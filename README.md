@@ -5,6 +5,14 @@ React component library for Myaza KYC — drop-in identity verification (ID capt
 ## Installation
 
 ```bash
+pnpm add @myazahq/kyc-sdk-react
+```
+
+```bash
+yarn add @myazahq/kyc-sdk-react
+```
+
+```bash
 npm install @myazahq/kyc-sdk-react
 ```
 
@@ -58,42 +66,42 @@ export default function VerifyButton() {
 
 ## Props
 
-| Prop                    | Type                                             | Default             | Description                                                                                                          |
-| ----------------------- | ------------------------------------------------ | ------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `apiKey`                | `string`                                         | —                   | **Required.** Sent as `Authorization: Bearer`. `pk_test_*` runs in sandbox, `pk_live_*` in production.               |
-| `environment`           | `'staging' \| 'production'`                      | —                   | **Required.** Selects the API base URL the SDK talks to.                                                             |
-| `country`               | `'NG' \| 'GH' \| 'KE' \| 'ZA' \| 'CI'`           | —                   | **Required.** Country whose ID types are offered.                                                                    |
-| `idTypes`               | `IdType[]`                                       | all allowed for org | Subset of ID types to offer; must be valid for `country`.                                                            |
-| `userData`              | `{ firstName?, lastName?, dateOfBirth? }`        | —                   | Pre-fills the user's details.                                                                                        |
-| `enableSelfie`          | `boolean`                                        | `true`              | Capture a selfie during liveness.                                                                                    |
-| `enableDocumentCapture` | `boolean`                                        | `true`              | Enable the document-scan step for document IDs.                                                                      |
-| `enableLiveness`        | `boolean`                                        | `true`              | Run the liveness challenge step. The server can still disable it per ID type.                                        |
-| `showThemeToggle`       | `boolean`                                        | `false`             | Show a light/dark toggle inside the modal.                                                                           |
-| `appearance`            | `KYCAppearance`                                  | brand defaults      | Brand & theme the modal — colors, logo, light/dark. See [Appearance & theming](#appearance--theming).                |
-| `consent`               | `KYCConsentContent`                              | built-in copy       | Override the consent/welcome screen `title` and `description`. See [Consent screen copy](#consent-screen-copy).       |
-| `metadata`              | `Record<string, string>`                         | —                   | Forwarded with every verify request.                                                                                 |
-| `onStart`               | `() => void`                                     | —                   | Called when the flow opens.                                                                                          |
-| `onStepChange`          | `(step: KYCStep) => void`                        | —                   | Called on each step transition.                                                                                      |
-| `onSubmit`              | `(submission: KYCSubmission) => void`            | —                   | Called when the server accepts the verification. `status` is always `'pending'`.                                     |
-| `onError`               | `(error: Error) => void`                         | —                   | Called for **technical** errors only (network, `401`, `402`, upload). Verification outcomes never come through here. |
-| `onClose`               | `() => void`                                     | —                   | Called when the user closes the flow.                                                                                |
+| Prop                    | Type                                      | Default             | Description                                                                                                          |
+| ----------------------- | ----------------------------------------- | ------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `apiKey`                | `string`                                  | —                   | **Required.** Sent as `Authorization: Bearer`. `pk_test_*` runs in sandbox, `pk_live_*` in production.               |
+| `environment`           | `'staging' \| 'production'`               | —                   | **Required.** Selects the API base URL the SDK talks to.                                                             |
+| `country`               | `'NG' \| 'GH' \| 'KE' \| 'ZA' \| 'CI'`    | —                   | **Required.** Country whose ID types are offered.                                                                    |
+| `idTypes`               | `IdType[]`                                | all allowed for org | Subset of ID types to offer; must be valid for `country`.                                                            |
+| `userData`              | `{ firstName?, lastName?, dateOfBirth? }` | —                   | Pre-fills the user's details.                                                                                        |
+| `enableSelfie`          | `boolean`                                 | `true`              | Capture a selfie during liveness.                                                                                    |
+| `enableDocumentCapture` | `boolean`                                 | `true`              | Enable the document-scan step for document IDs.                                                                      |
+| `enableLiveness`        | `boolean`                                 | `true`              | Run the liveness challenge step. The server can still disable it per ID type.                                        |
+| `showThemeToggle`       | `boolean`                                 | `false`             | Show a light/dark toggle inside the modal.                                                                           |
+| `appearance`            | `KYCAppearance`                           | brand defaults      | Brand & theme the modal — colors, logo, light/dark. See [Appearance & theming](#appearance--theming).                |
+| `consent`               | `KYCConsentContent`                       | built-in copy       | Override the consent/welcome screen `title` and `description`. See [Consent screen copy](#consent-screen-copy).      |
+| `metadata`              | `Record<string, string>`                  | —                   | Forwarded with every verify request.                                                                                 |
+| `onStart`               | `() => void`                              | —                   | Called when the flow opens.                                                                                          |
+| `onStepChange`          | `(step: KYCStep) => void`                 | —                   | Called on each step transition.                                                                                      |
+| `onSubmit`              | `(submission: KYCSubmission) => void`     | —                   | Called when the server accepts the verification. `status` is always `'pending'`.                                     |
+| `onError`               | `(error: Error) => void`                  | —                   | Called for **technical** errors only (network, `401`, `402`, upload). Verification outcomes never come through here. |
+| `onClose`               | `() => void`                              | —                   | Called when the user closes the flow.                                                                                |
 
 ## Appearance & theming
 
 Pass an `appearance` object to brand the flow. Colors are injected as CSS variables **scoped to the SDK** — they never leak into your page's styles. Because the UI is token-driven, setting one color cascades to all of its shades (hover/selected/focus states included).
 
-| Field              | Type                  | Description                                                                 |
-| ------------------ | --------------------- | --------------------------------------------------------------------------- |
-| `primaryColor`     | `string`              | Brand color — buttons, selected states, focus rings. Defaults to `#5645F5`. |
-| `primaryTextColor` | `string`              | Text/icons rendered on top of `primaryColor` (e.g. button labels).          |
-| `accentColor`      | `string`              | Subtle hover/active surfaces.                                               |
-| `backgroundColor`  | `string`              | Modal background.                                                           |
-| `surfaceColor`     | `string`              | Cards & panels.                                                             |
-| `borderColor`      | `string`              | Borders and input outlines.                                                 |
-| `textColor`        | `string`              | Primary text color.                                                         |
-| `companyName`      | `string`              | Used on the verify button (“Verify with …”) and the persistent header.      |
-| `logo`             | `string`              | Image URL, or `'default'` to use your org's logo. See below.                |
-| `theme`            | `'light' \| 'dark'`   | Initial mode (defaults to `'light'`). With `showThemeToggle`, users can flip it. |
+| Field              | Type                | Description                                                                      |
+| ------------------ | ------------------- | -------------------------------------------------------------------------------- |
+| `primaryColor`     | `string`            | Brand color — buttons, selected states, focus rings. Defaults to `#5645F5`.      |
+| `primaryTextColor` | `string`            | Text/icons rendered on top of `primaryColor` (e.g. button labels).               |
+| `accentColor`      | `string`            | Subtle hover/active surfaces.                                                    |
+| `backgroundColor`  | `string`            | Modal background.                                                                |
+| `surfaceColor`     | `string`            | Cards & panels.                                                                  |
+| `borderColor`      | `string`            | Borders and input outlines.                                                      |
+| `textColor`        | `string`            | Primary text color.                                                              |
+| `companyName`      | `string`            | Used on the verify button (“Verify with …”) and the persistent header.           |
+| `logo`             | `string`            | Image URL, or `'default'` to use your org's logo. See below.                     |
+| `theme`            | `'light' \| 'dark'` | Initial mode (defaults to `'light'`). With `showThemeToggle`, users can flip it. |
 
 ### Logo
 
@@ -118,10 +126,10 @@ appearance={{
 
 The welcome/consent step shows a heading and a short description. Override either through the `consent` prop:
 
-| Field         | Type     | Description                                                                                          |
-| ------------- | -------- | ---------------------------------------------------------------------------------------------------- |
+| Field         | Type     | Description                                                                                           |
+| ------------- | -------- | ----------------------------------------------------------------------------------------------------- |
 | `title`       | `string` | Heading. Defaults to `Welcome, {firstName}` when a first name is known, else `Identity Verification`. |
-| `description` | `string` | Sub-text under the heading. Defaults to the built-in regulatory copy.                                |
+| `description` | `string` | Sub-text under the heading. Defaults to the built-in regulatory copy.                                 |
 
 Both fields support `{firstName}` and `{lastName}` tokens, replaced with the values from `userData` (empty string when absent), so a custom title can still greet the user by name.
 
@@ -134,4 +142,4 @@ consent={{
 
 ## Documentation
 
-Full documentation, configuration options, and webhook setup: **[docs.myaza.co](https://docs.myaza.co)**.
+Full documentation, configuration options, and webhook setup: **[docs.myaza.co](https://identity.myaza.co/documentation/introduction)**.

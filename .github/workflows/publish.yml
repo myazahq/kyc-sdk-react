@@ -1,0 +1,54 @@
+name: Publish to npm
+
+# Lives in the PUBLIC repo myazahq/kyc-sdk-react. The monorepo sync preserves
+# this repo's .github/, so it survives every release sync.
+# Required secret: NPM_TOKEN (npm automation token).
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - name: Setup Node.js 20 (npm registry auth)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build
+        run: pnpm build
+
+      - name: Publish to npm (skip if this version already exists)
+        run: |
+          NAME=$(node -p "require('./package.json').name")
+          VERSION=$(node -p "require('./package.json').version")
+          echo "Resolved package: $NAME@$VERSION"
+
+          # `npm view pkg@version version` prints the version when it exists,
+          # prints nothing when the package exists but this version doesn't,
+          # and errors (E404) when the package has never been published.
+          PUBLISHED=$(npm view "$NAME@$VERSION" version 2>/dev/null || true)
+
+          if [ -n "$PUBLISHED" ]; then
+            echo "✓ $NAME@$VERSION is already on npm — skipping publish."
+            exit 0
+          fi
+
+          echo "Publishing $NAME@$VERSION to npm…"
+          npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

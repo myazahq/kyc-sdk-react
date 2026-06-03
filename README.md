@@ -142,4 +142,4 @@ consent={{
 
 ## Documentation
 
-Full documentation, configuration options, and webhook setup: **[docs.myaza.co](https://identity.myaza.co/documentation/introduction)**.
+Full documentation, configuration options, and webhook setup: **[identity.myaza.co/documentation/sdks](https://identity.myaza.co/documentation/sdks)**.

@@ -7,24 +7,41 @@ const SAMPLE_H = 48;
 const SAMPLE_INTERVAL_MS = 800;
 // Camera needs ~1.5s to auto-expose before we trust readings
 const WARMUP_MS = 1500;
-// Must be dim for this many consecutive readings before flagging
+// Must stay out-of-range for this many consecutive readings before flagging
 const CONFIRM_READINGS = 2;
-// 0–255 average luminance threshold
-const DIM_THRESHOLD = 62;
 
 /**
- * Periodically samples the video feed and returns whether the environment
- * is too dim for reliable capture. Uses a confirmation gate to avoid
- * flickering when the camera is still auto-exposing.
+ * Lighting thresholds on a 0–255 mean-luminance scale. Exported so they stay
+ * the single source of truth and can be tuned in one place. Kept in sync with
+ * the Flutter SDK's `_BrightnessSampler` (dark < 62, bright > 200).
+ */
+export const LIGHT_THRESHOLDS = {
+  /** Below this mean luminance the scene is too dark. */
+  dark: 62,
+  /** Above this mean luminance the scene is overexposed / too bright. */
+  bright: 200,
+} as const;
+
+/** Resolved lighting quality for the current camera feed. */
+export type LightLevel = 'ok' | 'dark' | 'bright';
+
+/**
+ * Periodically samples the video feed and classifies the lighting as `ok`,
+ * `dark`, or `bright`. Uses a confirmation gate (2 consecutive readings) to
+ * avoid flickering while the camera auto-exposes. Returns `ok` when disabled.
  */
 export function useLightLevel(
   videoRef: React.RefObject<HTMLVideoElement | null>,
   enabled: boolean,
-): { isDim: boolean } {
-  const [dimCount, setDimCount] = useState(0);
+): { level: LightLevel } {
+  // Signed streak: negative = consecutive dark readings, positive = bright.
+  const [streak, setStreak] = useState(0);
 
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled) {
+      setStreak(0);
+      return;
+    }
 
     const canvas = document.createElement('canvas');
     canvas.width = SAMPLE_W;
@@ -49,9 +66,15 @@ export function useLightLevel(
         }
         const brightness = sum / pixelCount;
         // setState called in a timer callback — allowed by react-hooks/set-state-in-effect
-        setDimCount((prev) =>
-          brightness < DIM_THRESHOLD ? Math.min(prev + 1, CONFIRM_READINGS + 1) : 0,
-        );
+        setStreak((prev) => {
+          if (brightness < LIGHT_THRESHOLDS.dark) {
+            return Math.max(prev <= 0 ? prev - 1 : -1, -(CONFIRM_READINGS + 1));
+          }
+          if (brightness > LIGHT_THRESHOLDS.bright) {
+            return Math.min(prev >= 0 ? prev + 1 : 1, CONFIRM_READINGS + 1);
+          }
+          return 0;
+        });
       }, SAMPLE_INTERVAL_MS);
     }, WARMUP_MS);
 
@@ -61,6 +84,10 @@ export function useLightLevel(
     };
   }, [enabled, videoRef]);
 
-  // When disabled, never report dim (stale dimCount is irrelevant)
-  return { isDim: enabled && dimCount >= CONFIRM_READINGS };
+  let level: LightLevel = 'ok';
+  if (enabled) {
+    if (streak <= -CONFIRM_READINGS) level = 'dark';
+    else if (streak >= CONFIRM_READINGS) level = 'bright';
+  }
+  return { level };
 }

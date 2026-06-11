@@ -5,8 +5,9 @@
 
 export const SDK_TYPE = 'web' as const;
 
-// Keep in sync with services/api.ts SDK_VERSION.
-export const SDK_VERSION = '1.0.0';
+// Single source of truth for the SDK version — also used by services/api.ts
+// for the X-SDK-Version header. Keep in sync with package.json.
+export const SDK_VERSION = '2.0.0';
 
 export interface WebDeviceMetadata {
 	sdkType: 'web';

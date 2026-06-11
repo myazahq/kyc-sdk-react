@@ -1,4 +1,6 @@
-import type { KYCSubmission } from './verification';
+import type { ButtonHTMLAttributes } from 'react';
+
+import type { KYCSubmission, KYCError } from './verification';
 
 // ---------------------------------------------------------------------------
 // Supported countries & ID types
@@ -112,26 +114,73 @@ export interface KYCConsentContent {
 }
 
 // ---------------------------------------------------------------------------
-// Environment
+// Success (submitted) screen content
 // ---------------------------------------------------------------------------
 
-/** Which Myaza backend the SDK talks to. Resolved to a base URL on mount. */
-export type SdkEnvironment = 'development' | 'staging' | 'production';
+export interface KYCSuccessContent {
+  /**
+   * Heading on the success screen shown after a verification is submitted.
+   * Supports `{firstName}` and `{lastName}` tokens, replaced with the values
+   * from `userData` (empty string when absent). Defaults to
+   * `Verification Submitted!`.
+   */
+  title?: string;
+  /**
+   * Sub-text under the heading. Supports the same `{firstName}` / `{lastName}`
+   * tokens. Defaults to the built-in "submitted for review" copy.
+   */
+  description?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Voice guidance (spoken liveness instructions)
+// ---------------------------------------------------------------------------
+
+/**
+ * Configuration for the spoken liveness instructions ("nod your head",
+ * "blink", …). This is text-to-speech **output** played to the user for
+ * accessibility — it never records audio, so no microphone permission is
+ * involved.
+ *
+ * Structured as an object (rather than a bare boolean) so a `language` can be
+ * added later without a breaking change — Myaza operates across NG/GH/KE/ZA/CI,
+ * and French guidance for CI is a likely future need.
+ */
+export interface VoiceGuidanceConfig {
+  /** Whether spoken guidance plays. Default `true` (on for accessibility). */
+  enabled?: boolean;
+  /**
+   * BCP-47 language tag for the spoken voice (e.g. `'en-US'`, `'fr-FR'`).
+   * Defaults to `'en-US'`. Currently selects the TTS voice only; the spoken
+   * text still mirrors the on-screen English instruction (localized strings
+   * are a planned follow-up).
+   */
+  language?: string;
+}
+
+/**
+ * `voiceGuidance` prop value. Accepts a bare boolean for ergonomics
+ * (`voiceGuidance={false}`) or the full {@link VoiceGuidanceConfig} object.
+ */
+export type VoiceGuidanceOption = boolean | VoiceGuidanceConfig;
 
 // ---------------------------------------------------------------------------
 // Client-side SDK config  (<MyazaKYC /> props & useMyazaKYC options)
 // ---------------------------------------------------------------------------
 
 export interface MyazaKYCConfig<C extends SupportedCountry = SupportedCountry> {
-  /** Bearer token sent as Authorization header to the server */
+  /**
+   * Bearer token sent as the Authorization header. The key prefix is the single
+   * source of truth for the environment — the SDK derives it (and the base URL)
+   * automatically: `pk_dev_…` → development, `pk_test_…` → sandbox,
+   * `pk_live_…` → production. An unrecognized prefix throws.
+   */
   apiKey: string;
 
-  /** Target backend. Resolved to a base URL: staging/production are hardcoded; development uses `devUrl`. */
-  environment: SdkEnvironment;
-
   /**
-   * Only used when environment is 'development'. Defaults to 'http://localhost:3000'.
-   * Has no effect for staging or production.
+   * Dev-only base-URL override. Only applied for **development** keys
+   * (`pk_dev_…`); defaults to `http://localhost:3001`. Ignored for sandbox /
+   * production keys.
    */
   devUrl?: string;
 
@@ -154,17 +203,45 @@ export interface MyazaKYCConfig<C extends SupportedCountry = SupportedCountry> {
   /** Enable the document-photo capture step */
   enableDocumentCapture?: boolean;
 
+  /**
+   * Allow picking a document photo from the device (gallery / file picker /
+   * drag-and-drop) as an alternative to the live camera capture. Default `true`.
+   * When `false`, all "upload a photo instead" affordances are hidden and the
+   * user must capture with the camera.
+   */
+  allowDocumentUpload?: boolean;
+
   /** Enable liveness detection during selfie capture (default: true) */
   enableLiveness?: boolean;
 
-  /** Show a light/dark mode toggle button inside the modal header */
+  /**
+   * Spoken liveness instructions (accessibility). `true`/omitted = on,
+   * `false` = off, or a {@link VoiceGuidanceConfig} for finer control
+   * (e.g. `{ enabled: true, language: 'fr-FR' }`). TTS output only — no
+   * microphone is used. Default: on.
+   */
+  voiceGuidance?: VoiceGuidanceOption;
+
+  /** Show a light/dark mode toggle button inside the modal header. Default `true`. */
   showThemeToggle?: boolean;
+
+  /**
+   * Hide the close (X) button and block all user-initiated dismissal of the
+   * modal — backdrop tap, Escape key, and (on mobile) swipe-down. When `true`,
+   * the flow can only be closed programmatically via the `close()` returned by
+   * {@link useMyazaKYC}. Default `false`. The terminal "Submitted" step is
+   * already non-dismissible regardless of this flag.
+   */
+  disableClose?: boolean;
 
   /** Visual customisation */
   appearance?: KYCAppearance;
 
   /** Override the consent (welcome) screen copy. */
   consent?: KYCConsentContent;
+
+  /** Override the success (submitted) screen copy. */
+  success?: KYCSuccessContent;
 
   /** Arbitrary metadata forwarded with every verification request */
   metadata?: Record<string, string>;
@@ -178,8 +255,37 @@ export interface MyazaKYCConfig<C extends SupportedCountry = SupportedCountry> {
    */
   onSubmit?: (submission: KYCSubmission) => void;
   onClose?: () => void;
-  onError?: (error: Error) => void;
+  /**
+   * Fires for technical errors only. Receives a {@link KYCError} — a real
+   * `Error` that also carries a typed `code` (e.g. `camera_permission_denied`,
+   * `upload_failed`, `network_error`). Verification *outcomes* never come
+   * through here — they arrive via webhook / status polling.
+   */
+  onError?: (error: KYCError) => void;
 }
+
+// ---------------------------------------------------------------------------
+// <MyazaKYC /> component props
+// ---------------------------------------------------------------------------
+
+/**
+ * Props for the `<MyazaKYC />` component: the full SDK config plus standard
+ * `<button>` attributes for the built-in trigger button.
+ *
+ * The trigger renders a real `<button>`, so you can:
+ * - pass `children` to set the button label/content (defaults to
+ *   `Verify with {companyName}` / `Verify Identity`),
+ * - pass `className` to restyle it (merged via `tailwind-merge`, so your
+ *   classes override the defaults),
+ * - forward any other button attribute (`disabled`, `aria-*`, `type`, …).
+ *
+ * `onClick` is owned by the SDK (it opens the modal) and is therefore omitted.
+ * To build your own trigger element instead, use the `useMyazaKYC()` hook and
+ * wire its `open()` to whatever you render.
+ */
+export type MyazaKYCProps<C extends SupportedCountry = SupportedCountry> =
+  MyazaKYCConfig<C> &
+    Omit<ButtonHTMLAttributes<HTMLButtonElement>, keyof MyazaKYCConfig<C> | 'onClick'>;
 
 // ---------------------------------------------------------------------------
 // Hook return type

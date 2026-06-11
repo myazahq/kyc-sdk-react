@@ -111,6 +111,16 @@
   100% { stroke-dashoffset: 0; }
 }
 
+/* Lighting-warning banner reveal — fade + vertical grow, mirroring the
+   Flutter SDK's AnimatedSwitcher (FadeTransition + SizeTransition). The
+   banner expands from zero height with a slight overshoot so the warning
+   visibly slides in rather than popping. */
+@keyframes lighting-in {
+  0% { opacity: 0; max-height: 0; transform: translateY(-10px); margin-top: -0.5rem; }
+  60% { opacity: 1; max-height: 6rem; transform: translateY(2px); }
+  100% { opacity: 1; max-height: 6rem; transform: translateY(0); margin-top: 0; }
+}
+
 @keyframes pulse-ring {
   0% { transform: scale(0.9); opacity: 0.7; }
   50% { transform: scale(1); opacity: 0.3; }
@@ -160,6 +170,11 @@
   }
   .animate-fade-in {
     animation: fade-in 250ms ease-out;
+  }
+  .animate-lighting-in {
+    animation: lighting-in 350ms cubic-bezier(0.22, 1, 0.36, 1);
+    transform-origin: top;
+    overflow: hidden;
   }
   .animate-checkmark {
     animation: checkmark-draw 500ms ease-out forwards;

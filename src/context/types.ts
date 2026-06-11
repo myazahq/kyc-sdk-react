@@ -1,5 +1,5 @@
 import type { KYCStep, IdType } from '../types/config';
-import type { ApiStatus } from '../types/verification';
+import type { ApiStatus, KYCError } from '../types/verification';
 
 // ---------------------------------------------------------------------------
 // State
@@ -49,7 +49,13 @@ export interface KYCState {
 
   // Step 5 – Submission result
   verificationId: string | null;
-  error: string | null;
+  /**
+   * Last technical error (submission failures). Carries the typed `code` so the
+   * consumer's `onError` receives a `KYCError`, not a bare string. Capture-step
+   * errors (camera permission, upload-after-retries) report to `onError`
+   * directly and do not set this — they have their own inline UI.
+   */
+  error: KYCError | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -83,7 +89,7 @@ export type KYCAction =
   // Submission
   | { type: 'SUBMIT_VERIFICATION' }
   | { type: 'SUBMISSION_SUCCESS'; payload: string }
-  | { type: 'SET_ERROR'; payload: string }
+  | { type: 'SET_ERROR'; payload: KYCError }
   | { type: 'CLEAR_ERROR' }
   | { type: 'RETRY' }
   | { type: 'RESET' };

@@ -2,12 +2,12 @@
 
 import React from 'react';
 import {
-  CreditCard,
   Fingerprint,
   FileText,
-  Car,
-  Vote,
-  Globe,
+  Landmark,
+  IdCard,
+  Contact,
+  BookUser,
 } from 'lucide-react';
 import { StepHeader } from '../components/StepHeader';
 import { Button } from '../components/ui/button';
@@ -21,18 +21,18 @@ import { ID_TYPES, isNumberOnlyIdType } from '../utils/countries';
 import type { IdType, SupportedCountry, IdTypeDefinition } from '../types/config';
 
 const ID_TYPE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
-  bvn: Fingerprint,
-  nin: CreditCard,
-  vnin: CreditCard,
-  passport: Globe,
-  'drivers-license': Car,
-  pvc: Vote,
-  'ghana-card': CreditCard,
-  voters: Vote,
-  ssnit: FileText,
-  'national-id': CreditCard,
-  cni: CreditCard,
-  'residence-card': FileText,
+  bvn: Landmark, // Bank Verification Number → bank/landmark
+  nin: Fingerprint,
+  vnin: Fingerprint,
+  passport: BookUser,
+  'drivers-license': IdCard,
+  pvc: Contact, // Permanent Voter's Card
+  'ghana-card': IdCard,
+  voters: Contact,
+  ssnit: IdCard,
+  'national-id': IdCard,
+  cni: IdCard,
+  'residence-card': IdCard,
 };
 
 interface IdTypeStepProps {

@@ -16,12 +16,24 @@ import type {
   NormalizedLandmark,
 } from '../liveness/types';
 import { speak, stopSpeaking } from '../liveness/speech';
+import type { LightLevel } from './useLightLevel';
 import {
   CAPTURE_FRAMERATE,
   LIVENESS_VIDEO_BITRATE,
   createVideoRecorder,
   logCaptureSize,
 } from '../lib/capture-settings';
+
+// User-facing guidance shown (and spoken) when a second face enters the frame.
+const MULTI_FACE_GUIDANCE = 'Make sure only your face is visible';
+// Sentinel stored in `warning` during a challenge when >1 face is present.
+const MULTI_FACE_WARNING = 'multiple_faces';
+
+function lightingGuidance(level: LightLevel): string | null {
+  if (level === 'dark') return 'Move to a brighter area';
+  if (level === 'bright') return 'Too bright — reduce glare';
+  return null;
+}
 
 // ---------------------------------------------------------------------------
 // Public return type
@@ -46,6 +58,12 @@ export interface UseLivenessOptions {
   config?: Partial<LivenessConfig>;
   captureFrame: () => string | null;
   compressImage: (base64: string) => Promise<string>;
+  /**
+   * Current lighting quality. When not `'ok'` the flow discourages capture —
+   * it won't start the first challenge or auto-capture the selfie, and shows
+   * lighting guidance instead. Defaults to `'ok'` when omitted.
+   */
+  lightLevel?: LightLevel;
 }
 
 // ---------------------------------------------------------------------------
@@ -58,6 +76,7 @@ export function useLiveness({
   config,
   captureFrame,
   compressImage,
+  lightLevel = 'ok',
 }: UseLivenessOptions): UseLivenessReturn {
   const [state, setState] = useState<LivenessState>({ phase: 'loading' });
   const [isFaceDetected, setIsFaceDetected] = useState(false);
@@ -98,6 +117,14 @@ export function useLiveness({
   const compressImageRef = useRef(compressImage);
   compressImageRef.current = compressImage;
 
+  // Live lighting quality, read inside the Face Mesh callback.
+  const lightLevelRef = useRef(lightLevel);
+  lightLevelRef.current = lightLevel;
+
+  // True while a challenge is paused because >1 face is in frame — used to
+  // restart the challenge timer when the frame returns to a single face.
+  const multiFacePausedRef = useRef(false);
+
   // -----------------------------------------------------------------------
   // Helper: update state and phase ref together
   // -----------------------------------------------------------------------
@@ -116,7 +143,9 @@ export function useLiveness({
         textToSpeak = next.guidance;
         break;
       case 'challenge':
-        if (next.warning && next.warning !== 'wrong_gesture') {
+        if (next.warning === MULTI_FACE_WARNING) {
+          textToSpeak = MULTI_FACE_GUIDANCE;
+        } else if (next.warning && next.warning !== 'wrong_gesture') {
           textToSpeak = next.warning;
         } else if (!next.warning) {
           textToSpeak = next.challenge.instruction;
@@ -249,9 +278,9 @@ export function useLiveness({
   // always calls the latest version without needing to re-create it.
   // -----------------------------------------------------------------------
 
-  const processLandmarksRef = useRef<(landmarks: NormalizedLandmark[] | null) => void>(() => {});
+  const processLandmarksRef = useRef<(landmarks: NormalizedLandmark[] | null, faceCount: number) => void>(() => {});
 
-  processLandmarksRef.current = (landmarks: NormalizedLandmark[] | null) => {
+  processLandmarksRef.current = (landmarks: NormalizedLandmark[] | null, faceCount: number) => {
     if (!mountedRef.current) return;
 
     const tracker = trackerRef.current;
@@ -269,8 +298,51 @@ export function useLiveness({
 
     setIsFaceDetected(true);
 
+    // --- Multiple faces: pause and ask for a single face -------------------
+    // More than one face is both a quality and a spoofing concern, so we never
+    // run detection or auto-capture while a second person is in frame.
+    if (faceCount > 1) {
+      if (phase === 'loading' || phase === 'positioning') {
+        positionStableRef.current = 0;
+        setPhase({ phase: 'positioning', guidance: MULTI_FACE_GUIDANCE });
+      } else if (phase === 'challenge' && tracker?.current) {
+        // Pause the challenge timer so a second face can't run out the clock.
+        if (!multiFacePausedRef.current) {
+          multiFacePausedRef.current = true;
+          clearChallengeTimer();
+        }
+        setPhase({
+          phase: 'challenge',
+          index: tracker.currentIndex,
+          challenge: tracker.current.config,
+          timeRemaining: tracker.current.config.timeoutSeconds,
+          warning: MULTI_FACE_WARNING,
+        });
+      } else if (phase === 'capturing') {
+        positionStableRef.current = 0;
+      }
+      return;
+    }
+
+    // Single face again — resume a paused challenge by restarting its timer.
+    if (multiFacePausedRef.current) {
+      multiFacePausedRef.current = false;
+      if (phase === 'challenge' && tracker?.current) {
+        cooldownFramesRef.current = 15; // brief grace so the face re-settles
+        startChallengeTimer(tracker.current.config.timeoutSeconds);
+      }
+    }
+
     // --- Positioning phase: check face is centered and stable ---
     if (phase === 'loading' || phase === 'positioning') {
+      // Block starting challenges in poor light — guide the user to fix it.
+      const light = lightingGuidance(lightLevelRef.current);
+      if (light) {
+        positionStableRef.current = Math.max(0, positionStableRef.current - 5);
+        setPhase({ phase: 'positioning', guidance: light });
+        return;
+      }
+
       const pos = checkFacePosition(landmarks);
 
       if (pos.isCentered && pos.isCorrectDistance) {
@@ -418,6 +490,11 @@ export function useLiveness({
 
     // --- Capturing phase: wait for steady face before taking selfie ---
     if (phase === 'capturing') {
+      // Don't auto-capture the selfie while lighting is poor.
+      if (lightingGuidance(lightLevelRef.current)) {
+        positionStableRef.current = 0;
+        return;
+      }
       const pos = checkFacePosition(landmarks);
       if (pos.isCentered && pos.isCorrectDistance) {
         positionStableRef.current++;
@@ -487,8 +564,8 @@ export function useLiveness({
 
     initTracker();
 
-    createFaceMesh((landmarks) => {
-      if (!cancelled) processLandmarksRef.current(landmarks);
+    createFaceMesh((landmarks, faceCount) => {
+      if (!cancelled) processLandmarksRef.current(landmarks, faceCount);
     })
       .then((handle) => {
         if (cancelled) { handle.close(); return; }
@@ -542,6 +619,7 @@ export function useLiveness({
     positionStableRef.current = 0;
     processingRef.current = false;
     cooldownFramesRef.current = 0;
+    multiFacePausedRef.current = false;
 
     // Cancel and close any existing FaceMesh instance so the effect re-initialises cleanly
     if (rafRef.current) cancelAnimationFrame(rafRef.current);

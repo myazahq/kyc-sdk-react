@@ -1,4 +1,4 @@
-const SDK_VERSION = '1.0.2';
+import { SDK_VERSION } from '../utils/device-metadata';
 
 export class KYCApiError extends Error {
   constructor(
@@ -87,11 +87,22 @@ export interface VerifyResponse {
   status: 'pending';
 }
 
+/**
+ * Minimal, publishable-safe status from `GET /api/kyc/status/:id`.
+ *
+ * Because this is reachable with the publishable (`pk_`) key the SDK carries, it
+ * intentionally contains NO PII, match scores, or result data — only the
+ * lifecycle state and (on non-success) the org-safe failure reason. To read the
+ * full result + extracted biodata, call `GET /api/kyc/verifications/:id` from
+ * your backend with a SECRET (`sk_`) key — never ship a secret key in the SDK.
+ */
 export interface VerificationStatusResponse {
   verificationId: string;
   status: 'pending' | 'verified' | 'failed' | 'not_found' | 'error';
-  result?: Record<string, unknown>;
+  reason?: string | null;
+  reasonCode?: string | null;
   createdAt: string;
+  completedAt?: string;
 }
 
 export interface SdkConfigIdType {
@@ -115,7 +126,7 @@ export interface SdkConfigBranding {
 }
 
 export interface SdkConfigResponse {
-  environment: 'STAGING' | 'PRODUCTION';
+  environment: 'DEVELOPMENT' | 'SANDBOX' | 'PRODUCTION';
   idTypes: SdkConfigIdType[];
   /**
    * Org branding (logo, name, color). Surfaced so the SDK can render the org's
@@ -206,6 +217,8 @@ export function createKYCApi(baseUrl: string, apiKey: string) {
       });
     },
 
+    // Minimal, publishable-safe status (no PII). The full result lives behind a
+    // secret-key-only endpoint and must be fetched from your backend.
     async status(verificationId: string): Promise<VerificationStatusResponse> {
       return request<VerificationStatusResponse>(`/status/${verificationId}`);
     },

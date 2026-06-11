@@ -14,7 +14,9 @@ import { useImageCompress } from '../hooks/useImageCompress';
 import { useLiveness } from '../hooks/useLiveness';
 import { useLightLevel } from '../hooks/useLightLevel';
 import { primeSpeech } from '../liveness/speech';
-import { KYCApiError } from '../services/api';
+import { withRetry } from '../lib/retry';
+import { mapToKycError, safeReportError } from '../lib/errors';
+import { KYCError } from '../types/verification';
 import { requiresDocumentCapture } from '../utils/countries';
 import {
   LIVENESS_VIDEO_BITRATE,
@@ -33,6 +35,7 @@ export function LivenessStep() {
   const [preview, setPreview] = useState<string | null>(kycState.selfieImage);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [retryInfo, setRetryInfo] = useState<{ attempt: number; total: number } | null>(null);
 
   const camera = useCamera({ facingMode: 'user', enabled: !preview });
   const { capture } = useImageCapture({ videoRef: camera.videoRef, mirror: true });
@@ -43,15 +46,18 @@ export function LivenessStep() {
   const livenessChunksRef = useRef<Blob[]>([]);
   const livenessMimeRef = useRef('video/webm');
 
+  const livenessActive = !preview && camera.isReady;
+  const { level: lightLevel } = useLightLevel(camera.videoRef, livenessActive);
+  const isDim = lightLevel === 'dark';
+  const isBright = lightLevel === 'bright';
+
   const liveness = useLiveness({
     videoRef: camera.videoRef,
     cameraReady: camera.isReady && !preview,
     captureFrame: capture,
     compressImage: compress,
+    lightLevel,
   });
-
-  const livenessActive = !preview && camera.isReady;
-  const { isDim } = useLightLevel(camera.videoRef, livenessActive);
 
   // Start/stop recorder with the camera stream
   React.useEffect(() => {
@@ -151,6 +157,7 @@ export function LivenessStep() {
   async function uploadSelfie(selfieBase64: string) {
     setIsUploading(true);
     setUploadError(null);
+    setRetryInfo(null);
 
     const api = config.api;
 
@@ -162,17 +169,38 @@ export function LivenessStep() {
       for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
       const blob = new Blob([bytes], { type: mime });
 
-      const mediaId = await api.upload(blob, 'selfie');
+      // Retried on transient failures (network / timeout / 5xx).
+      const mediaId = await withRetry(() => api.upload(blob, 'selfie'), {
+        onRetry: (attempt, total) => setRetryInfo({ attempt, total }),
+      });
       dispatch({ type: 'SET_MEDIA_ID', payload: { mediaType: 'selfie', mediaId } });
+      setRetryInfo(null);
       setIsUploading(false);
     } catch (err) {
+      setRetryInfo(null);
       setIsUploading(false);
-      const message = err instanceof KYCApiError
-        ? err.message
-        : 'Selfie upload failed. Please try again.';
-      setUploadError(message);
+      const kycError = mapToKycError(err, 'upload');
+      setUploadError(kycError.message);
+      safeReportError(config.onError, kycError);
     }
   }
+
+  // Report a denied camera permission to onError once. Liveness can't proceed
+  // without a camera, so the dedicated permission screen (below) is shown too.
+  const permissionReportedRef = useRef(false);
+  useEffect(() => {
+    if (camera.permissionDenied && !permissionReportedRef.current) {
+      permissionReportedRef.current = true;
+      safeReportError(
+        config.onError,
+        new KYCError(
+          'camera_permission_denied',
+          'Camera access is required for the liveness check. Please allow camera access and try again.',
+        ),
+      );
+    }
+    if (!camera.permissionDenied) permissionReportedRef.current = false;
+  }, [camera.permissionDenied, config]);
 
   // Track the last active gesture so the avatar stays visible during transitions
   const phase = liveness.state.phase;
@@ -225,15 +253,25 @@ export function LivenessStep() {
       <div className="space-y-5 animate-slide-up">
         <StepHeader title="Selfie Captured" description="Review your selfie before continuing." onBack={handleBack} />
 
-        <div className="mx-auto w-56 sm:w-64 overflow-hidden rounded-full border-4 border-primary/20">
+        <div className="relative mx-auto w-56 sm:w-64 overflow-hidden rounded-full border-4 border-primary/20">
           <img src={preview} alt="Selfie preview" className="aspect-square w-full object-cover" />
+
+          {isUploading && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/40 animate-fade-in">
+              <div className="relative flex items-center justify-center">
+                <div className="absolute h-16 w-16 rounded-full border-2 border-primary/40 animate-pulse-ring" />
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/15 backdrop-blur-sm">
+                  <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
-        {isUploading && (
-          <div className="flex items-center justify-center gap-2 rounded-lg bg-primary/5 px-4 py-3 text-sm text-primary">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Uploading...
-          </div>
+        {retryInfo && isUploading && (
+          <p className="text-center text-xs text-amber-700 dark:text-amber-400">
+            Upload failed — retrying ({retryInfo.attempt}/{retryInfo.total})…
+          </p>
         )}
 
         {uploadError && (
@@ -300,12 +338,16 @@ export function LivenessStep() {
 
   const challengeWarning = phase === 'challenge' ? liveness.state.warning : undefined;
   const hasWrongGesture = challengeWarning === 'wrong_gesture';
+  const hasMultipleFaces = challengeWarning === 'multiple_faces';
   const hasPositionWarning = challengeWarning && !hasWrongGesture;
+
+  // 'multiple_faces' is a sentinel — render the friendly guidance, not the code.
+  const warningText = hasMultipleFaces ? 'Make sure only your face is visible' : challengeWarning;
 
   const instructionText = isFaceMeshLoading
     ? 'Preparing face detection...'
     : hasPositionWarning
-      ? challengeWarning
+      ? warningText
       : getInstructionText(liveness.state);
 
   const ringColor = isLoading || isFaceMeshLoading
@@ -378,14 +420,16 @@ export function LivenessStep() {
               </svg>
             </div>
 
-            {/* Loading overlay */}
-            {isLoading && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-gray-100">
-                <div className="relative flex h-12 w-12 items-center justify-center">
-                  <div className="absolute inset-0 rounded-full border-3 border-gray-200" />
-                  <div className="absolute inset-0 rounded-full border-3 border-t-primary animate-spin" />
+            {/* Loading overlay — shown while the camera starts and while the
+                face-mesh model finishes downloading. */}
+            {(isLoading || isFaceMeshLoading) && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/40 animate-fade-in">
+                <div className="relative flex items-center justify-center">
+                  <div className="absolute h-16 w-16 rounded-full border-2 border-primary/40 animate-pulse-ring" />
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/15 backdrop-blur-sm">
+                    <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                  </div>
                 </div>
-                <p className="text-xs text-muted-foreground">Loading...</p>
               </div>
             )}
 
@@ -409,14 +453,18 @@ export function LivenessStep() {
           </div>
         </div>
 
-        {/* Low-light warning */}
-        {isDim && (
-          <div className="flex w-full items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-400">
+        {/* Lighting warning (too dark or too bright) */}
+        {(isDim || isBright) && (
+          <div className="flex w-full items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800 animate-lighting-in dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-400">
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mt-0.5 shrink-0">
               <path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/>
               <path d="M9 18h6M10 22h4"/>
             </svg>
-            <span>It looks dark here. Move to a brighter area or near a light source for better detection.</span>
+            <span>
+              {isBright
+                ? 'Too bright — reduce glare or move away from direct light for better detection.'
+                : 'It looks dark here. Move to a brighter area or near a light source for better detection.'}
+            </span>
           </div>
         )}
 

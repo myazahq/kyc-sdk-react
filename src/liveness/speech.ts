@@ -8,9 +8,50 @@
 // This module works around all of them.
 // ---------------------------------------------------------------------------
 
+import type { VoiceGuidanceOption } from '../types/config';
+
 let preferredVoice: SpeechSynthesisVoice | null = null;
 let voiceResolved = false;
 let primed = false;
+
+// ---------------------------------------------------------------------------
+// Runtime voice-guidance configuration
+//
+// Set once per session from the SDK config (see configureSpeech). When disabled,
+// speak()/primeSpeech() become no-ops so the liveness flow runs silently. The
+// `language` selects the spoken voice/lang; the text itself still mirrors the
+// on-screen instruction (localized strings are a planned follow-up).
+// ---------------------------------------------------------------------------
+
+let speechEnabled = true;
+let speechLanguage = 'en-US';
+
+/** Normalize the public `voiceGuidance` prop (boolean | object | undefined). */
+export function resolveVoiceGuidance(
+  option?: VoiceGuidanceOption,
+): { enabled: boolean; language: string } {
+  if (option === undefined) return { enabled: true, language: 'en-US' };
+  if (typeof option === 'boolean') return { enabled: option, language: 'en-US' };
+  return { enabled: option.enabled ?? true, language: option.language ?? 'en-US' };
+}
+
+/** Apply the resolved voice-guidance config for the rest of the session. */
+export function configureSpeech(option?: VoiceGuidanceOption): void {
+  const { enabled, language } = resolveVoiceGuidance(option);
+  speechEnabled = enabled;
+  // Changing language invalidates the cached voice pick.
+  if (language !== speechLanguage) {
+    speechLanguage = language;
+    voiceResolved = false;
+    preferredVoice = null;
+  }
+  if (!enabled) stopSpeaking();
+}
+
+/** Whether spoken guidance is currently enabled. */
+export function isSpeechEnabled(): boolean {
+  return speechEnabled;
+}
 
 function synth(): SpeechSynthesis | null {
   if (typeof window === 'undefined' || !window.speechSynthesis) return null;
@@ -29,7 +70,10 @@ function resolveVoice(): SpeechSynthesisVoice | null {
   if (voiceResolved) return preferredVoice;
 
   const femaleKeywords = ['female', 'woman', 'samantha', 'karen', 'moira', 'fiona', 'victoria', 'zira', 'hazel'];
-  const englishVoices = voices.filter((v) => v.lang.startsWith('en'));
+  // Prefer voices for the configured language (e.g. 'en', 'fr'); fall back to all.
+  const langPrefix = speechLanguage.slice(0, 2).toLowerCase();
+  const langVoices = voices.filter((v) => v.lang.toLowerCase().startsWith(langPrefix));
+  const englishVoices = langVoices.length > 0 ? langVoices : voices;
 
   const female = englishVoices.find((v) => {
     const name = v.name.toLowerCase();
@@ -89,6 +133,7 @@ let speakTimer: ReturnType<typeof setTimeout> | null = null;
  * After priming, all subsequent speak() calls work even from async contexts.
  */
 export function primeSpeech(): void {
+  if (!speechEnabled) return;
   const s = synth();
   if (!s || primed) return;
 
@@ -103,6 +148,7 @@ export function primeSpeech(): void {
  * Speak the given text. Cancels any ongoing speech.
  */
 export function speak(text: string): void {
+  if (!speechEnabled) return;
   const s = synth();
   if (!s) return;
 
@@ -127,6 +173,7 @@ export function speak(text: string): void {
     utterance.rate = 1.0;
     utterance.pitch = 1.1;
     utterance.volume = 1.0;
+    utterance.lang = speechLanguage;
 
     const voice = resolveVoice();
     if (voice) utterance.voice = voice;
@@ -143,6 +190,7 @@ export function speak(text: string): void {
           retry.rate = 1.0;
           retry.pitch = 1.1;
           retry.volume = 1.0;
+          retry.lang = speechLanguage;
           if (voice) retry.voice = voice;
           retry.onend = () => stopResumeWorkaround();
           retry.onerror = () => stopResumeWorkaround();

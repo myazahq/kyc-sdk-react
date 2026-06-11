@@ -52,7 +52,15 @@ let sharedInitPromise: Promise<FaceMeshInstance> | null = null;
 // The single active consumer's landmark callback. The instance's onResults
 // dispatcher (installed once, below) forwards to whatever is set here. Only one
 // liveness session runs at a time, so a single slot is enough.
-let activeCallback: ((landmarks: NormalizedLandmark[] | null) => void) | null = null;
+//
+// `faceCount` is the number of faces MediaPipe found in the frame — the liveness
+// flow uses `> 1` to pause challenges ("Make sure only your face is visible").
+type LandmarkCallback = (
+  landmarks: NormalizedLandmark[] | null,
+  faceCount: number,
+) => void;
+
+let activeCallback: LandmarkCallback | null = null;
 
 function loadFaceMeshScript(): Promise<FaceMeshConstructor> {
   if (faceMeshConstructorPromise) return faceMeshConstructorPromise;
@@ -91,7 +99,9 @@ function loadFaceMeshScript(): Promise<FaceMeshConstructor> {
 
 function applyOptions(instance: FaceMeshInstance) {
   instance.setOptions({
-    maxNumFaces: 1,
+    // Detect up to 2 faces so the liveness flow can spot (and pause on) a second
+    // person in frame. Only the largest/first face drives gesture detection.
+    maxNumFaces: 2,
     refineLandmarks: true,
     minDetectionConfidence: 0.35,
     minTrackingConfidence: 0.35,
@@ -128,10 +138,11 @@ function ensureInstance(): Promise<FaceMeshInstance> {
     instance.onResults((results: FaceMeshResults) => {
       const cb = activeCallback;
       if (!cb) return; // no session attached — ignore stray frames
-      if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
-        cb(results.multiFaceLandmarks[0]);
+      const faces = results.multiFaceLandmarks ?? [];
+      if (faces.length > 0) {
+        cb(faces[0], faces.length);
       } else {
-        cb(null);
+        cb(null, 0);
       }
     });
 
@@ -178,7 +189,7 @@ export function primeFaceMesh(): void {
  * alive for the next session.
  */
 export async function createFaceMesh(
-  onLandmarks: (landmarks: NormalizedLandmark[] | null) => void,
+  onLandmarks: LandmarkCallback,
 ): Promise<FaceMeshHandle> {
   const instance = await ensureInstance();
   activeCallback = onLandmarks;

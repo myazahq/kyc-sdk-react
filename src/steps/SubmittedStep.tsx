@@ -5,12 +5,22 @@ import { Loader2 } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { useKYCContext } from "../context/KYCContext";
 import { useKYCConfig } from "../context/KYCConfigContext";
-import { KYCApiError } from "../services/api";
 import { isNumberOnlyIdType } from "../utils/countries";
 import { collectWebDeviceMetadata } from "../utils/device-metadata";
+import { withRetry } from "../lib/retry";
+import { mapToKycError } from "../lib/errors";
+import { KYCError } from "../types/verification";
 
 function generateRequestId(): string {
 	return `kyc_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+}
+
+/** Replaces {firstName} / {lastName} tokens with the user's data (or ''). */
+function fillTokens(template: string, firstName?: string, lastName?: string): string {
+	return template
+		.replace(/\{firstName\}/g, firstName ?? '')
+		.replace(/\{lastName\}/g, lastName ?? '')
+		.trim();
 }
 
 export function SubmittedStep() {
@@ -20,6 +30,10 @@ export function SubmittedStep() {
 	// Increment to trigger a (re-)submission; starts at 0 to fire on mount.
 	const [submitTrigger, setSubmitTrigger] = useState(0);
 	const submittedTriggerRef = useRef<number | null>(null);
+
+	// While a transient failure is being retried, surface "Retrying (n/total)…"
+	// under the spinner so the user knows the SDK hasn't frozen.
+	const [retryInfo, setRetryInfo] = useState<{ attempt: number; total: number } | null>(null);
 
 	useEffect(() => {
 		// Guard against React 18 Strict Mode double-invocation in dev — without
@@ -34,16 +48,17 @@ export function SubmittedStep() {
 	async function runSubmit() {
 		// Put UI into loading state immediately
 		dispatch({ type: "SUBMIT_VERIFICATION" });
+		setRetryInfo(null);
 
 		if (!state.selectedIdType) {
-			dispatch({ type: "SET_ERROR", payload: "Missing ID type." });
+			dispatch({ type: "SET_ERROR", payload: new KYCError("unknown", "Missing ID type.") });
 			return;
 		}
 
 		const idNumber =
 			isNumberOnlyIdType(state.selectedIdType) ? state.idNumber : undefined;
 		if (isNumberOnlyIdType(state.selectedIdType) && !idNumber) {
-			dispatch({ type: "SET_ERROR", payload: "Missing ID number." });
+			dispatch({ type: "SET_ERROR", payload: new KYCError("unknown", "Missing ID number.") });
 			return;
 		}
 
@@ -51,14 +66,15 @@ export function SubmittedStep() {
 		const requestId = generateRequestId();
 
 		try {
-			// Upload video recordings (best-effort — failures do not block verification)
+			// Upload video recordings (best-effort — failures do not block verification).
+			// Each gets the same transient-retry treatment, but a final failure is swallowed.
 			let documentFrontVideoId: string | undefined;
 			let documentBackVideoId: string | undefined;
 			let livenessVideoId: string | undefined;
 
 			if (state.documentFrontVideoBlob) {
 				try {
-					documentFrontVideoId = await api.upload(state.documentFrontVideoBlob, "document_front_video");
+					documentFrontVideoId = await withRetry(() => api.upload(state.documentFrontVideoBlob!, "document_front_video"));
 				} catch {
 					/* non-fatal */
 				}
@@ -66,7 +82,7 @@ export function SubmittedStep() {
 
 			if (state.documentBackVideoBlob) {
 				try {
-					documentBackVideoId = await api.upload(state.documentBackVideoBlob, "document_back_video");
+					documentBackVideoId = await withRetry(() => api.upload(state.documentBackVideoBlob!, "document_back_video"));
 				} catch {
 					/* non-fatal */
 				}
@@ -74,7 +90,7 @@ export function SubmittedStep() {
 
 			if (state.livenessVideoBlob) {
 				try {
-					livenessVideoId = await api.upload(state.livenessVideoBlob, "liveness_video");
+					livenessVideoId = await withRetry(() => api.upload(state.livenessVideoBlob!, "liveness_video"));
 				} catch {
 					/* non-fatal */
 				}
@@ -88,26 +104,33 @@ export function SubmittedStep() {
 				? { firstName, lastName, ...(dob ? { dateOfBirth: dob } : {}) }
 				: undefined;
 
-			const result = await api.verify({
-				country: config.country,
-				idType: state.selectedIdType,
-				...(idNumber ? { idNumber } : {}),
-				...(userData ? { userData } : {}),
-				mediaIds: {
-					documentFront: state.mediaIds.documentFront,
-					documentBack: state.mediaIds.documentBack,
-					selfie: state.mediaIds.selfie,
-					documentFrontVideo: documentFrontVideoId,
-					documentBackVideo: documentBackVideoId,
-					livenessVideo: livenessVideoId,
-				},
-				metadata: {
-					requestId,
-					...config.metadata,
-					device: collectWebDeviceMetadata() as unknown as Record<string, unknown>,
-				},
-			});
+			// The verify submission is retried on transient failures (network /
+			// timeout / 5xx); terminal errors (401/402/403) surface immediately.
+			const result = await withRetry(
+				() =>
+					api.verify({
+						country: config.country,
+						idType: state.selectedIdType!,
+						...(idNumber ? { idNumber } : {}),
+						...(userData ? { userData } : {}),
+						mediaIds: {
+							documentFront: state.mediaIds.documentFront,
+							documentBack: state.mediaIds.documentBack,
+							selfie: state.mediaIds.selfie,
+							documentFrontVideo: documentFrontVideoId,
+							documentBackVideo: documentBackVideoId,
+							livenessVideo: livenessVideoId,
+						},
+						metadata: {
+							requestId,
+							...config.metadata,
+							device: collectWebDeviceMetadata() as unknown as Record<string, unknown>,
+						},
+					}),
+				{ onRetry: (attempt, total) => setRetryInfo({ attempt, total }) },
+			);
 
+			setRetryInfo(null);
 			dispatch({ type: "SUBMISSION_SUCCESS", payload: result.verificationId });
 
 			config.onSubmit?.({
@@ -117,48 +140,9 @@ export function SubmittedStep() {
 				submittedAt: new Date().toISOString(),
 			});
 		} catch (err) {
-			let message = "Submission failed. Please try again.";
-
-			if (err instanceof KYCApiError) {
-				if (err.statusCode === 401) {
-					message = "Invalid API key. Please contact support.";
-				} else if (err.statusCode === 403 && err.code === "id_type_not_allowed") {
-					message =
-						"This ID type isn't enabled for your organization. Contact your administrator to request access.";
-				} else if (err.statusCode === 403 && err.code === "feature_disabled") {
-					const feature = typeof err.body?.feature === "string" ? err.body.feature : null;
-					message =
-						feature === "document_verification"
-							? "Document verification is currently disabled for your organization."
-							: feature === "gov_db_check"
-							? "Government database verification is currently disabled for your organization."
-							: "This verification feature is currently disabled for your organization.";
-				} else if (err.statusCode === 403) {
-					message = err.message;
-				} else if (err.statusCode === 402) {
-					const body = err.body ?? {};
-					const toNum = (v: unknown) =>
-						typeof v === "number" ? v
-						: typeof v === "string" ? parseFloat(v)
-						: undefined;
-					const required = toNum(body.required);
-					const balance  = toNum(body.balance);
-					message =
-						required !== undefined && balance !== undefined && !isNaN(required) && !isNaN(balance)
-							? `Insufficient credits. Required: $${required.toFixed(2)}, Available: $${balance.toFixed(2)}`
-							: "Insufficient credits to process this verification.";
-				} else if (err.statusCode === 500 && err.code === "pricing_not_configured") {
-					message = "This verification type is not available. Please contact support.";
-				} else if (err.statusCode >= 500) {
-					message = "A server error occurred. Please try again in a moment.";
-				} else {
-					message = err.message;
-				}
-			} else if (err instanceof TypeError) {
-				message = "Network error. Please check your connection and try again.";
-			}
-
-			dispatch({ type: "SET_ERROR", payload: message });
+			// Retries (if any) are exhausted — surface a typed error.
+			setRetryInfo(null);
+			dispatch({ type: "SET_ERROR", payload: mapToKycError(err, "verify") });
 		}
 	}
 
@@ -177,9 +161,13 @@ export function SubmittedStep() {
 				</div>
 				<div className='text-center space-y-2'>
 					<p className='text-base font-medium'>
-						Submitting your verification...
+						{retryInfo ? "Reconnecting…" : "Submitting your verification..."}
 					</p>
-					<p className='text-sm text-muted-foreground'>Please wait a moment.</p>
+					<p className='text-sm text-muted-foreground'>
+						{retryInfo
+							? `Connection issue — retrying (${retryInfo.attempt}/${retryInfo.total})…`
+							: "Please wait a moment."}
+					</p>
 				</div>
 			</div>
 		);
@@ -211,7 +199,7 @@ export function SubmittedStep() {
 					<h2 className='text-xl font-semibold font-heading'>
 						Submission Failed
 					</h2>
-					<p className='text-sm text-muted-foreground'>{state.error}</p>
+					<p className='text-sm text-muted-foreground'>{state.error.message}</p>
 				</div>
 
 				<Button
@@ -233,6 +221,15 @@ export function SubmittedStep() {
 	// ---------------------------------------------------------------------------
 	// Success state
 	// ---------------------------------------------------------------------------
+
+	const firstName = config.userData?.firstName || state.userData.firstName;
+	const lastName = config.userData?.lastName || state.userData.lastName;
+	const successTitle = config.success?.title
+		? fillTokens(config.success.title, firstName, lastName)
+		: "Verification Submitted!";
+	const successDescription = config.success?.description
+		? fillTokens(config.success.description, firstName, lastName)
+		: "Your identity verification has been submitted for review. You'll be notified of the result.";
 
 	return (
 		<div className='flex flex-col items-center gap-6 py-6 animate-fade-in'>
@@ -257,11 +254,10 @@ export function SubmittedStep() {
 
 			<div className='text-center space-y-2'>
 				<h2 className='text-xl font-semibold font-heading'>
-					Verification Submitted!
+					{successTitle}
 				</h2>
 				<p className='text-sm text-muted-foreground'>
-					Your identity verification has been submitted for review. You'll be
-					notified of the result.
+					{successDescription}
 				</p>
 			</div>
 

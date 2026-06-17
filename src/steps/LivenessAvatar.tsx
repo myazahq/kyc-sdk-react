@@ -6,16 +6,10 @@ import type { LivenessChallenge } from "../liveness/types";
 
 // ---------------------------------------------------------------------------
 // Animated GIF avatar showing each gesture.
-// Slide-from-right transition when gesture changes.
-// Always renders a fixed-height container to prevent layout shift.
+// GIFs are bundled as data URIs and loaded lazily per gesture so they don't
+// bloat the main bundle — each loads only when its challenge is first shown.
+// Falls back to URL-based loading when assetsBasePath is explicitly provided.
 // ---------------------------------------------------------------------------
-
-const GIF_MAP: Record<LivenessChallenge, string> = {
-	nod: "Nod.gif",
-	turn: "Turn.gif",
-	blink: "Blink.gif",
-	smile: "Smile.gif",
-};
 
 const LABEL_MAP: Record<LivenessChallenge, string> = {
 	nod: "Nod your head up and down",
@@ -24,10 +18,23 @@ const LABEL_MAP: Record<LivenessChallenge, string> = {
 	smile: "Smile",
 };
 
+// Lazy loaders — each is a separate chunk in the ESM build (code splitting).
+// Imported as data URIs by esbuild so no static file serving is needed.
+const GIF_LOADERS: Record<LivenessChallenge, () => Promise<{ default: string }>> = {
+	nod: () => import("../../gifs/Nod.gif"),
+	turn: () => import("../../gifs/Turn.gif"),
+	blink: () => import("../../gifs/Blink.gif"),
+	smile: () => import("../../gifs/Smile.gif"),
+};
+
 interface LivenessAvatarProps {
 	gesture: LivenessChallenge | null;
 	visible: boolean;
-	/** Base path where gesture GIFs are served from. Defaults to "/kyc-assets" */
+	/**
+	 * Override the base path where gesture GIFs are served from (e.g. a CDN URL).
+	 * When omitted (the default), GIFs are loaded from the bundled data URIs —
+	 * no asset copying or CDN setup required.
+	 */
 	assetsBasePath?: string;
 	className?: string;
 }
@@ -35,19 +42,46 @@ interface LivenessAvatarProps {
 export function LivenessAvatar({
 	gesture,
 	visible,
-	assetsBasePath = "/kyc-assets",
+	assetsBasePath,
 	className,
 }: LivenessAvatarProps) {
 	const [displayed, setDisplayed] = useState<LivenessChallenge | null>(gesture);
 	const [slideState, setSlideState] = useState<"in" | "out-left" | "in-right">(
 		"in",
 	);
+	// Map of gesture → resolved src (data URI or URL)
+	const [gifSrcs, setGifSrcs] = useState<Partial<Record<LivenessChallenge, string>>>({});
 	const prevRef = useRef<LivenessChallenge | null>(null);
 
+	// Load the GIF src for a gesture — either from the bundled data URI or URL.
+	const loadGif = (g: LivenessChallenge) => {
+		if (assetsBasePath) {
+			const base = assetsBasePath.replace(/\/$/, "");
+			const FILE_MAP: Record<LivenessChallenge, string> = {
+				nod: "Nod.gif",
+				turn: "Turn.gif",
+				blink: "Blink.gif",
+				smile: "Smile.gif",
+			};
+			setGifSrcs((prev) => ({ ...prev, [g]: `${base}/${FILE_MAP[g]}` }));
+		} else {
+			GIF_LOADERS[g]().then((mod) => {
+				setGifSrcs((prev) => ({ ...prev, [g]: mod.default }));
+			});
+		}
+	};
+
+	// Pre-load the current gesture's GIF as soon as it changes.
+	useEffect(() => {
+		if (!gesture) return;
+		if (!gifSrcs[gesture]) loadGif(gesture);
+	// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [gesture, assetsBasePath]);
+
+	// Slide transition when the displayed gesture changes.
 	useEffect(() => {
 		if (gesture && gesture !== prevRef.current) {
 			if (prevRef.current !== null) {
-				// Slide old one out to left, then new one in from right
 				setSlideState("out-left");
 				const t = setTimeout(() => {
 					setDisplayed(gesture);
@@ -66,7 +100,7 @@ export function LivenessAvatar({
 	}, [gesture]);
 
 	const g = displayed;
-	const basePath = assetsBasePath.replace(/\/$/, "");
+	const src = g ? gifSrcs[g] : undefined;
 
 	return (
 		<div
@@ -84,9 +118,9 @@ export function LivenessAvatar({
 					slideState === "in" && "translate-x-0 opacity-100",
 				)}>
 				<div className='h-32 w-32 overflow-hidden rounded-full'>
-					{g && (
+					{g && src && (
 						<img
-							src={`${basePath}/${GIF_MAP[g]}`}
+							src={src}
 							alt={LABEL_MAP[g]}
 							className='h-full w-full object-cover scale-125'
 						/>

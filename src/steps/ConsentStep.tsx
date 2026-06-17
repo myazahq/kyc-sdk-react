@@ -15,6 +15,7 @@ import { Label } from '../components/ui/label';
 import { cn } from '../lib/utils';
 import { useKYCContext } from '../context/KYCContext';
 import { useKYCConfig } from '../context/KYCConfigContext';
+import { MobileHandoffSheet } from '../components/MobileHandoffSheet';
 
 interface ProcessStep {
   icon: React.ComponentType<{ className?: string }>;
@@ -134,6 +135,9 @@ export function ConsentStep() {
           <Lock className="h-3 w-3" />
           Your data is encrypted and securely processed
         </p>
+        <div className="flex justify-center pt-1">
+          <MobileHandoffSheet />
+        </div>
       </div>
     </div>
   );

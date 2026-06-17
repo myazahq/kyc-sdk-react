@@ -5,10 +5,12 @@ import { Check, Loader2, RotateCcw } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { StepHeader } from '../components/StepHeader';
 import { Button } from '../components/ui/button';
+import { CameraPermissionPrimer } from '../components/CameraPermissionPrimer';
 import { LivenessAvatar } from './LivenessAvatar';
 import { useKYCContext } from '../context/KYCContext';
 import { useKYCConfig } from '../context/KYCConfigContext';
 import { useCamera } from '../hooks/useCamera';
+import { useCameraPrimer } from '../hooks/useCameraPrimer';
 import { useImageCapture } from '../hooks/useImageCapture';
 import { useImageCompress } from '../hooks/useImageCompress';
 import { useLiveness } from '../hooks/useLiveness';
@@ -37,7 +39,17 @@ export function LivenessStep() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [retryInfo, setRetryInfo] = useState<{ attempt: number; total: number } | null>(null);
 
-  const camera = useCamera({ facingMode: 'user', enabled: !preview });
+  // Show an "Allow camera access" primer before the OS prompt (Stripe-style),
+  // unless the camera is already granted. The camera only starts — and thus the
+  // OS prompt only fires — once the user taps "Grant access".
+  const primerStatus = useCameraPrimer();
+  const [primed, setPrimed] = useState(false);
+  const needsPrimer = primerStatus === 'needed' && !primed && !preview;
+
+  const camera = useCamera({
+    facingMode: 'user',
+    enabled: !preview && (primerStatus === 'granted' || primed),
+  });
   const { capture } = useImageCapture({ videoRef: camera.videoRef, mirror: true });
   const { compress, isCompressing } = useImageCompress();
 
@@ -324,6 +336,30 @@ export function LivenessStep() {
   }
 
   // ---------------------------------------------------------------------------
+  // Camera permission primer (before the OS prompt)
+  // ---------------------------------------------------------------------------
+
+  if (needsPrimer) {
+    return (
+      <div className="space-y-5 animate-slide-up">
+        <StepHeader
+          title="Liveness Check"
+          description="We'll use your camera to verify you're a real person."
+          onBack={handleBack}
+        />
+        <CameraPermissionPrimer
+          bodyText="When prompted, allow camera access to continue your verification."
+          onGrant={() => {
+            // Speech needs a user gesture to start — prime it here.
+            primeSpeech();
+            setPrimed(true);
+          }}
+        />
+      </div>
+    );
+  }
+
+  // ---------------------------------------------------------------------------
   // Main liveness UI
   // ---------------------------------------------------------------------------
 
@@ -488,7 +524,7 @@ export function LivenessStep() {
         )}
 
         {/* Animated avatar */}
-        <LivenessAvatar gesture={avatarGesture} visible={showAvatar} />
+        <LivenessAvatar gesture={avatarGesture} visible={showAvatar} assetsBasePath={config.assetsBasePath} />
 
         {/* Failed state — retry */}
         {phase === 'failed' && (

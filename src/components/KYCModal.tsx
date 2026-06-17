@@ -201,6 +201,7 @@ export function KYCModal({ open, onClose, showThemeToggle, disableClose }: KYCMo
       <DialogContent
         fullscreen={fullscreen}
         overlayClassName={isCaptureStep ? 'bg-white' : undefined}
+        className="kyc-root"
         style={themeVars}
         onPointerDownOutside={(e) => { if (dismissBlocked) e.preventDefault(); }}
         onEscapeKeyDown={(e) => { if (dismissBlocked) e.preventDefault(); }}

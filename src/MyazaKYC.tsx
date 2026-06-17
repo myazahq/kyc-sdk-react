@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { KYCProvider, useKYCContext } from './context/KYCContext';
 import { KYCConfigProvider } from './context/KYCConfigContext';
 import { KYCModal } from './components/KYCModal';
@@ -9,7 +9,13 @@ import { buildThemeVars } from './lib/theme';
 import { primeFaceMesh } from './liveness/face-mesh';
 import { configureSpeech } from './liveness/speech';
 import { safeReportError } from './lib/errors';
+import { isDesktopDevice } from './lib/device';
+import type { HandoffSessionSnapshot } from './services/api';
 import type { MyazaKYCConfig, MyazaKYCProps, UseMyazaKYCReturn, KYCStep, SupportedCountry } from './types/config';
+
+// Lazy-loaded so the QR/handoff code (and qrcode.react) is code-split out of the
+// initial bundle — it only loads when a desktop user actually reaches the gate.
+const DeviceHandoffGate = lazy(() => import('./components/DeviceHandoffGate'));
 
 // ---------------------------------------------------------------------------
 // Inner component (has access to KYCContext)
@@ -24,6 +30,7 @@ function KYCInner({
   idTypes,
   metadata,
   userData,
+  assetsBasePath,
   enableSelfie,
   enableDocumentCapture,
   allowDocumentUpload,
@@ -31,6 +38,7 @@ function KYCInner({
   voiceGuidance,
   showThemeToggle,
   disableClose,
+  deviceHandoff,
   onStart,
   onStepChange,
   onSubmit,
@@ -43,6 +51,32 @@ function KYCInner({
 }: KYCInnerProps) {
   const { state, dispatch } = useKYCContext();
   const prevStepRef = useRef<KYCStep>(state.currentStep);
+
+  // Device-handoff gate (continue-on-phone). Shown before the flow on desktop
+  // when enabled; the gate owns its own session + polling and never touches the
+  // KYC reducer (so SubmittedStep's auto-submit can't fire on the desktop).
+  const [gateOpen, setGateOpen] = useState(false);
+
+  // Snapshot the desktop sends to mint a handoff session — the phone renders
+  // the same flow from it. userData is included so greeting tokens work on the
+  // phone (the token URL is already the secret, same risk level as a magic link).
+  const handoffSnapshot = useMemo<HandoffSessionSnapshot>(() => ({
+    country,
+    ...(idTypes ? { idTypes } : {}),
+    ...(enableSelfie !== undefined ? { enableSelfie } : {}),
+    ...(enableDocumentCapture !== undefined ? { enableDocumentCapture } : {}),
+    ...(allowDocumentUpload !== undefined ? { allowDocumentUpload } : {}),
+    ...(enableLiveness !== undefined ? { enableLiveness } : {}),
+    ...(voiceGuidance !== undefined ? { voiceGuidance } : {}),
+    ...(showThemeToggle !== undefined ? { showThemeToggle } : {}),
+    ...(disableClose !== undefined ? { disableClose } : {}),
+    ...(appearance ? { appearance: appearance as Record<string, unknown> } : {}),
+    ...(consent ? { consent: consent as Record<string, unknown> } : {}),
+    ...(success ? { success: success as Record<string, unknown> } : {}),
+    ...(metadata ? { metadata } : {}),
+    ...(userData ? { userData } : {}),
+    ...(assetsBasePath ? { assetsBasePath } : {}),
+  }), [country, idTypes, enableSelfie, enableDocumentCapture, allowDocumentUpload, enableLiveness, voiceGuidance, showThemeToggle, disableClose, appearance, consent, success, metadata, userData, assetsBasePath]);
 
   // Pre-load MediaPipe Face Mesh model as soon as the SDK mounts and apply the
   // voice-guidance config (enabled + language) for the spoken liveness prompts.
@@ -67,7 +101,8 @@ function KYCInner({
     }
   }, [state.error, onError]);
 
-  const handleOpen = useCallback(() => {
+  // Seed any pre-filled userData into the reducer. Shared by both entry paths.
+  const seedUserData = useCallback(() => {
     if (userData) {
       dispatch({ type: 'SET_USER_DATA', payload: {
         ...(userData.firstName ? { firstName: userData.firstName } : {}),
@@ -75,9 +110,32 @@ function KYCInner({
         ...(userData.dateOfBirth ? { dateOfBirth: userData.dateOfBirth } : {}),
       }});
     }
-    dispatch({ type: 'OPEN_MODAL' });
+  }, [dispatch, userData]);
+
+  // Offer handoff only on desktop, when enabled, and when the flow plausibly
+  // needs a camera (skip pure number-only-no-liveness flows).
+  const cameraNeeded = enableLiveness !== false || enableDocumentCapture !== false;
+
+  const handleOpen = useCallback(() => {
+    seedUserData();
     onStart?.();
-  }, [dispatch, onStart, userData]);
+    if (deviceHandoff !== false && cameraNeeded && isDesktopDevice()) {
+      setGateOpen(true);
+    } else {
+      dispatch({ type: 'OPEN_MODAL' });
+    }
+  }, [dispatch, onStart, seedUserData, deviceHandoff, cameraNeeded]);
+
+  // User chose to verify on this computer: leave the gate, start the flow.
+  const handleContinueHere = useCallback(() => {
+    setGateOpen(false);
+    dispatch({ type: 'OPEN_MODAL' });
+  }, [dispatch]);
+
+  const handleGateClose = useCallback(() => {
+    setGateOpen(false);
+    onClose?.();
+  }, [onClose]);
 
   const handleClose = useCallback(() => {
     dispatch({ type: 'CLOSE_MODAL' });
@@ -96,6 +154,8 @@ function KYCInner({
       enableDocumentCapture={enableDocumentCapture}
       allowDocumentUpload={allowDocumentUpload}
       enableLiveness={enableLiveness}
+      deviceHandoff={deviceHandoff}
+      assetsBasePath={assetsBasePath}
       appearance={appearance}
       consent={consent}
       success={success}
@@ -113,6 +173,18 @@ function KYCInner({
             ? `Verify with ${appearance.companyName}`
             : 'Verify Identity')}
       </Button>
+
+      {gateOpen && (
+        <Suspense fallback={null}>
+          <DeviceHandoffGate
+            snapshot={handoffSnapshot}
+            onContinueHere={handleContinueHere}
+            onClose={handleGateClose}
+            showThemeToggle={showThemeToggle}
+            disableClose={disableClose}
+          />
+        </Suspense>
+      )}
 
       <KYCModal open={state.isOpen} onClose={handleClose} showThemeToggle={showThemeToggle} disableClose={disableClose} />
     </KYCConfigProvider>

@@ -49,6 +49,18 @@ export interface KYCConfigValue {
   /** Allow picking a document photo from the device instead of the camera. Default true. */
   allowDocumentUpload?: boolean;
   enableLiveness?: boolean;
+  /**
+   * Show the "continue on another device" handoff option.
+   * Desktop: shown as a pre-flow gate. Mobile: shown as a subtle link on the consent step.
+   * Default true.
+   */
+  deviceHandoff?: boolean;
+  /**
+   * Base path (or absolute URL) where gesture GIFs are served from.
+   * Defaults to `'/kyc-assets'`. Copy `node_modules/@myazahq/kyc-sdk-react/gifs/`
+   * to that path, or set an absolute CDN URL to serve them remotely.
+   */
+  assetsBasePath?: string;
   /** Branding: company name, logo, primary color, theme. */
   appearance?: KYCAppearance;
   /** Consent (welcome) screen copy overrides. */
@@ -123,20 +135,34 @@ function describeConfigError(err: unknown): { message: string; statusCode?: numb
 
 type KYCConfigProviderProps = Omit<KYCConfigValue, 'serverConfig' | 'getIdTypeFeatures' | 'api'> & {
   children: ReactNode;
+  /**
+   * Pre-built API client. Used by the hosted (continue-on-phone) entry, which
+   * authenticates with a session token through a relative base URL — bypassing
+   * `resolveBaseUrl` (which throws on a non-key token). When omitted the client
+   * is built from the API key prefix as usual.
+   */
+  apiOverride?: KYCApi;
+  /**
+   * Pre-resolved server config. Used by the hosted entry, which already has the
+   * org's idType allowlist + branding from the session bootstrap, so it should
+   * NOT fetch `/config` (not in the session-token scope).
+   */
+  serverConfigOverride?: ServerSdkConfig;
 };
 
-export function KYCConfigProvider({ children, ...config }: KYCConfigProviderProps) {
-  const [serverConfig, setServerConfig] = useState<ServerSdkConfig>({
-    status: 'loading',
-    idTypes: [],
-  });
+export function KYCConfigProvider({ children, apiOverride, serverConfigOverride, ...config }: KYCConfigProviderProps) {
+  const [serverConfig, setServerConfig] = useState<ServerSdkConfig>(
+    serverConfigOverride ?? { status: 'loading', idTypes: [] },
+  );
 
   // Resolve the base URL from the API key prefix (+ devUrl for dev keys) and
   // build a single memoized API client. Rebuilt only when the key or devUrl
   // changes. An invalid key prefix throws here (fail-loud at integration time).
+  // `apiOverride` short-circuits this (hosted mode) — `resolveBaseUrl` is never
+  // called, so a session token doesn't trip its key-prefix validation.
   const api = useMemo(
-    () => createKYCApi(resolveBaseUrl(config.apiKey, config.devUrl), config.apiKey),
-    [config.apiKey, config.devUrl],
+    () => apiOverride ?? createKYCApi(resolveBaseUrl(config.apiKey, config.devUrl), config.apiKey),
+    [apiOverride, config.apiKey, config.devUrl],
   );
 
   // Guards onError so a fatal config failure is reported to the consumer at
@@ -144,6 +170,9 @@ export function KYCConfigProvider({ children, ...config }: KYCConfigProviderProp
   const reportedErrorRef = useRef<KYCApi | null>(null);
 
   useEffect(() => {
+    // Hosted mode already has the server config from the session bootstrap —
+    // don't fetch /config (and don't overwrite the provided override).
+    if (serverConfigOverride) return;
     let cancelled = false;
     api
       .config()
@@ -201,6 +230,8 @@ export function KYCConfigProvider({ children, ...config }: KYCConfigProviderProp
       config.enableDocumentCapture,
       config.allowDocumentUpload,
       config.enableLiveness,
+      config.deviceHandoff,
+      config.assetsBasePath,
       config.appearance,
       config.consent,
       config.success,

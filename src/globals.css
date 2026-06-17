@@ -1,6 +1,12 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* Native Tailwind v4 import — honours @source for self-contained SDK CSS. */
+@import "tailwindcss";
+@config "../tailwind.config.ts";
+
+/* Scan every SDK source file so all utility classes (space-y-*, gap-*, p-*,
+   etc.) are shipped in dist/styles.css and the SDK never depends on the host
+   app to generate them. @source works in native v4 mode but NOT in the
+   legacy @tailwind compat shim above. */
+@source "./**/*.{ts,tsx}";
 
 @theme inline {
   --color-background: var(--background);
@@ -87,6 +93,86 @@
     --ring: #7B6EF7;
   }
 
+  /* Scope all SDK design tokens to the modal root so the SDK is visually
+     self-contained regardless of the host app's :root or @theme overrides.
+     Covers semantic color tokens, the Tailwind radius scale (host @theme inline
+     often remaps rounded-* to var(--radius-*)), and font families. */
+  .kyc-root {
+    /* Semantic color tokens */
+    --background: #FFFFFF;
+    --foreground: #070330;
+    --primary: #5645F5;
+    --primary-foreground: #F6F5FE;
+    --secondary: #F6F5FE;
+    --secondary-foreground: #070330;
+    --muted: #F6F5FE;
+    --muted-foreground: #5A5775;
+    --accent: #E9E7FE;
+    --accent-foreground: #070330;
+    --destructive: #BD1B09;
+    --destructive-foreground: #FCD8D8;
+    --border: #D3CFFC;
+    --input: #D3CFFC;
+    --ring: #5645F5;
+
+    /* Tailwind radius scale — host @theme inline often maps rounded-* to
+       var(--radius-*) → var(--radius), which bloats with our larger --radius.
+       Pin to Tailwind v4 built-in defaults so rounded-md etc. stay correct. */
+    --radius: 0.75rem;
+    --radius-none: 0;
+    --radius-sm: 0.125rem;
+    --radius-md: 0.375rem;
+    --radius-lg: 0.5rem;
+    --radius-xl: 0.75rem;
+    --radius-2xl: 1rem;
+    --radius-3xl: 1.5rem;
+    --radius-full: 3.40282e+38px;
+
+    /* Font families — prevent host @theme font remappings from bleeding in */
+    --font-sans: "Karla", system-ui, sans-serif;
+    --font-body: "Karla", system-ui, sans-serif;
+    --font-heading: "Space Grotesk", system-ui, sans-serif;
+    --font-mono: ui-monospace, monospace;
+
+    /* Status colors */
+    --kyc-success: #0DA211;
+    --kyc-success-light: #D8F4DC;
+    --kyc-warning: #FFC107;
+    --kyc-warning-light: #FFF1D6;
+    --kyc-error: #BD1B09;
+    --kyc-error-light: #FCD8D8;
+    --kyc-info: #004FAF;
+    --kyc-info-light: #C8E9FF;
+  }
+
+  .dark .kyc-root {
+    --background: #040218;
+    --foreground: #F6F5FE;
+    --primary: #7B6EF7;
+    --primary-foreground: #F6F5FE;
+    --secondary: #302D53;
+    --secondary-foreground: #F6F5FE;
+    --muted: #302D53;
+    --muted-foreground: #ACABBA;
+    --accent: #302D53;
+    --accent-foreground: #F6F5FE;
+    --destructive: #BD1B09;
+    --destructive-foreground: #FCD8D8;
+    --border: #302D53;
+    --input: #302D53;
+    --ring: #7B6EF7;
+  }
+
+  /* Reset element-level base rules that host apps often apply via @layer base
+     (e.g. h1-h6 { letter-spacing: -0.02em; font-weight: 600 }).
+     SDK utility classes (font-semibold, text-2xl, etc.) have higher specificity
+     and still win — this only neutralises bare element rules. */
+  .kyc-root h1, .kyc-root h2, .kyc-root h3,
+  .kyc-root h4, .kyc-root h5, .kyc-root h6 {
+    letter-spacing: normal;
+    font-size: revert;
+  }
+
   * {
     font-family: var(--font-body);
   }
@@ -164,6 +250,14 @@
   100% { transform: scale(1); opacity: 1; }
 }
 
+/* Brief white "shutter" flash overlaid the instant a document photo is taken,
+   played alongside the zoom-crop transition into the captured still. */
+@keyframes capture-flash {
+  0% { opacity: 0; }
+  20% { opacity: 0.85; }
+  100% { opacity: 0; }
+}
+
 @layer utilities {
   .animate-slide-up {
     animation: slide-up 300ms ease-out;
@@ -200,6 +294,9 @@
   .animate-checkmark-pop {
     animation: checkmark-pop 400ms ease-out forwards;
   }
+  .animate-capture-flash {
+    animation: capture-flash 600ms ease-out forwards;
+  }
   .font-heading {
     font-family: var(--font-heading);
   }
@@ -207,3 +304,20 @@
     font-family: var(--font-body);
   }
 }
+
+/* ─── Host-app isolation: scoped border-radius overrides ─────────────────
+   These are intentionally OUTSIDE any @layer so they sit above @layer
+   utilities in the CSS cascade — meaning they win over any host-app Tailwind
+   CSS that maps rounded-* to var(--radius-*) via @theme inline, regardless
+   of which stylesheet loads last. The compound selector (.kyc-root .rounded-*)
+   also has higher specificity than the host's bare (.rounded-*) rule.
+   Values match Tailwind v4's built-in defaults for each suffix. */
+.kyc-root .rounded-sm, .kyc-root.rounded-sm { border-radius: 0.125rem; }
+.kyc-root .rounded,    .kyc-root.rounded    { border-radius: 0.25rem; }
+.kyc-root .rounded-md, .kyc-root.rounded-md { border-radius: 0.375rem; }
+.kyc-root .rounded-lg, .kyc-root.rounded-lg { border-radius: 0.5rem; }
+.kyc-root .rounded-xl, .kyc-root.rounded-xl { border-radius: 0.75rem; }
+.kyc-root .rounded-2xl, .kyc-root.rounded-2xl { border-radius: 1rem; }
+.kyc-root .rounded-3xl, .kyc-root.rounded-3xl { border-radius: 1.5rem; }
+.kyc-root .rounded-full, .kyc-root.rounded-full { border-radius: 3.40282e+38px; }
+.kyc-root .rounded-none, .kyc-root.rounded-none { border-radius: 0; }

@@ -8,7 +8,7 @@ import type { KYCSubmission, KYCError } from './verification';
 
 export type SupportedCountry = 'NG' | 'GH' | 'KE' | 'ZA' | 'CI';
 
-export type NigeriaIdType = 'bvn' | 'nin' | 'vnin' | 'passport' | 'drivers-license' | 'pvc';
+export type NigeriaIdType = 'bvn' | 'bvn-premium' | 'nin' | 'vnin' | 'tax-id' | 'passport' | 'drivers-license' | 'pvc';
 export type GhanaIdType = 'ghana-card' | 'voters' | 'drivers-license' | 'ssnit' | 'passport';
 export type KenyaIdType = 'national-id' | 'passport';
 export type SouthAfricaIdType = 'national-id';
@@ -33,6 +33,11 @@ export type IdTypeForCountry<C extends SupportedCountry> =
 export interface IdTypeDefinition {
   key: IdType;
   label: string;
+  /**
+   * What the user actually types when it differs from the ID's name — e.g.
+   * Tax ID lookups are keyed off the person's NIN, so the input asks for a NIN.
+   */
+  inputLabel?: string;
   digits?: number;
   pattern?: RegExp;
   /** Whether this ID type requires the user to photograph/upload a physical document. */
@@ -226,6 +231,16 @@ export interface MyazaKYCConfig<C extends SupportedCountry = SupportedCountry> {
   showThemeToggle?: boolean;
 
   /**
+   * Offer "continue on your phone" device handoff. On **desktop**, before the
+   * flow starts, the SDK shows a screen with a QR code + copyable link/code so
+   * the user can finish on their phone (useful when the desktop has no webcam),
+   * plus a "Continue on this device" CTA. When the phone submits, the desktop
+   * auto-advances and fires {@link onSubmit}. Mobile devices skip the screen and
+   * start the flow directly. Default `true`; set `false` to disable entirely.
+   */
+  deviceHandoff?: boolean;
+
+  /**
    * Hide the close (X) button and block all user-initiated dismissal of the
    * modal — backdrop tap, Escape key, and (on mobile) swipe-down. When `true`,
    * the flow can only be closed programmatically via the `close()` returned by
@@ -242,6 +257,20 @@ export interface MyazaKYCConfig<C extends SupportedCountry = SupportedCountry> {
 
   /** Override the success (submitted) screen copy. */
   success?: KYCSuccessContent;
+
+  /**
+   * Base path (or absolute URL) where the SDK's gesture GIF assets are served
+   * from. These are used by the liveness step to animate each challenge gesture.
+   *
+   * - Set to an **absolute URL** (e.g. `'https://cdn.example.com/kyc-assets'`)
+   *   to serve from a CDN — requires no files in your `public/` folder.
+   * - Set to a **relative path** (e.g. `'/kyc-assets'`) to serve locally; copy
+   *   the `gifs/` folder from `node_modules/@myazahq/kyc-sdk-react/gifs/` to
+   *   that path in your public directory.
+   *
+   * Defaults to `'/kyc-assets'`.
+   */
+  assetsBasePath?: string;
 
   /** Arbitrary metadata forwarded with every verification request */
   metadata?: Record<string, string>;

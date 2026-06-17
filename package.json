@@ -1,6 +1,6 @@
 {
   "name": "@myazahq/kyc-sdk-react",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -22,14 +22,15 @@
     "./styles.css": "./dist/styles.css"
   },
   "files": [
-    "dist"
+    "dist",
+    "gifs"
   ],
   "publishConfig": {
     "access": "public"
   },
   "scripts": {
-    "build": "tsup",
-    "dev": "tsup --watch",
+    "build": "tsup && tailwindcss -i ./src/globals.css -o ./dist/styles.css --minify",
+    "dev": "tsup --watch & tailwindcss -i ./src/globals.css -o ./dist/styles.css --watch",
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
@@ -50,9 +51,12 @@
     "clsx": "^2.1.1",
     "country-flag-icons": "^1.6.17",
     "lucide-react": "^1.7.0",
-    "tailwind-merge": "^3.5.0"
+    "qrcode.react": "^4.2.0",
+    "tailwind-merge": "^3.5.0",
+    "vaul": "^1.1.2"
   },
   "devDependencies": {
+    "@tailwindcss/cli": "^4.3.1",
     "@tailwindcss/postcss": "^4.2.2",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",

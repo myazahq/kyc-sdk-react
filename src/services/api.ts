@@ -135,6 +135,63 @@ export interface SdkConfigResponse {
   branding?: SdkConfigBranding;
 }
 
+// ---------------------------------------------------------------------------
+// Device handoff (continue-on-phone)
+// ---------------------------------------------------------------------------
+
+/**
+ * Snapshot of the consumer's config the desktop sends to mint a handoff
+ * session. The phone re-renders the same flow from it. `userData` is included
+ * so the greeting and consent tokens work on the phone — the token URL is
+ * already the secret, so the risk profile is the same as a magic link.
+ */
+export interface HandoffSessionSnapshot {
+  country: string;
+  idTypes?: string[];
+  enableSelfie?: boolean;
+  enableDocumentCapture?: boolean;
+  allowDocumentUpload?: boolean;
+  enableLiveness?: boolean;
+  voiceGuidance?: unknown;
+  showThemeToggle?: boolean;
+  disableClose?: boolean;
+  appearance?: Record<string, unknown>;
+  consent?: Record<string, unknown>;
+  success?: Record<string, unknown>;
+  metadata?: Record<string, string>;
+  userData?: { firstName?: string; lastName?: string; dateOfBirth?: string };
+  assetsBasePath?: string;
+}
+
+/** Response from `POST /api/kyc/session`. */
+export interface CreateHandoffSessionResponse {
+  sessionId: string;
+  /** Human-typable / copyable short code (display only). */
+  code: string;
+  /** Full hosted-page URL the QR encodes. */
+  url: string;
+  expiresAt: string;
+}
+
+export type HandoffSessionStatus = 'pending' | 'opened' | 'submitted' | 'expired';
+
+/** Response from `GET /api/kyc/session/:sessionId` (desktop poll, no PII). */
+export interface HandoffSessionStatusResponse {
+  status: HandoffSessionStatus;
+  verificationId?: string;
+  verificationStatus?: VerificationStatusResponse['status'];
+}
+
+/** Response from `GET /api/kyc/session/by-token/:token/bootstrap` (phone side). */
+export interface HandoffBootstrapResponse {
+  environment: 'DEVELOPMENT' | 'SANDBOX' | 'PRODUCTION';
+  configSnapshot: HandoffSessionSnapshot;
+  branding?: SdkConfigBranding;
+  /** Org allowlist + per-ID feature flags (same shape as /config). */
+  idTypes: SdkConfigIdType[];
+  expiresAt: string;
+}
+
 // The mimeType values the server accepts (image vs. video). Must mirror the
 // server's upload allowlist exactly.
 const IMAGE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const;
@@ -225,6 +282,26 @@ export function createKYCApi(baseUrl: string, apiKey: string) {
 
     async config(): Promise<SdkConfigResponse> {
       return request<SdkConfigResponse>('/config');
+    },
+
+    // ── Device handoff (continue-on-phone) ──────────────────────────────────
+
+    /** Desktop: mint a handoff session from a PII-free config snapshot. */
+    async createHandoffSession(snapshot: HandoffSessionSnapshot): Promise<CreateHandoffSessionResponse> {
+      return request<CreateHandoffSessionResponse>('/session', {
+        method: 'POST',
+        body: JSON.stringify(snapshot),
+      });
+    },
+
+    /** Desktop: poll a handoff session's lifecycle status. */
+    async getHandoffSession(sessionId: string): Promise<HandoffSessionStatusResponse> {
+      return request<HandoffSessionStatusResponse>(`/session/${sessionId}`);
+    },
+
+    /** Phone: bootstrap the hosted flow from the session token (public route). */
+    async bootstrapHandoff(token: string): Promise<HandoffBootstrapResponse> {
+      return request<HandoffBootstrapResponse>(`/session/by-token/${token}/bootstrap`);
     },
   };
 }

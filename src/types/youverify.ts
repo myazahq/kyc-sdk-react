@@ -171,6 +171,7 @@ export type YouVerifyNigeriaIdEndpoint =
   | 'bvn-premium'
   | 'nin'
   | 'vnin'
+  | 'tax-id'
   | 'drivers-license'
   | 'passport'
   | 'pvc';

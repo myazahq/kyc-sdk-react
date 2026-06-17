@@ -8,34 +8,59 @@ import { DOCUMENT_IMAGE_QUALITY, logCaptureSize } from '../lib/capture-settings'
 // Constants
 // ---------------------------------------------------------------------------
 
-/** ID card ISO/IEC 7810 ID-1: 85.60 mm × 53.98 mm → aspect ratio ≈ 1.586 */
-const ID_CARD_RATIO = 85.6 / 53.98; // 1.5857…
+/**
+ * Target aspect ratio. Most supported documents are ISO/IEC 7810 ID-1 cards
+ * (85.60 mm × 53.98 mm ≈ 1.586); passport data pages are a bit squarer (~1.42).
+ * We aim between them and accept a band that covers both, but NOT portrait
+ * shapes (a head/face crop is roughly square-to-portrait, ratio ≲ 1.1).
+ */
+const RATIO_TARGET = 1.55;
+const RATIO_TOLERANCE = 0.4; // accepts ~1.15 – 1.95 (landscape only)
 
-/** How far the detected ratio may deviate from the ideal before we reject */
-const RATIO_TOLERANCE = 0.45;
-
-/** Card bounding box must cover this fraction of the frame (area) */
-const MIN_AREA_FRACTION = 0.08;
+/** Card bounding box must cover this fraction of the frame (area). */
+const MIN_AREA_FRACTION = 0.1;
 const MAX_AREA_FRACTION = 0.95;
 
-/** How many *consecutive* frames a candidate must survive before we consider
- *  it "detected" (reduces jitter on noisy frames) */
-const DETECT_CONFIRM_FRAMES = 2;
+/** Minimum separation between a border pair, as a fraction of the frame. */
+const MIN_WIDTH_FRACTION = 0.3;
+const MIN_HEIGHT_FRACTION = 0.18;
+
+/**
+ * The KEY discriminator between a card and a face: every one of the four
+ * borders must be a *continuous, straight, high-contrast line*. Each side must
+ * have at least this fraction of its length covered by strong edge pixels.
+ * A face's bounding box has, at best, one or two coincidental straight sides —
+ * never four — so it can no longer pass.
+ */
+const BORDER_MIN_FILL = 0.55;
+
+/** A projection peak must reach this fraction of the strongest peak to count. */
+const PEAK_REL_THRESHOLD = 0.32;
+/** Cap candidate border lines per axis (keeps the rectangle search cheap). */
+const MAX_PEAKS = 6;
+
+/** How many *consecutive* frames a candidate must survive before "detected". */
+const DETECT_CONFIRM_FRAMES = 3;
 
 /** A detected card is "stable" when it hasn't moved more than this fraction
- *  of the video dimension in either axis */
-const STABILITY_FRACTION = 0.08;
+ *  of the video dimension in either axis. */
+const STABILITY_FRACTION = 0.07;
 
-/** How long the card must be stable before we auto-capture */
-const STABILITY_DURATION_MS = 800;
+/** How long the card must be stable before we auto-capture. */
+const STABILITY_DURATION_MS = 750;
 
 /** Fallback: capture the full frame after this many ms even if detection never
- *  triggers — ensures the user is never stuck waiting forever */
+ *  triggers — ensures the user is never stuck waiting forever. */
 const FALLBACK_CAPTURE_MS = 6000;
 
-/** Resolution we run detection at (keep small for 60 fps on mid-range phones) */
-const DETECT_W = 160;
-const DETECT_H = 100;
+/** Detection resolution. A bit higher than the old 160×100 so thin card
+ *  borders survive the downscale and read as clean straight lines. */
+const DETECT_W = 240;
+const DETECT_H = 150;
+
+/** Throttle detection to ~16 fps — plenty for guidance, far gentler on the CPU
+ *  than running edge detection on every animation frame. */
+const MIN_PROCESS_INTERVAL_MS = 60;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -62,29 +87,46 @@ export interface UseDocumentDetectionReturn {
   reset: () => void;
 }
 
+interface DetectRect {
+  top: number;
+  bottom: number;
+  left: number;
+  right: number;
+}
+
 // ---------------------------------------------------------------------------
 // Image-processing helpers (pure, no external deps)
 // ---------------------------------------------------------------------------
 
 /**
- * Convert RGBA ImageData to a grayscale Uint8ClampedArray.
+ * Convert RGBA ImageData to a grayscale Float32Array.
  * Uses the standard luminance formula: 0.299R + 0.587G + 0.114B.
  */
-function toGrayscale(data: Uint8ClampedArray, w: number, h: number): Uint8ClampedArray {
-  const gray = new Uint8ClampedArray(w * h);
+function toGrayscale(data: Uint8ClampedArray, w: number, h: number): Float32Array {
+  const gray = new Float32Array(w * h);
   for (let i = 0; i < w * h; i++) {
     const off = i * 4;
-    gray[i] = (0.299 * data[off] + 0.587 * data[off + 1] + 0.114 * data[off + 2]) | 0;
+    gray[i] = 0.299 * data[off] + 0.587 * data[off + 1] + 0.114 * data[off + 2];
   }
   return gray;
 }
 
 /**
- * Compute per-pixel Sobel gradient magnitude (0-255 scaled),
- * skipping a 1-pixel border.
+ * Compute the *directional* Sobel response, separated into:
+ *   • `gx` — magnitude of the horizontal derivative → responds to VERTICAL edges
+ *            (the left/right borders of a card).
+ *   • `gy` — magnitude of the vertical derivative → responds to HORIZONTAL edges
+ *            (the top/bottom borders of a card).
+ * Keeping the two directions apart is what lets us look for four straight
+ * borders independently instead of one undifferentiated blob of "edginess".
  */
-function sobelMagnitude(gray: Uint8ClampedArray, w: number, h: number): Float32Array {
-  const mag = new Float32Array(w * h);
+function directionalSobel(
+  gray: Float32Array,
+  w: number,
+  h: number,
+): { gx: Float32Array; gy: Float32Array } {
+  const gx = new Float32Array(w * h);
+  const gy = new Float32Array(w * h);
   for (let y = 1; y < h - 1; y++) {
     for (let x = 1; x < w - 1; x++) {
       const tl = gray[(y - 1) * w + (x - 1)];
@@ -96,17 +138,17 @@ function sobelMagnitude(gray: Uint8ClampedArray, w: number, h: number): Float32A
       const bc = gray[(y + 1) * w + x];
       const br = gray[(y + 1) * w + (x + 1)];
 
-      const gx = -tl - 2 * ml - bl + tr + 2 * mr + br;
-      const gy = -tl - 2 * tc - tr + bl + 2 * bc + br;
-      mag[y * w + x] = Math.sqrt(gx * gx + gy * gy);
+      const sx = -tl - 2 * ml - bl + tr + 2 * mr + br;
+      const sy = -tl - 2 * tc - tr + bl + 2 * bc + br;
+      const idx = y * w + x;
+      gx[idx] = sx < 0 ? -sx : sx;
+      gy[idx] = sy < 0 ? -sy : sy;
     }
   }
-  return mag;
+  return { gx, gy };
 }
 
-/**
- * Compute the mean and standard deviation of a Float32Array in a single pass.
- */
+/** Mean + standard deviation of a Float32Array in a single pass. */
 function meanStd(arr: Float32Array): { mean: number; std: number } {
   let sum = 0;
   let sumSq = 0;
@@ -120,119 +162,203 @@ function meanStd(arr: Float32Array): { mean: number; std: number } {
   return { mean, std: Math.sqrt(Math.max(0, variance)) };
 }
 
-/**
- * Simple 3-tap moving average to smooth a projection array in-place.
- */
+/** 3-tap moving average to smooth a projection array in-place. */
 function smooth3(arr: Float32Array): void {
+  let prev = arr[0];
   for (let i = 1; i < arr.length - 1; i++) {
-    arr[i] = (arr[i - 1] + arr[i] + arr[i + 1]) / 3;
+    const cur = arr[i];
+    arr[i] = (prev + cur + arr[i + 1]) / 3;
+    prev = cur;
   }
 }
 
 /**
- * Find the longest contiguous run in `arr` where arr[i] > threshold.
- * Returns [start, end] inclusive, or null if none found.
+ * Find the strongest, well-separated local maxima in a projection — these are
+ * the candidate border lines. Returns positions sorted ascending.
  */
-function longestRun(arr: Float32Array, threshold: number): [number, number] | null {
-  let bestStart = -1;
-  let bestLen = 0;
-  let runStart = -1;
+function findPeaks(proj: Float32Array): number[] {
+  const n = proj.length;
+  let max = 0;
+  for (let i = 0; i < n; i++) if (proj[i] > max) max = proj[i];
+  if (max <= 0) return [];
 
-  for (let i = 0; i <= arr.length; i++) {
-    const active = i < arr.length && arr[i] > threshold;
-    if (active && runStart === -1) {
-      runStart = i;
-    } else if (!active && runStart !== -1) {
-      const len = i - runStart;
-      if (len > bestLen) {
-        bestLen = len;
-        bestStart = runStart;
-      }
-      runStart = -1;
+  const thresh = max * PEAK_REL_THRESHOLD;
+  const candidates: { pos: number; val: number }[] = [];
+  for (let i = 0; i < n; i++) {
+    const v = proj[i];
+    if (v < thresh) continue;
+    const prev = i > 0 ? proj[i - 1] : -Infinity;
+    const next = i < n - 1 ? proj[i + 1] : -Infinity;
+    if (v >= prev && v >= next) candidates.push({ pos: i, val: v });
+  }
+
+  // Greedily keep the strongest peaks, suppressing any within a few pixels of an
+  // already-chosen one (avoids counting one thick border as two lines).
+  candidates.sort((a, b) => b.val - a.val);
+  const chosen: number[] = [];
+  const minSep = 3;
+  for (const c of candidates) {
+    if (chosen.every((p) => Math.abs(p - c.pos) >= minSep)) {
+      chosen.push(c.pos);
+      if (chosen.length >= MAX_PEAKS) break;
     }
   }
-
-  if (bestStart === -1) return null;
-  return [bestStart, bestStart + bestLen - 1];
+  return chosen.sort((a, b) => a - b);
 }
 
 /**
- * Try to find a rectangular card in the processed frame.
- *
- * Returns candidate bounds in **detection-canvas coordinates** (DETECT_W × DETECT_H),
- * or null if no plausible rectangle is found.
+ * Fraction of a horizontal line (row `r`, columns `left..right`) covered by
+ * strong horizontal-edge pixels. Checks r-1/r/r+1 and takes the best, so a
+ * border that lands between downscaled pixels still reads as continuous.
  */
-function findCardBounds(
-  ctx: CanvasRenderingContext2D,
-  mag: Float32Array,
-  threshold: number,
+function horizontalFill(
+  gy: Float32Array,
+  r: number,
+  left: number,
+  right: number,
   w: number,
   h: number,
-): { top: number; bottom: number; left: number; right: number } | null {
-  // Build binary edge map and row / col projections
+  thresh: number,
+): number {
+  const span = right - left + 1;
+  if (span <= 0) return 0;
+  let best = 0;
+  for (let rr = r - 1; rr <= r + 1; rr++) {
+    if (rr < 0 || rr >= h) continue;
+    let count = 0;
+    const base = rr * w;
+    for (let x = left; x <= right; x++) if (gy[base + x] > thresh) count++;
+    const frac = count / span;
+    if (frac > best) best = frac;
+  }
+  return best;
+}
+
+/**
+ * Fraction of a vertical line (column `c`, rows `top..bottom`) covered by strong
+ * vertical-edge pixels. Checks c-1/c/c+1 and takes the best.
+ */
+function verticalFill(
+  gx: Float32Array,
+  c: number,
+  top: number,
+  bottom: number,
+  w: number,
+  h: number,
+  thresh: number,
+): number {
+  const span = bottom - top + 1;
+  if (span <= 0) return 0;
+  let best = 0;
+  for (let cc = c - 1; cc <= c + 1; cc++) {
+    if (cc < 0 || cc >= w) continue;
+    let count = 0;
+    for (let y = top; y <= bottom; y++) if (gx[y * w + cc] > thresh) count++;
+    const frac = count / span;
+    if (frac > best) best = frac;
+  }
+  return best;
+}
+
+/**
+ * Find the best card-shaped rectangle whose four sides are all continuous
+ * straight borders. Returns bounds in detection-canvas coordinates, or null.
+ *
+ * Strategy:
+ *   1. Top/bottom borders are horizontal lines → peaks in the row projection of
+ *      |gy|. Left/right borders are vertical lines → peaks in the column
+ *      projection of |gx|.
+ *   2. For every pair of horizontal peaks × pair of vertical peaks, form a
+ *      rectangle, cheaply reject on aspect ratio + area, then require ALL FOUR
+ *      sides to be continuous high-contrast borders (the face-rejecting gate).
+ *   3. Score the survivors and return the best.
+ */
+function findCardBounds(gx: Float32Array, gy: Float32Array, w: number, h: number): DetectRect | null {
+  // Per-axis edge thresholds — a pixel counts as a "strong" border pixel when it
+  // sits clearly above the frame's typical gradient.
+  const sx = meanStd(gx);
+  const sy = meanStd(gy);
+  const vThresh = sx.mean + 0.6 * sx.std; // for vertical (left/right) borders
+  const hThresh = sy.mean + 0.6 * sy.std; // for horizontal (top/bottom) borders
+
+  // Row projection of horizontal-edge energy, column projection of vertical-edge
+  // energy. Each card border concentrates into a sharp peak here.
   const rowProj = new Float32Array(h);
   const colProj = new Float32Array(w);
-
   for (let y = 0; y < h; y++) {
+    const base = y * w;
+    let rowSum = 0;
     for (let x = 0; x < w; x++) {
-      if (mag[y * w + x] > threshold) {
-        rowProj[y]++;
-        colProj[x]++;
-      }
+      rowSum += gy[base + x];
+      colProj[x] += gx[base + x];
     }
+    rowProj[y] = rowSum;
   }
-
   smooth3(rowProj);
   smooth3(colProj);
 
-  // Minimum density required to count as a "card edge line"
-  const minRowDensity = w * 0.04;
-  const minColDensity = h * 0.04;
+  const hPeaks = findPeaks(rowProj); // candidate top/bottom rows
+  const vPeaks = findPeaks(colProj); // candidate left/right cols
+  if (hPeaks.length < 2 || vPeaks.length < 2) return null;
 
-  const rowRun = longestRun(rowProj, minRowDensity);
-  const colRun = longestRun(colProj, minColDensity);
+  const minH = MIN_HEIGHT_FRACTION * h;
+  const minW = MIN_WIDTH_FRACTION * w;
+  const frameArea = w * h;
 
-  if (!rowRun || !colRun) return null;
+  let best: DetectRect | null = null;
+  let bestScore = -1;
 
-  const [top, bottom] = rowRun;
-  const [left, right] = colRun;
+  for (let a = 0; a < hPeaks.length; a++) {
+    const top = hPeaks[a];
+    for (let b = a + 1; b < hPeaks.length; b++) {
+      const bottom = hPeaks[b];
+      const bh = bottom - top;
+      if (bh < minH) continue;
 
-  const bw = right - left;
-  const bh = bottom - top;
-  if (bw < 2 || bh < 2) return null;
+      for (let c = 0; c < vPeaks.length; c++) {
+        const left = vPeaks[c];
+        for (let d = c + 1; d < vPeaks.length; d++) {
+          const right = vPeaks[d];
+          const bw = right - left;
+          if (bw < minW) continue;
 
-  // Aspect ratio check
-  const ratio = bw / bh;
-  if (Math.abs(ratio - ID_CARD_RATIO) > RATIO_TOLERANCE) return null;
+          // Cheap geometric rejects first.
+          const ratio = bw / bh;
+          if (Math.abs(ratio - RATIO_TARGET) > RATIO_TOLERANCE) continue;
+          const areaFrac = (bw * bh) / frameArea;
+          if (areaFrac < MIN_AREA_FRACTION || areaFrac > MAX_AREA_FRACTION) continue;
 
-  // Area check (as fraction of the detection canvas)
-  const areaFrac = (bw * bh) / (w * h);
-  if (areaFrac < MIN_AREA_FRACTION || areaFrac > MAX_AREA_FRACTION) return null;
+          // The expensive, decisive test: are all four sides real borders?
+          const tf = horizontalFill(gy, top, left, right, w, h, hThresh);
+          if (tf < BORDER_MIN_FILL) continue;
+          const bf = horizontalFill(gy, bottom, left, right, w, h, hThresh);
+          if (bf < BORDER_MIN_FILL) continue;
+          const lf = verticalFill(gx, left, top, bottom, w, h, vThresh);
+          if (lf < BORDER_MIN_FILL) continue;
+          const rf = verticalFill(gx, right, top, bottom, w, h, vThresh);
+          if (rf < BORDER_MIN_FILL) continue;
 
-  // Perimeter quality check — at least 20% of the rectangle's border pixels
-  // should be above the edge threshold, otherwise it's likely background noise.
-  const edgePixels = (ctx.getImageData(0, 0, w, h)).data; // already drawn
-  let perimeterLen = 0;
-  let perimeterEdges = 0;
+          const minFill = Math.min(tf, bf, lf, rf);
+          const avgFill = (tf + bf + lf + rf) / 4;
 
-  // Top and bottom rows
-  for (let x = left; x <= right; x++) {
-    perimeterLen += 2;
-    if (mag[top * w + x] > threshold) perimeterEdges++;
-    if (mag[bottom * w + x] > threshold) perimeterEdges++;
+          // Prefer a well-centered candidate (correlates with the on-screen
+          // guide frame) and a fuller rectangle.
+          const cx = (left + right) / 2 / w;
+          const cy = (top + bottom) / 2 / h;
+          const centerDist = Math.hypot(cx - 0.5, cy - 0.5);
+          const centerBonus = 0.15 * (1 - Math.min(centerDist / 0.5, 1));
+
+          const score = minFill * 0.6 + avgFill * 0.25 + centerBonus;
+          if (score > bestScore) {
+            bestScore = score;
+            best = { top, bottom, left, right };
+          }
+        }
+      }
+    }
   }
-  // Left and right cols (excluding corners already counted)
-  for (let y = top + 1; y < bottom; y++) {
-    perimeterLen += 2;
-    if (mag[y * w + left] > threshold) perimeterEdges++;
-    if (mag[y * w + right] > threshold) perimeterEdges++;
-  }
 
-  if (perimeterLen > 0 && perimeterEdges / perimeterLen < 0.08) return null;
-
-  void edgePixels; // suppress unused warning — we called getImageData for the side-effect above
-
-  return { top, bottom, left, right };
+  return best;
 }
 
 // ---------------------------------------------------------------------------
@@ -258,6 +384,7 @@ export function useDocumentDetection({
   const lastBoundsRef = useRef<CardBounds | null>(null);
   const hasCapturedRef = useRef(false);
   const isCapturingRef = useRef(false);
+  const lastProcessRef = useRef(0);
 
   // ---------------------------------------------------------------------------
   // Fallback: capture the full video frame (no crop)
@@ -359,6 +486,15 @@ export function useDocumentDetection({
       return;
     }
 
+    // Throttle the (relatively heavy) edge detection — guidance doesn't need to
+    // run on every single animation frame.
+    const now = performance.now();
+    if (now - lastProcessRef.current < MIN_PROCESS_INTERVAL_MS) {
+      rafRef.current = requestAnimationFrame(processFrame);
+      return;
+    }
+    lastProcessRef.current = now;
+
     // Size the canvas to our detection resolution (done once or on first frame)
     if (canvas.width !== DETECT_W || canvas.height !== DETECT_H) {
       canvas.width = DETECT_W;
@@ -375,14 +511,10 @@ export function useDocumentDetection({
     ctx.drawImage(video, 0, 0, DETECT_W, DETECT_H);
     const { data } = ctx.getImageData(0, 0, DETECT_W, DETECT_H);
 
-    // Compute edge magnitudes
+    // Directional edges → find a four-bordered card rectangle
     const gray = toGrayscale(data, DETECT_W, DETECT_H);
-    const mag = sobelMagnitude(gray, DETECT_W, DETECT_H);
-    const { mean, std } = meanStd(mag);
-    const threshold = mean + 0.75 * std;
-
-    // Try to find a card-shaped rectangle
-    const candidate = findCardBounds(ctx, mag, threshold, DETECT_W, DETECT_H);
+    const { gx, gy } = directionalSobel(gray, DETECT_W, DETECT_H);
+    const candidate = findCardBounds(gx, gy, DETECT_W, DETECT_H);
 
     if (!candidate) {
       // No card — reset confirm counter
@@ -426,7 +558,7 @@ export function useDocumentDetection({
     const last = lastBoundsRef.current;
     const vw = video.videoWidth;
     const vh = video.videoHeight;
-    const threshold5pct =
+    const isStablePosition =
       last !== null &&
       Math.abs(bounds.x - last.x) < STABILITY_FRACTION * vw &&
       Math.abs(bounds.y - last.y) < STABILITY_FRACTION * vh &&
@@ -435,8 +567,7 @@ export function useDocumentDetection({
 
     lastBoundsRef.current = bounds;
 
-    if (threshold5pct) {
-      const now = performance.now();
+    if (isStablePosition) {
       if (stableStartRef.current === null) {
         stableStartRef.current = now;
       } else if (now - stableStartRef.current >= STABILITY_DURATION_MS) {
@@ -476,7 +607,7 @@ export function useDocumentDetection({
 
     // Fallback: only grab the full frame if a card was detected at some point
     // but stability never triggered (e.g. card kept moving). Never fires if
-    // no card was ever detected — don't capture a blank background.
+    // no card was ever detected — don't capture a blank background or a face.
     fallbackTimerRef.current = setTimeout(() => {
       if (!hasCapturedRef.current && everDetectedRef.current) {
         captureFullFrame();
@@ -514,6 +645,7 @@ export function useDocumentDetection({
     lastBoundsRef.current = null;
     hasCapturedRef.current = false;
     isCapturingRef.current = false;
+    lastProcessRef.current = 0;
     setIsCardDetected(false);
     setIsStable(false);
     setCardBounds(null);

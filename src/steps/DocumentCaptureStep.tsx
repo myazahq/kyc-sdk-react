@@ -14,11 +14,16 @@ import { StepHeader } from "../components/StepHeader";
 import { ImageCropper } from "../components/ImageCropper";
 import { Button } from "../components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "../components/ui/alert";
+import { CameraPermissionPrimer } from "../components/CameraPermissionPrimer";
 import { useKYCContext } from "../context/KYCContext";
 import { useKYCConfig } from "../context/KYCConfigContext";
 import { ID_TYPES, getScanSides } from "../utils/countries";
 import { useCamera } from "../hooks/useCamera";
-import { useDocumentDetection } from "../hooks/useDocumentDetection";
+import { useCameraPrimer } from "../hooks/useCameraPrimer";
+import {
+	useDocumentDetection,
+	type CardBounds,
+} from "../hooks/useDocumentDetection";
 import { useImageCompress } from "../hooks/useImageCompress";
 import { useLightLevel } from "../hooks/useLightLevel";
 import { primeSpeech } from "../liveness/speech";
@@ -41,6 +46,49 @@ import {
 //   back          — camera open for back side
 //   review        — both images shown, ready to upload and proceed
 type ScanPhase = "front" | "front-preview" | "back" | "review";
+
+// State driving the post-capture zoom-crop animation. `snapshot` is the frozen
+// full live frame; `bounds` is the detected card rectangle in full video-pixel
+// coordinates; `captured` is the final cropped still to commit when done.
+interface CaptureZoomState {
+	snapshot: string;
+	videoW: number;
+	videoH: number;
+	bounds: CardBounds;
+	mirror: boolean;
+	captured: string;
+}
+
+/** Respect the user's reduced-motion preference — skip the zoom animation. */
+function prefersReducedMotion(): boolean {
+	return (
+		typeof window !== "undefined" &&
+		typeof window.matchMedia === "function" &&
+		window.matchMedia("(prefers-reduced-motion: reduce)").matches
+	);
+}
+
+/**
+ * Grab the current video frame as a JPEG data URL (downscaled for memory; the
+ * reported `w`/`h` are the FULL video dimensions so detected card bounds map
+ * correctly onto it).
+ */
+function grabFrameSnapshot(
+	video: HTMLVideoElement,
+): { url: string; w: number; h: number } | null {
+	const vw = video.videoWidth;
+	const vh = video.videoHeight;
+	if (vw === 0 || vh === 0) return null;
+	const maxW = 1280;
+	const scale = vw > maxW ? maxW / vw : 1;
+	const canvas = document.createElement("canvas");
+	canvas.width = Math.round(vw * scale);
+	canvas.height = Math.round(vh * scale);
+	const ctx = canvas.getContext("2d");
+	if (!ctx) return null;
+	ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+	return { url: canvas.toDataURL("image/jpeg", 0.82), w: vw, h: vh };
+}
 
 export function DocumentCaptureStep() {
 	const { state, dispatch } = useKYCContext();
@@ -88,6 +136,10 @@ export function DocumentCaptureStep() {
 	} | null>(null);
 	const [cropperSrc, setCropperSrc] = useState<string | null>(null);
 	const [pauseForCrop, setPauseForCrop] = useState(false);
+	// While set, a short "zoom-crop" animation plays over the viewport: the frozen
+	// live frame zooms onto the detected document before the cropped still is
+	// shown — instead of hard-cutting to a tight, zoomed crop. Cleared on finish.
+	const [captureZoom, setCaptureZoom] = useState<CaptureZoomState | null>(null);
 	const fileInputRef = useRef<HTMLInputElement | null>(null);
 	// True between opening the OS file picker and a file actually being chosen.
 	// Used to detect a cancelled picker (window refocuses with no file) so we can
@@ -104,12 +156,19 @@ export function DocumentCaptureStep() {
 
 	const cameraActive = (phase === "front" || phase === "back") && !pauseForCrop;
 
+	// Show an "Allow camera access" primer before the OS prompt (Stripe-style),
+	// unless the camera is already granted. The camera only starts — and thus the
+	// OS prompt only fires — once the user taps "Grant access".
+	const primerStatus = useCameraPrimer();
+	const [primed, setPrimed] = useState(false);
+	const needsPrimer = cameraActive && primerStatus === "needed" && !primed;
+
 	// Document capture runs at a higher resolution than liveness so the still
 	// image stays sharp enough for OCR (see capture-settings.ts). The video is
 	// kept small via the bitrate + frame-rate caps, not by lowering resolution.
 	const camera = useCamera({
 		facingMode: "environment",
-		enabled: cameraActive,
+		enabled: cameraActive && (primerStatus === "granted" || primed),
 		resolution: {
 			width: DOCUMENT_CAPTURE_WIDTH,
 			height: DOCUMENT_CAPTURE_HEIGHT,
@@ -255,12 +314,39 @@ export function DocumentCaptureStep() {
 			return;
 		}
 		const captured = detection.capturedImage;
+		const bounds = detection.cardBounds;
+		// Snapshot the live frame BEFORE stopping the camera, so we can animate the
+		// crop-in (camera zooming onto the document) rather than hard-cutting to the
+		// tight cropped still. Falls back to an instant swap when we can't animate.
+		const video = camera.videoRef.current;
+		const snap =
+			video && bounds && video.videoWidth > 0 ? grabFrameSnapshot(video) : null;
 		detection.reset();
 		stopDocRecorder(true);
 		camera.stop();
-		storeCapture(captured);
+		if (snap && bounds && !prefersReducedMotion()) {
+			setCaptureZoom({
+				snapshot: snap.url,
+				videoW: snap.w,
+				videoH: snap.h,
+				bounds,
+				mirror: mirrorPreview,
+				captured,
+			});
+		} else {
+			storeCapture(captured);
+		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [detection.capturedImage, lightLevel]);
+
+	// Finish the zoom-crop animation: drop the overlay and commit the still.
+	const finishCaptureZoom = useCallback(() => {
+		if (!captureZoom) return;
+		const captured = captureZoom.captured;
+		setCaptureZoom(null);
+		storeCapture(captured);
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [captureZoom, phase, isTwoSided]);
 
 	// ---------------------------------------------------------------------------
 	// Store a captured image for the current phase
@@ -479,6 +565,7 @@ export function DocumentCaptureStep() {
 
 	const retakeFront = () => {
 		stopDocRecorder(false);
+		setCaptureZoom(null);
 		setFrontPreview(null);
 		setUploadError(null);
 		dispatch({ type: "CLEAR_DOCUMENT_FRONT" });
@@ -488,6 +575,7 @@ export function DocumentCaptureStep() {
 
 	const retakeBack = () => {
 		stopDocRecorder(false);
+		setCaptureZoom(null);
 		setBackPreview(null);
 		setUploadError(null);
 		dispatch({ type: "CLEAR_DOCUMENT_BACK" });
@@ -497,6 +585,7 @@ export function DocumentCaptureStep() {
 
 	const handleBack = () => {
 		camera.stop();
+		setCaptureZoom(null);
 		detection.reset();
 		dispatch({ type: "SET_STEP", payload: "id-type" });
 	};
@@ -763,9 +852,19 @@ export function DocumentCaptureStep() {
 			)}
 
 			{/* ------------------------------------------------------------------ */}
+			{/* Camera permission primer (before the OS prompt)                     */}
+			{/* ------------------------------------------------------------------ */}
+			{needsPrimer && !showFlipBanner && (
+				<CameraPermissionPrimer
+					bodyText="When prompted, allow camera access to photograph your document."
+					onGrant={() => setPrimed(true)}
+				/>
+			)}
+
+			{/* ------------------------------------------------------------------ */}
 			{/* Camera / capture screen                                             */}
 			{/* ------------------------------------------------------------------ */}
-			{cameraActive && !showFlipBanner && (
+			{cameraActive && !needsPrimer && !showFlipBanner && (
 				<div className='space-y-3'>
 					<div
 						className='relative overflow-hidden rounded-xl bg-black'
@@ -839,7 +938,7 @@ export function DocumentCaptureStep() {
 							</div>
 						)}
 
-						{camera.isReady && !camera.error && (
+						{camera.isReady && !camera.error && !captureZoom && (
 							<div className='absolute bottom-4 left-0 right-0 flex items-center justify-center'>
 								<button
 									onClick={handleManualCapture}
@@ -848,6 +947,13 @@ export function DocumentCaptureStep() {
 									<Camera className='h-5 w-5 text-primary' />
 								</button>
 							</div>
+						)}
+
+						{captureZoom && (
+							<CaptureZoomTransition
+								{...captureZoom}
+								onDone={finishCaptureZoom}
+							/>
 						)}
 					</div>
 
@@ -1026,3 +1132,113 @@ function DocumentDetectionOverlay({
 		</div>
 	);
 }
+
+// ---------------------------------------------------------------------------
+// CaptureZoomTransition
+// ---------------------------------------------------------------------------
+
+/**
+ * Plays a short "the camera zoomed onto your document" animation: the frozen
+ * full live frame (rendered object-cover, exactly as the user just saw it) pans
+ * and scales so the detected card rectangle expands to fill the frame, then
+ * hands off to the cropped still. A quick white shutter flash sells the capture.
+ *
+ * The transform is derived from the object-cover mapping between video pixels
+ * and the rendered container, so the zoom tracks the real on-screen position of
+ * the document.
+ */
+function CaptureZoomTransition({
+	snapshot,
+	videoW,
+	videoH,
+	bounds,
+	mirror,
+	onDone,
+}: CaptureZoomState & { onDone: () => void }) {
+	const containerRef = useRef<HTMLDivElement | null>(null);
+	const doneRef = useRef(false);
+	const [transform, setTransform] = useState<string>("none");
+
+	const done = useCallback(() => {
+		if (doneRef.current) return;
+		doneRef.current = true;
+		onDone();
+	}, [onDone]);
+
+	useEffect(() => {
+		const el = containerRef.current;
+		if (!el) {
+			done();
+			return;
+		}
+		const { width: W, height: H } = el.getBoundingClientRect();
+		if (W === 0 || H === 0) {
+			done();
+			return;
+		}
+
+		// object-cover: the frame is uniformly scaled to cover the container, then
+		// center-cropped. Map the card's center (video px) to container px.
+		const s = Math.max(W / videoW, H / videoH);
+		const bcx = bounds.x + bounds.width / 2;
+		const bcy = bounds.y + bounds.height / 2;
+		let dcx = (bcx - videoW / 2) * s + W / 2;
+		const dcy = (bcy - videoH / 2) * s + H / 2;
+		// When the preview is mirrored, the content is flipped horizontally, so the
+		// card's on-screen x is mirrored about the container center too.
+		if (mirror) dcx = W - dcx;
+
+		// Zoom so the whole card fits the container (min → "contain" the card),
+		// matching the framing of the cropped still we hand off to.
+		const z = Math.min(W / (bounds.width * s), H / (bounds.height * s));
+		// translate so the card center lands at the container center (origin 50%).
+		const tx = -z * (dcx - W / 2);
+		const ty = -z * (dcy - H / 2);
+
+		// Start at identity (the live framing), then animate to the zoom on the next
+		// frame so the browser registers the transition.
+		const raf = requestAnimationFrame(() => {
+			requestAnimationFrame(() => {
+				setTransform(`translate(${tx}px, ${ty}px) scale(${z})`);
+			});
+		});
+
+		// Safety net: if transitionend never fires, finish anyway.
+		const timer = window.setTimeout(done, 900);
+		return () => {
+			cancelAnimationFrame(raf);
+			window.clearTimeout(timer);
+		};
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, []);
+
+	return (
+		<div ref={containerRef} className='absolute inset-0 z-10 overflow-hidden bg-black'>
+			<div
+				className='h-full w-full will-change-transform'
+				style={{
+					transform,
+					transformOrigin: "50% 50%",
+					transition:
+						transform === "none" ?
+							undefined
+						:	"transform 620ms cubic-bezier(0.22, 1, 0.36, 1)",
+				}}
+				onTransitionEnd={(e) => {
+					if (e.propertyName === "transform") done();
+				}}>
+				<img
+					src={snapshot}
+					alt=''
+					draggable={false}
+					className={cn(
+						"h-full w-full object-cover",
+						mirror && "transform-[scaleX(-1)]",
+					)}
+				/>
+			</div>
+			<div className='pointer-events-none absolute inset-0 bg-white animate-capture-flash' />
+		</div>
+	);
+}
+

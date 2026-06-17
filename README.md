@@ -71,7 +71,7 @@ export default function VerifyButton() {
 
 | Prop                    | Type                                      | Default             | Description                                                                                                          |
 | ----------------------- | ----------------------------------------- | ------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `apiKey`                | `string`                                  | —                   | **Required.** Sent as `Authorization: Bearer`. The **environment is derived from the key prefix** (`pk_test_…` → staging, `pk_live_…` → production); an unrecognized prefix throws. |
+| `apiKey`                | `string`                                  | —                   | **Required.** Sent as `Authorization: Bearer`. The **environment is derived from the key prefix** (`pk_test_…` → sandbox, `pk_live_…` → production); an unrecognized prefix throws. |
 | `country`               | `'NG' \| 'GH' \| 'KE' \| 'ZA' \| 'CI'`    | —                   | **Required.** Country whose ID types are offered.                                                                    |
 | `idTypes`               | `IdType[]`                                | all allowed for org | Subset of ID types to offer; must be valid for `country`.                                                            |
 | `userData`              | `{ firstName?, lastName?, dateOfBirth? }` | —                   | Pre-fills the user's details.                                                                                        |
@@ -81,6 +81,7 @@ export default function VerifyButton() {
 | `enableLiveness`        | `boolean`                                 | `true`              | Run the liveness challenge step. The server can still disable it per ID type.                                        |
 | `voiceGuidance`         | `boolean \| { enabled?, language? }`      | `true`              | Spoken liveness instructions (accessibility, TTS **output** — no microphone). `false` mutes it; pass `{ language: 'fr-FR' }` to set the voice. See [Robustness & error handling](#robustness--error-handling). |
 | `showThemeToggle`       | `boolean`                                 | `false`             | Show a light/dark toggle inside the modal.                                                                           |
+| `deviceHandoff`         | `boolean`                                 | `true`              | On desktop, show a "continue on your phone" screen (QR + copyable link) before the flow starts — handy when the computer has no webcam. The user can still choose to continue on the current device, and when they finish on their phone the desktop completes automatically. Set `false` to disable. Has no effect on mobile/touch devices. |
 | `appearance`            | `KYCAppearance`                           | brand defaults      | Brand & theme the modal — colors, logo, light/dark. See [Appearance & theming](#appearance--theming).                |
 | `consent`               | `KYCConsentContent`                       | built-in copy       | Override the consent/welcome screen `title` and `description`. See [Consent screen copy](#consent-screen-copy).      |
 | `success`               | `KYCSuccessContent`                       | built-in copy       | Override the success/submitted screen `title` and `description`. See [Success screen copy](#success-screen-copy).    |
@@ -101,7 +102,7 @@ base URL) from the API key prefix, which is the single source of truth:
 
 | Key prefix | Environment | Base URL |
 |---|---|---|
-| `pk_test_…` / `sk_test_…` | staging | `https://staging.identity.myaza.app` |
+| `pk_test_…` / `sk_test_…` | sandbox | `https://sandbox.identity.myaza.app` |
 | `pk_live_…` / `sk_live_…` | production | `https://identity.myaza.app` |
 
 An unrecognized or malformed key throws at setup (it never silently defaults).

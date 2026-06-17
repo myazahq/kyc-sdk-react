@@ -1,6 +1,11 @@
 // Components
 export { MyazaKYC, useMyazaKYC } from './MyazaKYC';
 
+// Hosted "continue on your phone" entry — mounted by the Myaza-hosted
+// verification page (`/verify/<token>`), not by integrators directly.
+export { MyazaKYCHosted } from './MyazaKYCHosted';
+export type { MyazaKYCHostedProps } from './MyazaKYCHosted';
+
 // Context (for advanced usage)
 export { KYCProvider, useKYCContext } from './context/KYCContext';
 

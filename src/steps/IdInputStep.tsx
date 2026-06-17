@@ -25,7 +25,8 @@ export function IdInputStep({ country }: IdInputStepProps = {}) {
     ? (ID_TYPES[resolvedCountry] ?? []).find((t) => t.key === state.selectedIdType)
     : null;
 
-  const idLabel = idTypeDef?.label ?? 'ID Number';
+  // What the field asks for — e.g. Tax ID is looked up by the person's NIN.
+  const idLabel = idTypeDef?.inputLabel ?? idTypeDef?.label ?? 'ID Number';
 
   // ---------------------------------------------------------------------------
   // Derived state
@@ -42,8 +43,8 @@ export function IdInputStep({ country }: IdInputStepProps = {}) {
   const isFormValid =
     state.idNumber.trim() !== '' &&
     idValidation.valid &&
-    state.userData.firstName.trim() !== '' &&
-    state.userData.lastName.trim() !== '';
+    (hasFirstName || state.userData.firstName.trim() !== '') &&
+    (hasLastName || state.userData.lastName.trim() !== '');
 
   // ---------------------------------------------------------------------------
   // Navigation

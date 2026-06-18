@@ -18,7 +18,8 @@ export type SdkEnvironment = 'development' | 'sandbox' | 'production';
 
 /** Canonical base URLs per environment (see kyc-dashboard environments docs). */
 const BASE_URLS: Record<Exclude<SdkEnvironment, 'development'>, string> = {
-  sandbox: 'https://sandbox.identity.myaza.app',
+  // Sandbox and production share the same host; the key prefix selects the env.
+  sandbox: 'https://identity.myaza.app',
   production: 'https://identity.myaza.app',
 };
 

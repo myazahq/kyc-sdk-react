@@ -1,4 +1,4 @@
-import type { KYCStep, IdType } from '../types/config';
+import type { KYCStep, IdType, SupportedCountry, QuestionnaireAnswerValue, PoaDocumentType } from '../types/config';
 import type { ApiStatus, KYCError } from '../types/verification';
 
 // ---------------------------------------------------------------------------
@@ -11,6 +11,15 @@ export interface KYCUserData {
   dateOfBirth: string;
 }
 
+export interface BusinessDetails {
+  /** Chosen registry country; null until picked (single-country flows resolve at submit). */
+  country: string | null;
+  /** Chosen verification product; null until picked (single-product flows resolve at submit). */
+  product: string | null;
+  registrationNumber: string;
+  registrationName: string;
+}
+
 export interface MediaIds {
   documentFront?: string;
   documentBack?: string;
@@ -18,12 +27,16 @@ export interface MediaIds {
   documentFrontVideo?: string;
   documentBackVideo?: string;
   livenessVideo?: string;
+  proofOfAddress?: string;
 }
 
 export interface KYCState {
   currentStep: KYCStep;
   status: ApiStatus;
   isOpen: boolean;
+
+  // Step 1b – country selection (multi-region flows; null = use config default)
+  selectedCountry: SupportedCountry | null;
 
   // Step 2 – ID type selection
   selectedIdType: IdType | null;
@@ -47,6 +60,16 @@ export interface KYCState {
   documentBackVideoBlob: Blob | null;
   livenessVideoBlob: Blob | null;
 
+  // Step 2b — business (KYB) workflow details (replaces id-type/capture steps)
+  business: BusinessDetails;
+
+  // Step 4b — extra-info questionnaire answers, keyed by question key
+  questionnaireAnswers: Record<string, QuestionnaireAnswerValue>;
+
+  // Step 4c — proof of address (mediaId lives in mediaIds.proofOfAddress)
+  poaDocumentType: PoaDocumentType | null;
+  poaFileName: string | null;
+
   // Step 5 – Submission result
   verificationId: string | null;
   /**
@@ -66,9 +89,12 @@ export type KYCAction =
   | { type: 'OPEN_MODAL' }
   | { type: 'CLOSE_MODAL' }
   | { type: 'SET_STEP'; payload: KYCStep }
+  | { type: 'SET_COUNTRY'; payload: SupportedCountry }
   | { type: 'SELECT_ID_TYPE'; payload: IdType }
   | { type: 'SET_ID_NUMBER'; payload: string }
   | { type: 'SET_USER_DATA'; payload: Partial<KYCUserData> }
+  // Business (KYB) details
+  | { type: 'SET_BUSINESS_DETAILS'; payload: Partial<BusinessDetails> }
   // Document capture
   | { type: 'SET_DOCUMENT_FRONT'; payload: string }
   | { type: 'SET_DOCUMENT_BACK'; payload: string }
@@ -86,6 +112,11 @@ export type KYCAction =
   | { type: 'SET_DOCUMENT_BACK_VIDEO'; payload: Blob }
   | { type: 'SET_LIVENESS_VIDEO'; payload: Blob }
   | { type: 'CLEAR_LIVENESS_VIDEO' }
+  // Questionnaire
+  | { type: 'SET_QUESTIONNAIRE_ANSWER'; payload: { key: string; value: QuestionnaireAnswerValue | undefined } }
+  // Proof of Address
+  | { type: 'SET_POA_DOCUMENT'; payload: { documentType: PoaDocumentType; fileName: string } }
+  | { type: 'CLEAR_POA_DOCUMENT' }
   // Submission
   | { type: 'SUBMIT_VERIFICATION' }
   | { type: 'SUBMISSION_SUCCESS'; payload: string }

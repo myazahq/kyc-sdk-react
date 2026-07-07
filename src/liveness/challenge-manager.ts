@@ -4,6 +4,7 @@
 
 import {
   CHALLENGE_POOL,
+  FLASH_CHALLENGE,
   type ChallengeConfig,
   type LivenessChallenge,
   type LivenessConfig,
@@ -41,6 +42,9 @@ function shuffle<T>(arr: T[]): T[] {
 export function pickChallenges(config: Partial<LivenessConfig> = {}): ChallengeConfig[] {
   const merged = { ...DEFAULT_LIVENESS_CONFIG, ...config };
 
+  // Flash-only mode: no gestures — the single flash challenge IS the check.
+  if (merged.mode === 'flash') return [{ ...FLASH_CHALLENGE }];
+
   // Filter pool if a subset is specified
   let pool = CHALLENGE_POOL;
   if (merged.challengePool && merged.challengePool.length > 0) {
@@ -70,6 +74,10 @@ export function pickChallenges(config: Partial<LivenessConfig> = {}): ChallengeC
       }
     }
   }
+
+  // 'both' mode: the flash challenge always runs LAST (after gestures), so the
+  // face is settled and the reflection windows are clean.
+  if (merged.mode === 'both') picked.push({ ...FLASH_CHALLENGE });
 
   return picked;
 }

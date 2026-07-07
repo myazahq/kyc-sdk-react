@@ -17,6 +17,7 @@ import { Alert, AlertDescription, AlertTitle } from "../components/ui/alert";
 import { CameraPermissionPrimer } from "../components/CameraPermissionPrimer";
 import { useKYCContext } from "../context/KYCContext";
 import { useKYCConfig } from "../context/KYCConfigContext";
+import { stepAfterCapture } from "../lib/post-capture";
 import { ID_TYPES, getScanSides } from "../utils/countries";
 import { useCamera } from "../hooks/useCamera";
 import { useCameraPrimer } from "../hooks/useCameraPrimer";
@@ -536,11 +537,12 @@ export function DocumentCaptureStep() {
 					config.getIdTypeFeatures(config.country, state.selectedIdType)
 				:	null;
 			const skipLiveness =
-				features ? !features.livenessCheck : config.enableLiveness === false;
+				config.enableSelfie === false ||
+				(features ? !features.livenessCheck : config.enableLiveness === false);
 			if (!skipLiveness) primeSpeech();
 			dispatch({
 				type: "SET_STEP",
-				payload: skipLiveness ? "submitted" : "liveness",
+				payload: skipLiveness ? stepAfterCapture(config) : "liveness",
 			});
 		} catch (err) {
 			// Retries exhausted — show the inline error AND report a typed error once.

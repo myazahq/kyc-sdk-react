@@ -9,6 +9,7 @@ import { CameraPermissionPrimer } from '../components/CameraPermissionPrimer';
 import { LivenessAvatar } from './LivenessAvatar';
 import { useKYCContext } from '../context/KYCContext';
 import { useKYCConfig } from '../context/KYCConfigContext';
+import { stepAfterCapture } from '../lib/post-capture';
 import { useCamera } from '../hooks/useCamera';
 import { useCameraPrimer } from '../hooks/useCameraPrimer';
 import { useImageCapture } from '../hooks/useImageCapture';
@@ -16,6 +17,7 @@ import { useImageCompress } from '../hooks/useImageCompress';
 import { useLiveness } from '../hooks/useLiveness';
 import { useLightLevel } from '../hooks/useLightLevel';
 import { primeSpeech } from '../liveness/speech';
+import { recordLivenessSignals } from '../lib/integrity-signals';
 import { withRetry } from '../lib/retry';
 import { mapToKycError, safeReportError } from '../lib/errors';
 import { KYCError } from '../types/verification';
@@ -63,13 +65,24 @@ export function LivenessStep() {
   const isDim = lightLevel === 'dark';
   const isBright = lightLevel === 'bright';
 
+  // How Presence Intelligence verifies: gesture challenges (default), the
+  // screen-reflection flash sequence, or both. Workflow-configured.
+  const livenessMode = config.livenessMode ?? 'gestures';
+
   const liveness = useLiveness({
     videoRef: camera.videoRef,
     cameraReady: camera.isReady && !preview,
     captureFrame: capture,
     compressImage: compress,
     lightLevel,
+    config: { mode: livenessMode },
   });
+
+  // Record the mode once for the submit's integrity metadata (flash results
+  // are recorded by the hook when the sequence runs).
+  useEffect(() => {
+    recordLivenessSignals({ mode: livenessMode });
+  }, [livenessMode]);
 
   // Start/stop recorder with the camera stream
   React.useEffect(() => {
@@ -245,7 +258,14 @@ export function LivenessStep() {
 
   const handleContinue = () => {
     camera.stop();
-    dispatch({ type: 'SUBMIT_VERIFICATION' });
+    // Proof of Address / questionnaire (when configured) sit between capture
+    // and the final submission; otherwise submit straight away.
+    const next = stepAfterCapture(config);
+    if (next === 'submitted') {
+      dispatch({ type: 'SUBMIT_VERIFICATION' });
+    } else {
+      dispatch({ type: 'SET_STEP', payload: next });
+    }
   };
 
   const handleBack = () => {
@@ -363,7 +383,8 @@ export function LivenessStep() {
   // Main liveness UI
   // ---------------------------------------------------------------------------
 
-  const showAvatar = phase === 'challenge' || phase === 'challenge_passed';
+  const isFlashChallenge = activeChallenge?.type === 'flash';
+  const showAvatar = (phase === 'challenge' || phase === 'challenge_passed') && !isFlashChallenge;
   const avatarGesture = activeChallenge?.type ?? lastGestureRef.current;
 
   // Show the gray loading overlay only while the camera stream hasn't started yet.
@@ -402,6 +423,17 @@ export function LivenessStep() {
 
   return (
     <div className="space-y-5 animate-slide-up">
+      {/* Screen-reflection flash overlay: painted over the WHOLE viewport so
+          the display emits enough light for the face to reflect. Fixed +
+          max z so it covers the modal chrome; pointer-events pass through. */}
+      {liveness.flashColor && (
+        <div
+          aria-hidden
+          className="pointer-events-none fixed inset-0 z-[90]"
+          style={{ backgroundColor: liveness.flashColor, opacity: 0.96, transition: 'background-color 120ms linear' }}
+        />
+      )}
+
       <StepHeader
         title="Liveness Check"
         description={isLoading ? 'Preparing your camera for verification.' : 'Follow the instructions below to verify you are a real person.'}
@@ -536,7 +568,11 @@ export function LivenessStep() {
                   ? 'Face lost. Please try again.'
                   : liveness.state.reason === 'load_error'
                     ? 'Failed to load liveness detection. Check your connection and try again.'
-                    : 'Something went wrong.'}
+                    : liveness.state.reason === 'flash_failed'
+                      ? "We couldn't verify the screen reflection. Hold still, face the screen, and try again."
+                      : liveness.state.reason === 'face_swap'
+                        ? "We couldn't verify face continuity. Keep your face steady in the frame and try again."
+                        : 'Something went wrong.'}
             </p>
             <Button className="w-full" onClick={liveness.retry}>
               Try Again

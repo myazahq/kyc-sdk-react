@@ -3,6 +3,8 @@
 // with server-side facts (real IP, request user-agent, X-SDK-Version header)
 // before persisting to Verification.deviceMetadata.
 
+import { getIntegrityMetadata } from '../lib/integrity-signals';
+
 export const SDK_TYPE = 'web' as const;
 
 // Single source of truth for the SDK version — also used by services/api.ts
@@ -253,6 +255,13 @@ export function collectWebDeviceMetadata(): WebDeviceMetadata {
 			online: nav.onLine,
 			webdriver: nav.webdriver,
 		};
+
+		// Capture-integrity signals collected during the session (virtual-camera
+		// heuristics + how Presence Intelligence ran). See lib/integrity-signals.
+		const integrity = getIntegrityMetadata();
+		if (integrity) {
+			(meta as WebDeviceMetadata & { integrity?: unknown }).integrity = integrity;
+		}
 
 		return meta;
 	} catch {

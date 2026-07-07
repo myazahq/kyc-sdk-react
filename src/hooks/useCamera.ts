@@ -7,6 +7,7 @@ import {
   CAPTURE_HEIGHT,
   type VideoCaptureConstraints,
 } from '../lib/capture-settings';
+import { inspectCameraStream } from '../lib/integrity-signals';
 
 export type FacingMode = 'user' | 'environment';
 
@@ -76,6 +77,9 @@ export function useCamera({
 
       streamRef.current = mediaStream;
       setStream(mediaStream);
+      // Injection heuristics (virtual cameras, bare emulated devices) — rides
+      // the submit's device metadata. Best-effort, never blocks startup.
+      inspectCameraStream(mediaStream);
 
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;

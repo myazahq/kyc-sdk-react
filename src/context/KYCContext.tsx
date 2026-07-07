@@ -11,16 +11,21 @@ export const initialKYCState: KYCState = {
   currentStep: 'consent',
   status: 'idle',
   isOpen: false,
+  selectedCountry: null,
   selectedIdType: null,
   documentFrontImage: null,
   documentBackImage: null,
   mediaIds: {},
   idNumber: '',
   userData: { firstName: '', lastName: '', dateOfBirth: '' },
+  business: { country: null, product: null, registrationNumber: '', registrationName: '' },
   selfieImage: null,
   documentFrontVideoBlob: null,
   documentBackVideoBlob: null,
   livenessVideoBlob: null,
+  questionnaireAnswers: {},
+  poaDocumentType: null,
+  poaFileName: null,
   verificationId: null,
   error: null,
 };
@@ -40,6 +45,15 @@ export function kycReducer(state: KYCState, action: KYCAction): KYCState {
     case 'SET_STEP':
       return { ...state, currentStep: action.payload, error: null };
 
+    case 'SET_COUNTRY':
+      // Switching country invalidates any prior ID-type choice (ID types are
+      // country-specific).
+      return {
+        ...state,
+        selectedCountry: action.payload,
+        selectedIdType: state.selectedCountry === action.payload ? state.selectedIdType : null,
+      };
+
     case 'SELECT_ID_TYPE':
       return { ...state, selectedIdType: action.payload };
 
@@ -48,6 +62,9 @@ export function kycReducer(state: KYCState, action: KYCAction): KYCState {
 
     case 'SET_USER_DATA':
       return { ...state, userData: { ...state.userData, ...action.payload } };
+
+    case 'SET_BUSINESS_DETAILS':
+      return { ...state, business: { ...state.business, ...action.payload } };
 
     // ── Document capture ────────────────────────────────────────────────────
 
@@ -126,6 +143,32 @@ export function kycReducer(state: KYCState, action: KYCAction): KYCState {
 
     case 'CLEAR_LIVENESS_VIDEO':
       return { ...state, livenessVideoBlob: null };
+
+    // ── Questionnaire ───────────────────────────────────────────────────────
+
+    case 'SET_QUESTIONNAIRE_ANSWER': {
+      const next = { ...state.questionnaireAnswers };
+      if (action.payload.value === undefined) delete next[action.payload.key];
+      else next[action.payload.key] = action.payload.value;
+      return { ...state, questionnaireAnswers: next };
+    }
+
+    // ── Proof of Address ────────────────────────────────────────────────────
+
+    case 'SET_POA_DOCUMENT':
+      return {
+        ...state,
+        poaDocumentType: action.payload.documentType,
+        poaFileName: action.payload.fileName,
+      };
+
+    case 'CLEAR_POA_DOCUMENT':
+      return {
+        ...state,
+        poaDocumentType: null,
+        poaFileName: null,
+        mediaIds: { ...state.mediaIds, proofOfAddress: undefined },
+      };
 
     // ── Submission ──────────────────────────────────────────────────────────
 

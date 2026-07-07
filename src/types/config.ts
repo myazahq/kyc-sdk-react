@@ -61,11 +61,73 @@ export type IdTypesByCountry = {
 
 export type KYCStep =
   | 'consent'
+  | 'country-select'
   | 'id-type'
   | 'id-input'
   | 'document-capture'
+  // eMRTD chip read — native (mobile) SDKs only; the web SDK never puts it in
+  // the step order (Web NFC can't do ISO-DEP) but renders its screen for the
+  // builder preview, where it stands in for the visually-identical mobile UI.
+  | 'nfc'
+  | 'business-details'
   | 'liveness'
+  | 'proof-of-address'
+  | 'questionnaire'
   | 'submitted';
+
+// ---------------------------------------------------------------------------
+// Proof of Address (utility bill / bank statement / tenancy document)
+// ---------------------------------------------------------------------------
+
+export type PoaDocumentType = 'utility_bill' | 'bank_statement' | 'tenancy_agreement' | 'other';
+
+export interface ProofOfAddressConfig {
+  /** Adds the Proof of Address step (after capture, before the questionnaire). */
+  enabled?: boolean;
+  /** Accepted document kinds (absent = all). */
+  documentTypes?: PoaDocumentType[];
+  /** Recency window the server checks the document date against (default 90). */
+  maxAgeDays?: number;
+}
+
+// ---------------------------------------------------------------------------
+// Extra-info questionnaire (compliance declarations)
+// ---------------------------------------------------------------------------
+
+export interface QuestionnaireFieldOption {
+  value: string;
+  label: string;
+}
+
+export interface QuestionnaireField {
+  /** Stable snake_case key — also the webhook/decisioning field name. */
+  key: string;
+  label: string;
+  /**
+   * 'money' = amount + currency. The answer stores `<key>` (number, 2dp) and
+   * a `<key>_currency` companion (ISO code).
+   */
+  type: 'text' | 'number' | 'money' | 'select' | 'multiselect' | 'boolean' | 'date';
+  required?: boolean;
+  placeholder?: string;
+  helpText?: string;
+  options?: QuestionnaireFieldOption[];
+  min?: number;
+  max?: number;
+  /** money only: allowed ISO currency codes; the first is the default. */
+  currencies?: string[];
+}
+
+export interface QuestionnaireConfig {
+  /** Off switch for the step. Omitted/true = shown; false = skipped even though
+   *  the questions remain configured (the builder's Questionnaire toggle). */
+  enabled?: boolean;
+  title?: string;
+  description?: string;
+  fields: QuestionnaireField[];
+}
+
+export type QuestionnaireAnswerValue = string | number | boolean | string[];
 
 // ---------------------------------------------------------------------------
 // Appearance / theming
@@ -189,11 +251,63 @@ export interface MyazaKYCConfig<C extends SupportedCountry = SupportedCountry> {
    */
   devUrl?: string;
 
-  /** Two-letter country code */
-  country: C;
+  /**
+   * Run the SDK from a **published Workflow** built in the Myaza
+   * dashboard (`wf_…`). The SDK fetches the workflow’s configuration from the
+   * server and uses it as the source of truth: **workflow config wins over any
+   * overlapping props** (country, idTypes, step toggles, appearance, copy).
+   * Runtime data — `userId`, `userData`, `metadata`, callbacks — always comes
+   * from your code. With a `workflowId`, `country` becomes optional.
+   *
+   * An unknown/unpublished flow surfaces as a blocking `invalid_workflow` error
+   * (via {@link onError} and the modal), never a silently different flow.
+   */
+  workflowId?: string;
+
+  /**
+   * Two-letter country code. Required unless {@link workflowId} is set (the flow
+   * carries the country) or {@link subjectType} is `'business'` (the business
+   * block carries its own registry country). When both are present the flow's
+   * country wins.
+   */
+  country?: C;
+
+  /**
+   * What the flow verifies: an individual (KYC — the default) or a business
+   * (KYB registry lookup). Normally supplied by a resolved workflow, not
+   * hand-written: **live business submissions require a published KYB
+   * workflow** (the server rejects them otherwise). Setting it as a prop is
+   * supported for the dashboard builder's live preview (`previewMode`), where
+   * submissions are mocked.
+   */
+  subjectType?: import('./business').SubjectType;
+
+  /**
+   * Business (KYB) subject configuration — the registry country, offered
+   * products, and whether the registered business name is required. Like
+   * {@link subjectType}, this normally rides a resolved workflow config.
+   */
+  business?: import('./business').WorkflowBusinessConfig;
+
+  /**
+   * Multi-region configuration. When more than one country is listed the flow
+   * opens with a country-select step; the picked country's `idTypes` override
+   * the root {@link idTypes} list. `country` acts as the default/primary.
+   * Typically supplied by a dashboard-built Workflow rather than hand-written.
+   */
+  countries?: Array<{ country: SupportedCountry; idTypes?: IdType[] }>;
 
   /** Subset of ID types to offer. Only types valid for the given country are accepted. */
   idTypes?: IdTypeForCountry<C>[];
+
+  /**
+   * The org's own reference for the person being verified (e.g. your internal
+   * user id). It is **not** matched during verification — it becomes
+   * `Entity.externalUserId` at the KYC seam, so repeat checks of the same user
+   * collapse onto one entity and you can correlate results back to your record.
+   * Optional; when omitted the server falls back to the provider record id.
+   */
+  userId?: string;
 
   /** Pre-populated user data. Fields provided here won't be collected again. */
   userData?: {
@@ -227,8 +341,32 @@ export interface MyazaKYCConfig<C extends SupportedCountry = SupportedCountry> {
    */
   voiceGuidance?: VoiceGuidanceOption;
 
+  /**
+   * How Presence Intelligence verifies liveness when the selfie step runs:
+   * `'gestures'` (default) — randomized gesture challenges; `'flash'` — the
+   * screen emits a random color sequence and the face's reflection is verified
+   * (fast, hold-still, defeats replays/injection); `'both'` — gestures then
+   * flash (strongest). Usually configured in the workflow builder.
+   */
+  livenessMode?: 'gestures' | 'flash' | 'both';
+
+  /**
+   * Device Intelligence — device + IP fraud analysis (multi-accounting,
+   * emulator, datacenter-IP, velocity). On by default and billed per
+   * verification; `false` disables the analysis, its charge, and the SDK's
+   * fingerprint collection. Normally set by the workflow builder.
+   */
+  deviceIntelligence?: boolean;
+
   /** Show a light/dark mode toggle button inside the modal header. Default `true`. */
   showThemeToggle?: boolean;
+
+  /**
+   * Force the flow to render full screen on EVERY device. Desktop drops the
+   * centered modal for the fullscreen layout and the expand/collapse button
+   * is hidden (mobile is always fullscreen). Default `false`.
+   */
+  fullScreen?: boolean;
 
   /**
    * Offer "continue on your phone" device handoff. On **desktop**, before the
@@ -249,6 +387,31 @@ export interface MyazaKYCConfig<C extends SupportedCountry = SupportedCountry> {
    */
   disableClose?: boolean;
 
+  /**
+   * Open the verification modal immediately on mount instead of waiting for
+   * the trigger button click (the button is not rendered). Used by embedded
+   * preview surfaces (e.g. the dashboard flow builder); pairs naturally with
+   * `deviceHandoff={false}`. Default `false`.
+   */
+  defaultOpen?: boolean;
+
+  /**
+   * Preview/mock mode (dashboard workflow builder). All WRITES are stubbed in
+   * the browser: document photos, selfies, and liveness videos are never
+   * uploaded and no verification is ever created — walking the flow is free of
+   * side effects. Read-only calls (config, workflow resolution) still hit the
+   * server so the preview reflects real grants + branding. Default `false`.
+   */
+  previewMode?: boolean;
+
+  /**
+   * Imperatively show a specific step (dashboard workflow builder: clicking a
+   * step in the rail jumps the preview there). Prerequisite state (an ID type
+   * of the right kind) is seeded automatically so mid-flow steps render.
+   * Ignored when unset.
+   */
+  previewStep?: KYCStep | null;
+
   /** Visual customisation */
   appearance?: KYCAppearance;
 
@@ -257,6 +420,24 @@ export interface MyazaKYCConfig<C extends SupportedCountry = SupportedCountry> {
 
   /** Override the success (submitted) screen copy. */
   success?: KYCSuccessContent;
+
+  /**
+   * Extra-info questionnaire shown after capture, right before submission —
+   * compliance declarations like income, source of funds, expected volume.
+   * Usually configured in the dashboard workflow builder (rides `workflowId`);
+   * answers are validated server-side against the published definition and
+   * delivered in `data.questionnaire` on verification webhooks.
+   */
+  questionnaire?: QuestionnaireConfig;
+
+  /**
+   * Proof of Address: collect a PoA document (utility bill, bank statement,
+   * tenancy) after capture. The server reads it (Document AI), checks the name
+   * against the verified subject + a recency window, and delivers the result
+   * in `data.proofOfAddress` on verification webhooks — it never changes the
+   * verification's own status. Usually configured in the workflow builder.
+   */
+  proofOfAddress?: ProofOfAddressConfig;
 
   /**
    * Base path (or absolute URL) where the SDK's gesture GIF assets are served
@@ -272,7 +453,11 @@ export interface MyazaKYCConfig<C extends SupportedCountry = SupportedCountry> {
    */
   assetsBasePath?: string;
 
-  /** Arbitrary metadata forwarded with every verification request */
+  /**
+   * Arbitrary, free-form metadata forwarded verbatim with every verification
+   * request. Nothing here is required or interpreted by the SDK/server — use
+   * {@link userId} for the user reference, not a `userId` key in here.
+   */
   metadata?: Record<string, string>;
 
   // Callbacks

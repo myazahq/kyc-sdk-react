@@ -16,15 +16,24 @@ import { cn } from '../lib/utils';
 import { useKYCContext } from '../context/KYCContext';
 import { useKYCConfig } from '../context/KYCConfigContext';
 import { requiresDocumentCapture } from '../utils/countries';
+import { hasActiveQuestionnaire } from '../lib/questionnaire';
+import { hasProofOfAddressStep } from '../lib/post-capture';
+import { isBusinessFlow } from '../lib/business';
+import { ProofOfAddressStep } from '../steps/ProofOfAddressStep';
 import type { KYCStep } from '../types/config';
 import { VisuallyHidden } from './VisuallyHidden';
 import { KYCErrorBoundary } from './KYCErrorBoundary';
 
+import { BusinessDetailsStep } from '../steps/BusinessDetailsStep';
 import { ConsentStep } from '../steps/ConsentStep';
+import { CountrySelectStep } from '../steps/CountrySelectStep';
 import { IdTypeStep } from '../steps/IdTypeStep';
 import { IdInputStep } from '../steps/IdInputStep';
 import { DocumentCaptureStep } from '../steps/DocumentCaptureStep';
 import { LivenessStep } from '../steps/LivenessStep';
+import { NfcStep } from '../steps/NfcStep';
+import { QuestionnaireStep } from '../steps/QuestionnaireStep';
+import { PreviewCapturePlaceholder } from '../steps/PreviewCapturePlaceholder';
 import { SubmittedStep } from '../steps/SubmittedStep';
 
 interface KYCModalProps {
@@ -33,6 +42,8 @@ interface KYCModalProps {
   showThemeToggle?: boolean;
   /** Hide the close button and block all user-initiated dismissal. */
   disableClose?: boolean;
+  /** Force fullscreen on all devices (hides the expand toggle). */
+  fullScreen?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -46,7 +57,7 @@ function ThemeToggle() {
   const toggle = () => {
     const next = !document.documentElement.classList.contains('dark');
     document.documentElement.classList.toggle('dark', next);
-    try { localStorage.setItem('theme', next ? 'dark' : 'light'); } catch { /* ignore */ }
+    try { localStorage.setItem('myaza-kyc-theme', next ? 'dark' : 'light'); } catch { /* ignore */ }
     rerender();
   };
 
@@ -94,15 +105,38 @@ function HeaderBrand() {
 // Step ordering — 5 steps each flow path
 // ---------------------------------------------------------------------------
 
-function buildStepOrder(hasDocCapture: boolean, hasLiveness: boolean): KYCStep[] {
+function buildStepOrder(
+  isBusiness: boolean,
+  hasDocCapture: boolean,
+  hasLiveness: boolean,
+  hasCountrySelect: boolean,
+  hasPoa: boolean,
+  hasQuestionnaire: boolean,
+): KYCStep[] {
+  // Business (KYB) flow — no id-type, no capture, no liveness, no PoA.
+  if (isBusiness) {
+    return ['consent', 'business-details', ...(hasQuestionnaire ? (['questionnaire'] as KYCStep[]) : []), 'submitted'];
+  }
   const middle: KYCStep[] = hasDocCapture ? ['document-capture'] : ['id-input'];
   if (hasLiveness) middle.push('liveness');
-  return ['consent', 'id-type', ...middle, 'submitted'];
+  if (hasPoa) middle.push('proof-of-address');
+  if (hasQuestionnaire) middle.push('questionnaire');
+  return ['consent', ...(hasCountrySelect ? (['country-select'] as KYCStep[]) : []), 'id-type', ...middle, 'submitted'];
 }
 
-function getStepProgress(step: KYCStep, hasDocCapture: boolean, hasLiveness: boolean): number {
-  const order = buildStepOrder(hasDocCapture, hasLiveness);
-  const index = order.indexOf(step);
+function getStepProgress(
+  step: KYCStep,
+  isBusiness: boolean,
+  hasDocCapture: boolean,
+  hasLiveness: boolean,
+  hasCountrySelect: boolean,
+  hasPoa: boolean,
+  hasQuestionnaire: boolean,
+): number {
+  const order = buildStepOrder(isBusiness, hasDocCapture, hasLiveness, hasCountrySelect, hasPoa, hasQuestionnaire);
+  // The preview-only nfc step sits right after document capture in the mobile
+  // flow — borrow that slot so the progress bar reads sensibly.
+  const index = order.indexOf(step === 'nfc' ? 'document-capture' : step);
   if (index === -1) return 0;
   return Math.round(((index + 1) / order.length) * 100);
 }
@@ -151,14 +185,29 @@ function CurrentStep() {
   switch (state.currentStep) {
     case 'consent':
       return <ConsentStep />;
+    case 'country-select':
+      return <CountrySelectStep />;
     case 'id-type':
       return <IdTypeStep country={config.country} allowedIdTypes={config.idTypes} />;
     case 'document-capture':
-      return <DocumentCaptureStep />;
+      // Preview mode never touches the camera — a static placeholder stands in
+      // for the capture steps (the flow stays walkable via its Continue).
+      return config.previewMode ? <PreviewCapturePlaceholder kind="document" /> : <DocumentCaptureStep />;
     case 'id-input':
       return <IdInputStep />;
+    case 'nfc':
+      // Never in the WEB flow order (browsers can't do ISO-DEP) — reached only
+      // via the builder preview's previewStep, standing in for the mobile SDK's
+      // visually-identical chip-read screen.
+      return <NfcStep />;
+    case 'business-details':
+      return <BusinessDetailsStep />;
     case 'liveness':
-      return <LivenessStep />;
+      return config.previewMode ? <PreviewCapturePlaceholder kind="liveness" /> : <LivenessStep />;
+    case 'proof-of-address':
+      return <ProofOfAddressStep />;
+    case 'questionnaire':
+      return <QuestionnaireStep />;
     case 'submitted':
       return <SubmittedStep />;
   }
@@ -166,7 +215,7 @@ function CurrentStep() {
 
 const CAPTURE_STEPS: KYCStep[] = ['document-capture', 'liveness'];
 
-export function KYCModal({ open, onClose, showThemeToggle, disableClose }: KYCModalProps) {
+export function KYCModal({ open, onClose, showThemeToggle, disableClose, fullScreen }: KYCModalProps) {
   const { state } = useKYCContext();
   const config = useKYCConfig();
   const isTerminal = state.currentStep === 'submitted';
@@ -174,14 +223,24 @@ export function KYCModal({ open, onClose, showThemeToggle, disableClose }: KYCMo
   // disables close (programmatic close() is then the only way out).
   const dismissBlocked = isTerminal || disableClose === true;
   const isCaptureStep = CAPTURE_STEPS.includes(state.currentStep);
+  const isBusiness = isBusinessFlow(config);
   const hasDocCapture = state.selectedIdType ? requiresDocumentCapture(state.selectedIdType) : true;
+  const hasCountrySelect = (config.countries?.length ?? 0) > 1;
   const livenessFeatures = state.selectedIdType
     ? config.getIdTypeFeatures(config.country, state.selectedIdType)
     : null;
-  const hasLiveness = livenessFeatures
-    ? livenessFeatures.livenessCheck
-    : config.enableLiveness !== false;
-  const [fullscreen, setFullscreen] = useState(false);
+  // The selfie/liveness step is present only when Presence Intelligence is on
+  // (`enableSelfie !== false`). With it on, the server feature flag (or the
+  // legacy `enableLiveness` prop) decides whether liveness gestures run.
+  const hasLiveness =
+    config.enableSelfie !== false &&
+    (livenessFeatures ? livenessFeatures.livenessCheck : config.enableLiveness !== false);
+  const hasQuestionnaire = hasActiveQuestionnaire(config.questionnaire);
+  const hasPoa = hasProofOfAddressStep(config.proofOfAddress);
+  const [expanded, setExpanded] = useState(false);
+  // `fullScreen` (config) forces the fullscreen layout on every device and
+  // hides the expand/collapse control; otherwise the user toggles it.
+  const fullscreen = fullScreen === true || expanded;
   const themeVars = buildThemeVars(config.appearance);
   // A fatal config-load failure (e.g. wrong API key) blocks the whole flow.
   const configError =
@@ -214,7 +273,7 @@ export function KYCModal({ open, onClose, showThemeToggle, disableClose }: KYCMo
         <div className="flex h-full flex-col overflow-hidden rounded-[inherit]">
           <div className="relative shrink-0">
             {!configError && (
-              <Progress value={getStepProgress(state.currentStep, hasDocCapture, hasLiveness)} className="absolute inset-x-0 top-0 z-10 rounded-none" />
+              <Progress value={getStepProgress(state.currentStep, isBusiness, hasDocCapture, hasLiveness, hasCountrySelect, hasPoa, hasQuestionnaire)} className="absolute inset-x-0 top-0 z-10 rounded-none" />
             )}
 
             {/* Header row — org brand top-left, controls top-right.
@@ -238,15 +297,18 @@ export function KYCModal({ open, onClose, showThemeToggle, disableClose }: KYCMo
                   </button>
                 )}
 
-                {/* Expand / collapse toggle — desktop only */}
+                {/* Expand / collapse toggle — desktop only; hidden when the
+                    flow is forced fullscreen */}
+                {fullScreen !== true && (
                 <button
                   type="button"
-                  onClick={() => setFullscreen((f) => !f)}
+                  onClick={() => setExpanded((f) => !f)}
                   className="hidden xl:flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
                   aria-label={fullscreen ? 'Exit fullscreen' : 'Fullscreen'}
                 >
                   {fullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
                 </button>
+                )}
               </div>
             </div>
           </div>

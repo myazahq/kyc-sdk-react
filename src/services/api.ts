@@ -51,7 +51,8 @@ export type MediaUploadType =
   | 'selfie'
   | 'document_front_video'
   | 'document_back_video'
-  | 'liveness_video';
+  | 'liveness_video'
+  | 'proof_of_address';
 
 /** Response from `POST /api/kyc/upload` — the stored mediaId. */
 export interface UploadResponse {
@@ -62,18 +63,50 @@ export interface VerifyRequest {
   country: string;
   idType: string;
   idNumber?: string;
+  /**
+   * Business (KYB) submission block. Present ⇒ this is a business verification.
+   * Requires a published KYB workflow (`workflowId` or hosted link); there is
+   * no capture, so `mediaIds` is omitted. `idType` carries the product key for
+   * transport symmetry.
+   */
+  business?: {
+    registrationNumber: string;
+    registrationName?: string;
+    product?: string;
+  };
+  /**
+   * Attribution: the published flow ("flow_…") that configured this SDK mount.
+   * Validated server-side and silently dropped when stale — never fails a
+   * submission.
+   */
+  workflowId?: string;
+  /** The org's user reference → Entity.externalUserId at the seam (not matched). */
+  userId?: string;
+  /**
+   * The Presence Intelligence method that ran, so prop-configured mounts bill
+   * the right per-method component. A published workflow's livenessMode always
+   * wins over this server-side. Absent ⇒ gestures.
+   */
+  livenessMode?: 'gestures' | 'flash' | 'both';
+  deviceIntelligence?: boolean;
+  /** What kind of proof-of-address document `mediaIds.proofOfAddress` is. */
+  proofOfAddressType?: 'utility_bill' | 'bank_statement' | 'tenancy_agreement' | 'other';
   userData?: {
     firstName?: string;
     lastName?: string;
     dateOfBirth?: string;
   };
-  mediaIds: {
+  /** Extra-info questionnaire answers, validated server-side against the published definition. */
+  questionnaire?: Record<string, string | number | boolean | string[]>;
+  /** Captured media references. Omitted for business (KYB) submissions — no capture. */
+  mediaIds?: {
     documentFront?: string;
     documentBack?: string;
     selfie?: string;
     documentFrontVideo?: string;
     documentBackVideo?: string;
     livenessVideo?: string;
+    proofOfAddress?: string;
   };
   metadata: {
     requestId: string;
@@ -136,6 +169,64 @@ export interface SdkConfigResponse {
 }
 
 // ---------------------------------------------------------------------------
+// Verification Flows (dashboard-built SDK configuration templates)
+// ---------------------------------------------------------------------------
+
+/**
+ * The serialized template config a published flow carries — the same shape a
+ * handoff `configSnapshot` uses, minus the runtime fields (userId/userData/
+ * metadata), which always come from the consumer's code.
+ */
+export interface WorkflowConfigPayload {
+  /**
+   * What the workflow verifies. Absent = 'individual'. Business (KYB)
+   * workflows use the `business` block below instead of country/idTypes.
+   */
+  subjectType?: 'individual' | 'business';
+  /** Business (KYB) configuration — present when `subjectType === 'business'`. */
+  business?: {
+    /** ISO-2 registry country (NOT limited to the individual catalogue). */
+    country: string;
+    /** Offered product keys (absent = ['business']). */
+    products?: string[];
+    requireRegistrationName?: boolean;
+  };
+  /** Absent for business workflows — the business block carries its own country. */
+  country?: string;
+  /** Multi-region: per-country ID types (validation toggles are server-enforced). */
+  countries?: Array<{ country: string; idTypes?: string[] }>;
+  idTypes?: string[];
+  enableSelfie?: boolean;
+  enableDocumentCapture?: boolean;
+  allowDocumentUpload?: boolean;
+  enableLiveness?: boolean;
+  /** Presence Intelligence method: gestures (default) | flash | both. */
+  livenessMode?: string;
+  voiceGuidance?: unknown;
+  showThemeToggle?: boolean;
+  fullScreen?: boolean;
+  disableClose?: boolean;
+  appearance?: Record<string, unknown>;
+  consent?: Record<string, unknown>;
+  success?: Record<string, unknown>;
+  /** Extra-info questionnaire definition (compliance declarations). */
+  questionnaire?: { title?: string; description?: string; fields: unknown[] };
+  /** Proof of Address step configuration. */
+  proofOfAddress?: { enabled?: boolean; documentTypes?: string[]; maxAgeDays?: number };
+  assetsBasePath?: string;
+}
+
+/** Response from `GET /api/kyc/workflows/:workflowId` — one round trip hydrates the SDK. */
+export interface WorkflowResolutionResponse {
+  flow: { id: string; name: string; version: number };
+  config: WorkflowConfigPayload;
+  environment: 'DEVELOPMENT' | 'SANDBOX' | 'PRODUCTION';
+  /** Org allowlist + per-ID feature flags (same shape as /config). */
+  idTypes: SdkConfigIdType[];
+  branding?: SdkConfigBranding;
+}
+
+// ---------------------------------------------------------------------------
 // Device handoff (continue-on-phone)
 // ---------------------------------------------------------------------------
 
@@ -146,19 +237,45 @@ export interface SdkConfigResponse {
  * already the secret, so the risk profile is the same as a magic link.
  */
 export interface HandoffSessionSnapshot {
-  country: string;
+  /** Absent for business (KYB) sessions — `business.country` carries theirs. */
+  country?: string;
+  /** What the session verifies. Absent = 'individual'. */
+  subjectType?: 'individual' | 'business';
+  /** Business (KYB) configuration — present when `subjectType === 'business'`. */
+  business?: {
+    country: string;
+    products?: string[];
+    requireRegistrationName?: boolean;
+  };
+  /**
+   * Attribution ride-along when the desktop SDK was configured by a published
+   * flow — the server validates it and stamps it on the session (it is NOT
+   * part of the rendered config).
+   */
+  workflowId?: string;
+  /** Multi-region configuration (per-country ID types). */
+  countries?: Array<{ country: string; idTypes?: string[] }>;
   idTypes?: string[];
   enableSelfie?: boolean;
   enableDocumentCapture?: boolean;
   allowDocumentUpload?: boolean;
   enableLiveness?: boolean;
+  /** Presence Intelligence method: gestures (default) | flash | both. */
+  livenessMode?: string;
   voiceGuidance?: unknown;
   showThemeToggle?: boolean;
+  fullScreen?: boolean;
   disableClose?: boolean;
   appearance?: Record<string, unknown>;
   consent?: Record<string, unknown>;
   success?: Record<string, unknown>;
+  /** Extra-info questionnaire definition (compliance declarations). */
+  questionnaire?: { title?: string; description?: string; fields: unknown[] };
+  /** Proof of Address step configuration. */
+  proofOfAddress?: { enabled?: boolean; documentTypes?: string[]; maxAgeDays?: number };
   metadata?: Record<string, string>;
+  /** Opaque org user reference — rides the snapshot like metadata (not PII). */
+  userId?: string;
   userData?: { firstName?: string; lastName?: string; dateOfBirth?: string };
   assetsBasePath?: string;
 }
@@ -203,6 +320,8 @@ const VIDEO_MIME_TYPES = ['video/webm', 'video/mp4'] as const;
 function normalizeMimeType(blobType: string, type: MediaUploadType): string {
   const base = (blobType.split(';')[0] || '').trim().toLowerCase();
   const isVideo = type.endsWith('_video');
+  // Proof-of-address documents may be PDFs (bank statements, e-bills).
+  if (type === 'proof_of_address' && base === 'application/pdf') return base;
   const allowed: readonly string[] = isVideo ? VIDEO_MIME_TYPES : IMAGE_MIME_TYPES;
   if (allowed.includes(base)) return base;
   return isVideo ? 'video/webm' : 'image/jpeg';
@@ -214,6 +333,7 @@ const MIME_EXTENSIONS: Record<string, string> = {
   'image/webp': 'webp',
   'video/webm': 'webm',
   'video/mp4': 'mp4',
+  'application/pdf': 'pdf',
 };
 
 // Wrap the blob as a named File with a clean mimeType so the multipart part
@@ -282,6 +402,15 @@ export function createKYCApi(baseUrl: string, apiKey: string) {
 
     async config(): Promise<SdkConfigResponse> {
       return request<SdkConfigResponse>('/config');
+    },
+
+    /**
+     * Resolve a published Workflow (dashboard-built configuration + decisioning template).
+     * 404s when the flow is unknown to this key's org/environment or not
+     * published.
+     */
+    async workflow(workflowId: string): Promise<WorkflowResolutionResponse> {
+      return request<WorkflowResolutionResponse>(`/workflows/${encodeURIComponent(workflowId)}`);
     },
 
     // ── Device handoff (continue-on-phone) ──────────────────────────────────

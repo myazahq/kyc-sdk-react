@@ -15,6 +15,8 @@ import type {
   LivenessConfig,
   NormalizedLandmark,
 } from '../liveness/types';
+import { runFlashSequence } from '../liveness/flash-detector';
+import { recordLivenessSignals } from '../lib/integrity-signals';
 import { speak, stopSpeaking } from '../liveness/speech';
 import type { LightLevel } from './useLightLevel';
 import {
@@ -45,6 +47,11 @@ export interface UseLivenessReturn {
   isFaceDetected: boolean;
   /** Short video blob recorded during the liveness session */
   videoBlob: Blob | null;
+  /**
+   * CSS color for the fullscreen flash overlay while the screen-reflection
+   * challenge runs; null when no flash is being shown.
+   */
+  flashColor: string | null;
   retry: () => void;
 }
 
@@ -105,6 +112,16 @@ export function useLiveness({
 
   // Challenge timeout
   const challengeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Flash (screen-reflection) challenge
+  const [flashColor, setFlashColor] = useState<string | null>(null);
+  const flashSessionRef = useRef(0); // bumped on retry/unmount to abort a running sequence
+  const flashRunningRef = useRef(false);
+
+  // Face-continuity guard: a real face can't teleport between consecutive
+  // frames — landmark jumps (position/scale) flag face swaps & spliced feeds.
+  const prevFaceSigRef = useRef<{ x: number; y: number; iod: number } | null>(null);
+  const faceGlitchesRef = useRef(0);
 
   // Video recording
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -280,6 +297,94 @@ export function useLiveness({
 
   const processLandmarksRef = useRef<(landmarks: NormalizedLandmark[] | null, faceCount: number) => void>(() => {});
 
+  // Shared "current challenge passed" path — used by gesture detection AND the
+  // flash-sequence completion. Advances to the next challenge or capture.
+  const passCurrentChallenge = () => {
+    const tracker = trackerRef.current;
+    if (!tracker?.current) return;
+    clearChallengeTimer();
+    tracker.markCurrentPassed();
+    setChallenges([...tracker.all]);
+    setPhase({ phase: 'challenge_passed', index: tracker.currentIndex });
+
+    // After a delay (800ms flash + 1000ms cooldown), advance to next challenge or capture
+    setTimeout(() => {
+      if (!mountedRef.current) return;
+
+      // Reset detection buffers for next challenge
+      nodHistoryRef.current = [];
+      blinkHistoryRef.current = [];
+      prevFaceSigRef.current = null;
+
+      const hasMore = tracker.advance();
+      setChallenges([...tracker.all]);
+
+      if (hasMore) {
+        const next = tracker.current!;
+        // 30 frames (~1s) cooldown so residual face state doesn't
+        // instantly pass the next gesture
+        cooldownFramesRef.current = 30;
+        setPhase({
+          phase: 'challenge',
+          index: tracker.currentIndex,
+          challenge: next.config,
+          timeRemaining: next.config.timeoutSeconds,
+        });
+        startChallengeTimer(next.config.timeoutSeconds);
+        maybeStartFlash();
+      } else {
+        // All challenges passed — wait for steady face then capture
+        positionStableRef.current = 0;
+        setPhase({ phase: 'capturing' });
+      }
+    }, 1800);
+  };
+
+  // Start the flash (screen-reflection) sequence when the ACTIVE challenge is
+  // the flash challenge. Runs on its own timeline (not landmark-driven); the
+  // challenge timeout still applies as the outer deadline.
+  const maybeStartFlash = () => {
+    const tracker = trackerRef.current;
+    const entry = tracker?.current;
+    const video = videoRef.current;
+    if (!entry || entry.config.type !== 'flash' || flashRunningRef.current || !video) return;
+
+    flashRunningRef.current = true;
+    const session = flashSessionRef.current;
+    const isActive = () =>
+      mountedRef.current && flashSessionRef.current === session && phaseRef.current === 'challenge';
+
+    runFlashSequence(video, setFlashColor, isActive)
+      .then((result) => {
+        flashRunningRef.current = false;
+        recordLivenessSignals({
+          mode: config?.mode ?? 'gestures',
+          flash: {
+            passed: result.passed,
+            score: result.score,
+            matched: result.matched,
+            total: result.total,
+            inconclusive: result.inconclusive,
+            sequence: result.sequence,
+          },
+        });
+        if (!isActive()) return;
+        if (result.passed) {
+          passCurrentChallenge();
+        } else {
+          clearChallengeTimer();
+          stopRecording();
+          trackerRef.current?.markCurrentFailed();
+          setChallenges([...(trackerRef.current?.all ?? [])]);
+          setPhase({ phase: 'failed', reason: 'flash_failed' });
+        }
+      })
+      .catch(() => {
+        flashRunningRef.current = false;
+        setFlashColor(null);
+      });
+  };
+
   processLandmarksRef.current = (landmarks: NormalizedLandmark[] | null, faceCount: number) => {
     if (!mountedRef.current) return;
 
@@ -362,6 +467,7 @@ export function useLiveness({
             });
             setChallenges([...tracker.all]);
             startChallengeTimer(current.config.timeoutSeconds);
+            maybeStartFlash(); // flash-only mode: the first challenge IS the flash
           }
         } else {
           setPhase({ phase: 'positioning', guidance: 'Kindly hold still' });
@@ -381,6 +487,44 @@ export function useLiveness({
     if (phase === 'challenge' && tracker) {
       const current = tracker.current;
       if (!current) return;
+
+      // Flash challenge runs on its own timeline (maybeStartFlash) — no
+      // gesture detection, and no position warnings while the overlay covers
+      // the screen. The face-continuity guard below is also skipped: the
+      // color flashes legitimately disturb the landmark tracking.
+      if (current.config.type === 'flash') return;
+
+      // Face-continuity guard: consecutive-frame landmark jumps (face center
+      // teleporting / face size snapping) are physically impossible for a live
+      // face and typical of face swaps or spliced feeds. Three strikes fails.
+      const nose = landmarks[1];
+      const leftEye = landmarks[33];
+      const rightEye = landmarks[263];
+      if (nose && leftEye && rightEye && cooldownFramesRef.current === 0) {
+        const iod = Math.hypot(rightEye.x - leftEye.x, rightEye.y - leftEye.y);
+        const prev = prevFaceSigRef.current;
+        if (prev && iod > 0 && prev.iod > 0) {
+          const jumped =
+            Math.abs(nose.x - prev.x) > 0.18 ||
+            Math.abs(nose.y - prev.y) > 0.18 ||
+            iod / prev.iod > 1.5 ||
+            iod / prev.iod < 0.66;
+          if (jumped) {
+            faceGlitchesRef.current++;
+            recordLivenessSignals({
+              mode: config?.mode ?? 'gestures',
+              faceGlitches: faceGlitchesRef.current,
+            });
+            if (faceGlitchesRef.current >= 3) {
+              clearChallengeTimer();
+              stopRecording();
+              setPhase({ phase: 'failed', reason: 'face_swap' });
+              return;
+            }
+          }
+        }
+        prevFaceSigRef.current = { x: nose.x, y: nose.y, iod };
+      }
 
       // Check if user has moved out of position
       const pos = checkFacePosition(landmarks);
@@ -432,42 +576,7 @@ export function useLiveness({
       }
 
       if (detected) {
-        clearChallengeTimer();
-        tracker.markCurrentPassed();
-        setChallenges([...tracker.all]);
-
-        // Show brief pass flash
-        setPhase({ phase: 'challenge_passed', index: tracker.currentIndex });
-
-        // After a delay (800ms flash + 1000ms cooldown), advance to next challenge or capture
-        setTimeout(() => {
-          if (!mountedRef.current) return;
-
-          // Reset detection buffers for next challenge
-          nodHistoryRef.current = [];
-          blinkHistoryRef.current = [];
-
-          const hasMore = tracker.advance();
-          setChallenges([...tracker.all]);
-
-          if (hasMore) {
-            const next = tracker.current!;
-            // 30 frames (~1s) cooldown so residual face state doesn't
-            // instantly pass the next gesture
-            cooldownFramesRef.current = 30;
-            setPhase({
-              phase: 'challenge',
-              index: tracker.currentIndex,
-              challenge: next.config,
-              timeRemaining: next.config.timeoutSeconds,
-            });
-            startChallengeTimer(next.config.timeoutSeconds);
-          } else {
-            // All challenges passed — wait for steady face then capture
-            positionStableRef.current = 0;
-            setPhase({ phase: 'capturing' });
-          }
-        }, 1800);
+        passCurrentChallenge();
       } else if (wrongGesture) {
         // Flash a warning for wrong gesture
         setPhase({
@@ -582,6 +691,7 @@ export function useLiveness({
       faceMeshRef.current?.close();
       faceMeshRef.current = null;
       clearChallengeTimer();
+      flashSessionRef.current++; // abort any in-flight flash sequence
       stopSpeaking();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -620,6 +730,12 @@ export function useLiveness({
     processingRef.current = false;
     cooldownFramesRef.current = 0;
     multiFacePausedRef.current = false;
+    // Abort any in-flight flash sequence and clear the overlay + guards.
+    flashSessionRef.current++;
+    flashRunningRef.current = false;
+    setFlashColor(null);
+    prevFaceSigRef.current = null;
+    faceGlitchesRef.current = 0;
 
     // Cancel and close any existing FaceMesh instance so the effect re-initialises cleanly
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
@@ -637,6 +753,7 @@ export function useLiveness({
     challenges,
     isFaceDetected,
     videoBlob,
+    flashColor,
     retry,
   };
 }

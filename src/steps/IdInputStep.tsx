@@ -7,6 +7,7 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { useKYCContext } from '../context/KYCContext';
 import { useKYCConfig } from '../context/KYCConfigContext';
+import { stepAfterCapture } from '../lib/post-capture';
 import { validateIdNumber } from '../utils/validators';
 import { ID_TYPES, isNumberOnlyIdType } from '../utils/countries';
 import type { SupportedCountry } from '../types/config';
@@ -57,8 +58,13 @@ export function IdInputStep({ country }: IdInputStepProps = {}) {
     const features = state.selectedIdType
       ? config.getIdTypeFeatures(resolvedCountry, state.selectedIdType)
       : null;
-    const skipLiveness = features ? !features.livenessCheck : config.enableLiveness === false;
-    dispatch({ type: 'SET_STEP', payload: skipLiveness ? 'submitted' : 'liveness' });
+    const skipLiveness =
+      config.enableSelfie === false ||
+      (features ? !features.livenessCheck : config.enableLiveness === false);
+    dispatch({
+      type: 'SET_STEP',
+      payload: skipLiveness ? stepAfterCapture(config) : 'liveness',
+    });
   };
 
   const handleBack = () => {

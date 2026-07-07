@@ -1,27 +1,15 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Loader2 } from "lucide-react";
-import { Button } from "../components/ui/button";
 import { useKYCContext } from "../context/KYCContext";
 import { useKYCConfig } from "../context/KYCConfigContext";
 import { isNumberOnlyIdType } from "../utils/countries";
-import { collectWebDeviceMetadata } from "../utils/device-metadata";
 import { withRetry } from "../lib/retry";
 import { mapToKycError } from "../lib/errors";
+import { businessProductsForCountry, isBusinessFlow } from "../lib/business";
 import { KYCError } from "../types/verification";
-
-function generateRequestId(): string {
-	return `kyc_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-}
-
-/** Replaces {firstName} / {lastName} tokens with the user's data (or ''). */
-function fillTokens(template: string, firstName?: string, lastName?: string): string {
-	return template
-		.replace(/\{firstName\}/g, firstName ?? '')
-		.replace(/\{lastName\}/g, lastName ?? '')
-		.trim();
-}
+import { generateRequestId, fillTokens, buildSubmitMetadata, uploadCaptureVideos } from "./submit-helpers";
+import { SubmittingScreen, SubmitErrorScreen, SubmitSuccessScreen } from "./SubmittedScreens";
 
 export function SubmittedStep() {
 	const { state, dispatch } = useKYCContext();
@@ -34,6 +22,7 @@ export function SubmittedStep() {
 	// While a transient failure is being retried, surface "Retrying (n/total)…"
 	// under the spinner so the user knows the SDK hasn't frozen.
 	const [retryInfo, setRetryInfo] = useState<{ attempt: number; total: number } | null>(null);
+	const onRetry = (attempt: number, total: number) => setRetryInfo({ attempt, total });
 
 	useEffect(() => {
 		// Guard against React 18 Strict Mode double-invocation in dev — without
@@ -45,16 +34,48 @@ export function SubmittedStep() {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [submitTrigger]);
 
-	async function runSubmit() {
-		// Put UI into loading state immediately
-		dispatch({ type: "SUBMIT_VERIFICATION" });
-		setRetryInfo(null);
+	// Business (KYB) flow — a registry lookup, no media, no capture. A published
+	// KYB workflow is required server-side; a stale one surfaces as a typed error.
+	async function submitBusiness(requestId: string): Promise<void> {
+		const business = config.business!;
+		const registrationNumber = state.business.registrationNumber.trim();
+		const registrationName = state.business.registrationName.trim();
+		// Multi-registry workflows: the picked country (step state) wins over the
+		// workflow's primary; products were already narrowed to that country.
+		const country = state.business.country ?? business.country;
+		const product = state.business.product ?? businessProductsForCountry(business, country)[0]!;
+		if (!registrationNumber) {
+			dispatch({ type: "SET_ERROR", payload: new KYCError("unknown", "Missing registration number.") });
+			return;
+		}
+		const result = await withRetry(
+			() =>
+				config.api.verify({
+					country,
+					// The product key rides on idType for transport symmetry.
+					idType: product,
+					business: {
+						registrationNumber,
+						...(registrationName ? { registrationName } : {}),
+						product,
+					},
+					...(config.workflowId ? { workflowId: config.workflowId } : {}),
+					...(config.userId ? { userId: config.userId } : {}),
+					...(Object.keys(state.questionnaireAnswers).length > 0
+						? { questionnaire: state.questionnaireAnswers }
+						: {}),
+					metadata: buildSubmitMetadata(config.metadata, requestId, config.deviceIntelligence !== false),
+				}),
+			{ onRetry },
+		);
+		finishSubmit(result.verificationId, requestId);
+	}
 
+	async function submitIndividual(requestId: string): Promise<void> {
 		if (!state.selectedIdType) {
 			dispatch({ type: "SET_ERROR", payload: new KYCError("unknown", "Missing ID type.") });
 			return;
 		}
-
 		const idNumber =
 			isNumberOnlyIdType(state.selectedIdType) ? state.idNumber : undefined;
 		if (isNumberOnlyIdType(state.selectedIdType) && !idNumber) {
@@ -63,82 +84,70 @@ export function SubmittedStep() {
 		}
 
 		const api = config.api;
+
+		// Upload video recordings (best-effort — failures never block verification).
+		const videoIds = await uploadCaptureVideos(api, state);
+
+		// Merge userData: config props take precedence over user-typed values
+		const firstName = config.userData?.firstName || state.userData.firstName || undefined;
+		const lastName  = config.userData?.lastName  || state.userData.lastName  || undefined;
+		const dob       = config.userData?.dateOfBirth;
+		const userData = (firstName || lastName || dob)
+			? { firstName, lastName, ...(dob ? { dateOfBirth: dob } : {}) }
+			: undefined;
+
+		// The verify submission is retried on transient failures (network /
+		// timeout / 5xx); terminal errors (401/402/403) surface immediately.
+		const result = await withRetry(
+			() =>
+				api.verify({
+					country: config.country,
+					idType: state.selectedIdType!,
+					...(idNumber ? { idNumber } : {}),
+					// Flow attribution — validated server-side, dropped if stale.
+					...(config.workflowId ? { workflowId: config.workflowId } : {}),
+					// The liveness method that ran — per-method billing for
+					// prop-configured mounts (a workflow's mode wins server-side).
+					...(config.livenessMode ? { livenessMode: config.livenessMode } : {}),
+					...(config.userId ? { userId: config.userId } : {}),
+					...(userData ? { userData } : {}),
+					// Extra-info questionnaire answers — validated server-side
+					// against the workflow's published definition.
+					...(Object.keys(state.questionnaireAnswers).length > 0
+						? { questionnaire: state.questionnaireAnswers }
+						: {}),
+					mediaIds: {
+						documentFront: state.mediaIds.documentFront,
+						documentBack: state.mediaIds.documentBack,
+						selfie: state.mediaIds.selfie,
+						...videoIds,
+					},
+					metadata: buildSubmitMetadata(config.metadata, requestId, config.deviceIntelligence !== false),
+				}),
+			{ onRetry },
+		);
+		finishSubmit(result.verificationId, requestId);
+	}
+
+	function finishSubmit(verificationId: string, requestId: string) {
+		setRetryInfo(null);
+		dispatch({ type: "SUBMISSION_SUCCESS", payload: verificationId });
+		config.onSubmit?.({
+			verificationId,
+			status: "pending",
+			metadata: { ...config.metadata, requestId },
+			submittedAt: new Date().toISOString(),
+		});
+	}
+
+	async function runSubmit() {
+		// Put UI into loading state immediately
+		dispatch({ type: "SUBMIT_VERIFICATION" });
+		setRetryInfo(null);
 		const requestId = generateRequestId();
-
 		try {
-			// Upload video recordings (best-effort — failures do not block verification).
-			// Each gets the same transient-retry treatment, but a final failure is swallowed.
-			let documentFrontVideoId: string | undefined;
-			let documentBackVideoId: string | undefined;
-			let livenessVideoId: string | undefined;
-
-			if (state.documentFrontVideoBlob) {
-				try {
-					documentFrontVideoId = await withRetry(() => api.upload(state.documentFrontVideoBlob!, "document_front_video"));
-				} catch {
-					/* non-fatal */
-				}
-			}
-
-			if (state.documentBackVideoBlob) {
-				try {
-					documentBackVideoId = await withRetry(() => api.upload(state.documentBackVideoBlob!, "document_back_video"));
-				} catch {
-					/* non-fatal */
-				}
-			}
-
-			if (state.livenessVideoBlob) {
-				try {
-					livenessVideoId = await withRetry(() => api.upload(state.livenessVideoBlob!, "liveness_video"));
-				} catch {
-					/* non-fatal */
-				}
-			}
-
-			// Merge userData: config props take precedence over user-typed values
-			const firstName = config.userData?.firstName || state.userData.firstName || undefined;
-			const lastName  = config.userData?.lastName  || state.userData.lastName  || undefined;
-			const dob       = config.userData?.dateOfBirth;
-			const userData = (firstName || lastName || dob)
-				? { firstName, lastName, ...(dob ? { dateOfBirth: dob } : {}) }
-				: undefined;
-
-			// The verify submission is retried on transient failures (network /
-			// timeout / 5xx); terminal errors (401/402/403) surface immediately.
-			const result = await withRetry(
-				() =>
-					api.verify({
-						country: config.country,
-						idType: state.selectedIdType!,
-						...(idNumber ? { idNumber } : {}),
-						...(userData ? { userData } : {}),
-						mediaIds: {
-							documentFront: state.mediaIds.documentFront,
-							documentBack: state.mediaIds.documentBack,
-							selfie: state.mediaIds.selfie,
-							documentFrontVideo: documentFrontVideoId,
-							documentBackVideo: documentBackVideoId,
-							livenessVideo: livenessVideoId,
-						},
-						metadata: {
-							requestId,
-							...config.metadata,
-							device: collectWebDeviceMetadata() as unknown as Record<string, unknown>,
-						},
-					}),
-				{ onRetry: (attempt, total) => setRetryInfo({ attempt, total }) },
-			);
-
-			setRetryInfo(null);
-			dispatch({ type: "SUBMISSION_SUCCESS", payload: result.verificationId });
-
-			config.onSubmit?.({
-				verificationId: result.verificationId,
-				status: "pending",
-				metadata: { requestId, ...config.metadata },
-				submittedAt: new Date().toISOString(),
-			});
+			if (isBusinessFlow(config)) await submitBusiness(requestId);
+			else await submitIndividual(requestId);
 		} catch (err) {
 			// Retries (if any) are exhausted — surface a typed error.
 			setRetryInfo(null);
@@ -146,81 +155,19 @@ export function SubmittedStep() {
 		}
 	}
 
-	// ---------------------------------------------------------------------------
-	// Loading state
-	// ---------------------------------------------------------------------------
-
 	if (state.status === "loading") {
-		return (
-			<div className='flex flex-col items-center justify-center gap-6 py-12 animate-fade-in'>
-				<div className='relative flex items-center justify-center'>
-					<div className='absolute h-20 w-20 rounded-full border-2 border-primary/30 animate-pulse-ring' />
-					<div className='flex h-14 w-14 items-center justify-center rounded-full bg-primary/10'>
-						<Loader2 className='h-7 w-7 animate-spin text-primary' />
-					</div>
-				</div>
-				<div className='text-center space-y-2'>
-					<p className='text-base font-medium'>
-						{retryInfo ? "Reconnecting…" : "Submitting your verification..."}
-					</p>
-					<p className='text-sm text-muted-foreground'>
-						{retryInfo
-							? `Connection issue — retrying (${retryInfo.attempt}/${retryInfo.total})…`
-							: "Please wait a moment."}
-					</p>
-				</div>
-			</div>
-		);
+		return <SubmittingScreen retryInfo={retryInfo} />;
 	}
-
-	// ---------------------------------------------------------------------------
-	// Error state
-	// ---------------------------------------------------------------------------
 
 	if (state.status === "error" && state.error) {
 		return (
-			<div className='flex flex-col items-center gap-6 py-8 animate-fade-in'>
-				<div className='flex h-20 w-20 items-center justify-center rounded-full bg-destructive/10'>
-					<svg
-						className='h-10 w-10 text-destructive'
-						viewBox='0 0 24 24'
-						fill='none'
-						stroke='currentColor'
-						strokeWidth='2.5'
-						strokeLinecap='round'
-						strokeLinejoin='round'>
-						<circle cx='12' cy='12' r='10' />
-						<line x1='12' y1='8' x2='12' y2='12' />
-						<line x1='12' y1='16' x2='12.01' y2='16' />
-					</svg>
-				</div>
-
-				<div className='text-center space-y-1'>
-					<h2 className='text-xl font-semibold font-heading'>
-						Submission Failed
-					</h2>
-					<p className='text-sm text-muted-foreground'>{state.error.message}</p>
-				</div>
-
-				<Button
-					className='w-full'
-					onClick={() => setSubmitTrigger((t) => t + 1)}>
-					Try Again
-				</Button>
-
-				<Button
-					variant='ghost'
-					className='w-full'
-					onClick={() => config.onClose?.()}>
-					Close
-				</Button>
-			</div>
+			<SubmitErrorScreen
+				message={state.error.message}
+				onRetry={() => setSubmitTrigger((t) => t + 1)}
+				onClose={() => config.onClose?.()}
+			/>
 		);
 	}
-
-	// ---------------------------------------------------------------------------
-	// Success state
-	// ---------------------------------------------------------------------------
 
 	const firstName = config.userData?.firstName || state.userData.firstName;
 	const lastName = config.userData?.lastName || state.userData.lastName;
@@ -229,41 +176,15 @@ export function SubmittedStep() {
 		: "Verification Submitted!";
 	const successDescription = config.success?.description
 		? fillTokens(config.success.description, firstName, lastName)
-		: "Your identity verification has been submitted for review. You'll be notified of the result.";
+		: isBusinessFlow(config)
+			? "Your business verification has been submitted for review. You'll be notified of the result."
+			: "Your identity verification has been submitted for review. You'll be notified of the result.";
 
 	return (
-		<div className='flex flex-col items-center gap-6 py-6 animate-fade-in'>
-			{/* Animated checkmark */}
-			<div className='flex h-20 w-20 items-center justify-center rounded-full bg-[var(--kyc-success)]/10'>
-				<svg
-					className='h-10 w-10 text-[var(--kyc-success)]'
-					viewBox='0 0 24 24'
-					fill='none'
-					stroke='currentColor'
-					strokeWidth='3'
-					strokeLinecap='round'
-					strokeLinejoin='round'>
-					<path
-						d='M4 12l5 5L20 6'
-						strokeDasharray='100'
-						strokeDashoffset='100'
-						className='animate-checkmark'
-					/>
-				</svg>
-			</div>
-
-			<div className='text-center space-y-2'>
-				<h2 className='text-xl font-semibold font-heading'>
-					{successTitle}
-				</h2>
-				<p className='text-sm text-muted-foreground'>
-					{successDescription}
-				</p>
-			</div>
-
-			<Button className='w-full' onClick={() => config.onClose?.()}>
-				Done
-			</Button>
-		</div>
+		<SubmitSuccessScreen
+			title={successTitle}
+			description={successDescription}
+			onDone={() => config.onClose?.()}
+		/>
 	);
 }

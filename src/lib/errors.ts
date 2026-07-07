@@ -42,6 +42,47 @@ function toNum(v: unknown): number | undefined {
 }
 
 /**
+ * Server error codes with dedicated user-facing messages, keyed by the body's
+ * `error` token. Mostly the business (KYB) submission path — checked before
+ * the generic status-code branches so e.g. a 500 `pricing_not_configured`
+ * doesn't read as a transient server blip.
+ */
+const CODED_ERRORS: Record<string, { code: KYCErrorCode; message: string }> = {
+  workflow_not_found: {
+    code: 'invalid_workflow',
+    message: 'This verification workflow is unavailable. It may have been unpublished — please reload and try again.',
+  },
+  workflow_subject_mismatch: {
+    code: 'invalid_workflow',
+    message: 'This workflow cannot accept a business submission. Contact the organization that sent you here.',
+  },
+  business_verifications_disabled: {
+    code: 'feature_disabled',
+    message: 'Business verification is not enabled for this organization. Contact your administrator to request access.',
+  },
+  country_mismatch: {
+    code: 'invalid_workflow',
+    message: "The submitted country doesn't match this workflow's configuration. Please reload and try again.",
+  },
+  product_unsupported: {
+    code: 'invalid_workflow',
+    message: 'The selected verification product is not offered by this workflow. Please reload and try again.',
+  },
+  registration_name_required: {
+    code: 'unknown',
+    message: 'Please enter the registered business name to continue.',
+  },
+  only_test_ids_allowed: {
+    code: 'unknown',
+    message: 'Sandbox mode accepts only published test registration numbers (e.g. RC0000001 or RC0000002).',
+  },
+  pricing_not_configured: {
+    code: 'unknown',
+    message: 'Verification pricing has not been configured for this organization. Please contact support.',
+  },
+};
+
+/**
  * Maps an unknown error thrown by the API client to a typed {@link KYCError}
  * with a user-facing message. `context` selects the fallback code when the
  * failure isn't a specific HTTP status (e.g. a bare network failure during an
@@ -49,6 +90,10 @@ function toNum(v: unknown): number | undefined {
  */
 export function mapToKycError(err: unknown, context: ErrorContext): KYCError {
   if (err instanceof KYCApiError) {
+    const coded = err.code ? CODED_ERRORS[err.code] : undefined;
+    if (coded) {
+      return new KYCError(coded.code, coded.message);
+    }
     if (err.statusCode === 401) {
       return new KYCError('invalid_api_key', 'Invalid API key. Please contact support.');
     }

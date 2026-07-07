@@ -6,7 +6,11 @@ export type LivenessChallenge =
   | 'nod'
   | 'turn'
   | 'blink'
-  | 'smile';
+  | 'smile'
+  | 'flash';
+
+/** How Presence Intelligence verifies liveness. Configured per workflow. */
+export type LivenessMode = 'gestures' | 'flash' | 'both';
 
 export interface ChallengeConfig {
   type: LivenessChallenge;
@@ -52,6 +56,21 @@ export const CHALLENGE_POOL: ChallengeConfig[] = [
   },
 ];
 
+/**
+ * Screen-reflection (flash) challenge — appended as the FINAL challenge when
+ * the liveness mode includes flash; never part of the random gesture pool.
+ * The screen emits a random color sequence and the face's reflected hue shift
+ * is verified against it (see flash-detector.ts).
+ */
+export const FLASH_CHALLENGE: ChallengeConfig = {
+  type: 'flash',
+  instruction: 'Hold still',
+  icon: '✨',
+  avatarAnimation: '',
+  timeoutSeconds: 12,
+  detectionThreshold: 0.5,
+};
+
 // ---------------------------------------------------------------------------
 // State machine
 // ---------------------------------------------------------------------------
@@ -72,7 +91,7 @@ export type LivenessState =
   | { phase: 'challenge_passed'; index: number }
   | { phase: 'capturing' }
   | { phase: 'complete'; selfieBase64: string }
-  | { phase: 'failed'; reason: 'timeout' | 'face_lost' | 'no_camera' | 'load_error' };
+  | { phase: 'failed'; reason: 'timeout' | 'face_lost' | 'no_camera' | 'load_error' | 'flash_failed' | 'face_swap' };
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -84,6 +103,8 @@ export interface LivenessConfig {
   timeoutPerChallenge: number;
   enableAvatar: boolean;
   positioningTimeout: number;
+  /** gestures (default) | flash (screen-reflection only) | both (gestures + flash). */
+  mode: LivenessMode;
 }
 
 export const DEFAULT_LIVENESS_CONFIG: LivenessConfig = {
@@ -91,6 +112,7 @@ export const DEFAULT_LIVENESS_CONFIG: LivenessConfig = {
   timeoutPerChallenge: 8,
   enableAvatar: true,
   positioningTimeout: 15,
+  mode: 'gestures',
 };
 
 // ---------------------------------------------------------------------------

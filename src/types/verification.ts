@@ -38,6 +38,7 @@ export type KYCErrorCode =
   | 'upload_failed'
   | 'camera_permission_denied'
   | 'feature_disabled'
+  | 'invalid_workflow'
   | 'unknown';
 
 export interface KYCErrorDetails {

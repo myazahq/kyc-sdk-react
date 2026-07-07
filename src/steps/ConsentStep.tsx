@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import {
   ShieldCheck,
   BadgeCheck,
+  Building2,
   UserRound,
   ScanLine,
   ScanFace,
@@ -15,6 +16,7 @@ import { Label } from '../components/ui/label';
 import { cn } from '../lib/utils';
 import { useKYCContext } from '../context/KYCContext';
 import { useKYCConfig } from '../context/KYCConfigContext';
+import { isBusinessFlow } from '../lib/business';
 import { MobileHandoffSheet } from '../components/MobileHandoffSheet';
 
 interface ProcessStep {
@@ -34,34 +36,58 @@ const DEFAULT_CONSENT_DESCRIPTION =
   'We need to verify your identity to comply with regulatory requirements. ' +
   'This process is quick and secure.';
 
+const DEFAULT_BUSINESS_CONSENT_DESCRIPTION =
+  'We need to verify your business to comply with regulatory requirements. ' +
+  'This process is quick and secure.';
+
 export function ConsentStep() {
   const { dispatch } = useKYCContext();
   const config = useKYCConfig();
+  const isBusiness = isBusinessFlow(config);
   const firstName = config.userData?.firstName;
   const lastName = config.userData?.lastName;
   const [consented, setConsented] = useState(false);
 
-  const defaultTitle = firstName ? `Welcome, ${firstName}` : 'Identity Verification';
+  const defaultTitle = firstName
+    ? `Welcome, ${firstName}`
+    : isBusiness
+      ? 'Business Verification'
+      : 'Identity Verification';
   const title = config.consent?.title
     ? fillTokens(config.consent.title, firstName, lastName)
     : defaultTitle;
   const description = config.consent?.description
     ? fillTokens(config.consent.description, firstName, lastName)
-    : DEFAULT_CONSENT_DESCRIPTION;
+    : isBusiness
+      ? DEFAULT_BUSINESS_CONSENT_DESCRIPTION
+      : DEFAULT_CONSENT_DESCRIPTION;
 
   const handleContinue = () => {
-    dispatch({ type: 'SET_STEP', payload: 'id-type' });
+    // Business (KYB) flows go straight to the details form. Multi-region
+    // individual flows pick the country first; single-region skips straight
+    // to the ID-type list.
+    if (isBusiness) {
+      dispatch({ type: 'SET_STEP', payload: 'business-details' });
+      return;
+    }
+    const multiRegion = (config.countries?.length ?? 0) > 1;
+    dispatch({ type: 'SET_STEP', payload: multiRegion ? 'country-select' : 'id-type' });
   };
 
   // Reflect the actually-enabled features so the list matches the real flow.
-  const steps: ProcessStep[] = [
-    { icon: BadgeCheck, label: 'Verify your government-issued ID' },
-    { icon: UserRound, label: 'Collect basic personal information' },
-  ];
-  if (config.enableDocumentCapture !== false) {
+  const steps: ProcessStep[] = isBusiness
+    ? [
+        { icon: Building2, label: 'Collect your business registration details' },
+        { icon: BadgeCheck, label: 'Verify your business against the official registry' },
+      ]
+    : [
+        { icon: BadgeCheck, label: 'Verify your government-issued ID' },
+        { icon: UserRound, label: 'Collect basic personal information' },
+      ];
+  if (!isBusiness && config.enableDocumentCapture !== false) {
     steps.push({ icon: ScanLine, label: 'Capture a photo of your ID document' });
   }
-  if (config.enableSelfie !== false) {
+  if (!isBusiness && config.enableSelfie !== false) {
     steps.push({ icon: ScanFace, label: 'Take a selfie for facial verification' });
   }
 
@@ -118,8 +144,9 @@ export function ConsentStep() {
           htmlFor="consent"
           className="text-sm leading-snug cursor-pointer font-normal"
         >
-          I consent to the collection and processing of my personal data for
-          identity verification purposes.
+          {isBusiness
+            ? 'I consent to the collection and processing of the provided business information for verification purposes.'
+            : 'I consent to the collection and processing of my personal data for identity verification purposes.'}
         </Label>
       </label>
 
@@ -135,9 +162,12 @@ export function ConsentStep() {
           <Lock className="h-3 w-3" />
           Your data is encrypted and securely processed
         </p>
-        <div className="flex justify-center pt-1">
-          <MobileHandoffSheet />
-        </div>
+        {/* No camera in the business flow — nothing to hand off to a phone for. */}
+        {!isBusiness && (
+          <div className="flex justify-center pt-1">
+            <MobileHandoffSheet />
+          </div>
+        )}
       </div>
     </div>
   );

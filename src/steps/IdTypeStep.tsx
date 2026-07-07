@@ -42,15 +42,19 @@ interface IdTypeStepProps {
 
 export function IdTypeStep({ country, allowedIdTypes }: IdTypeStepProps = {}) {
   const { state, dispatch } = useKYCContext();
-  const { serverConfig } = useKYCConfig();
+  const config = useKYCConfig();
+  const { serverConfig } = config;
 
   // Determine which country to use — prop override or default to NG
   const resolvedCountry: SupportedCountry = country ?? 'NG';
 
   const allTypes: readonly IdTypeDefinition[] = ID_TYPES[resolvedCountry] ?? [];
-  const propAllowed = allowedIdTypes
-    ? allTypes.filter((t) => allowedIdTypes.includes(t.key))
-    : allTypes;
+  // An empty allowlist means "offer everything granted", same as absent — the
+  // server treats [] that way, so the picker must too.
+  const propAllowed =
+    allowedIdTypes && allowedIdTypes.length > 0
+      ? allTypes.filter((t) => allowedIdTypes.includes(t.key))
+      : allTypes;
 
   // Intersect with the server-driven access list. While the config is still
   // loading we show nothing (a loader renders below); on error we fall back
@@ -60,12 +64,20 @@ export function IdTypeStep({ country, allowedIdTypes }: IdTypeStepProps = {}) {
       .filter((row) => row.country === resolvedCountry)
       .map((row) => row.idType),
   );
-  const visibleTypes =
+  const grantedVisible =
     serverConfig.status === 'ready'
       ? propAllowed.filter((t) => grantedKeys.has(t.key))
       : serverConfig.status === 'error'
         ? propAllowed
         : [];
+  // Document Intelligence off ⇒ number-only IDs only (there's no document
+  // capture step), so drop every document-scanned ID from the picker. This is
+  // what makes the disabled "Document Intelligence" step actually disappear from
+  // the live flow rather than still offering passports/licenses.
+  const visibleTypes =
+    config.enableDocumentCapture === false
+      ? grantedVisible.filter((t) => isNumberOnlyIdType(t.key))
+      : grantedVisible;
 
   const handleSelect = (value: string) => {
     dispatch({ type: 'SELECT_ID_TYPE', payload: value as IdType });
@@ -80,7 +92,10 @@ export function IdTypeStep({ country, allowedIdTypes }: IdTypeStepProps = {}) {
   };
 
   const handleBack = () => {
-    dispatch({ type: 'SET_STEP', payload: 'consent' });
+    dispatch({
+      type: 'SET_STEP',
+      payload: (config.countries?.length ?? 0) > 1 ? 'country-select' : 'consent',
+    });
   };
 
   return (

@@ -15,8 +15,11 @@ import type {
   KYCAppearance,
   KYCConsentContent,
   KYCSuccessContent,
+  QuestionnaireConfig,
+  ProofOfAddressConfig,
   VoiceGuidanceOption,
 } from './types/config';
+import type { SubjectType, WorkflowBusinessConfig } from './types/business';
 
 export interface MyazaKYCHostedProps {
   /**
@@ -110,6 +113,7 @@ function HostedFlow({
   bootstrap: HandoffBootstrapResponse;
 }) {
   const snap = bootstrap.configSnapshot;
+  const isBusiness = snap.subjectType === 'business' && !!snap.business;
   const serverConfigOverride: ServerSdkConfig = {
     status: 'ready',
     idTypes: bootstrap.idTypes,
@@ -123,24 +127,35 @@ function HostedFlow({
         apiKey={`${HANDOFF_TOKEN_PREFIX}${token}`}
         apiOverride={api}
         serverConfigOverride={serverConfigOverride}
-        country={snap.country as SupportedCountry}
+        subjectType={snap.subjectType as SubjectType | undefined}
+        business={snap.business as WorkflowBusinessConfig | undefined}
+        // Business snapshots carry no top-level country — the registry country
+        // stands in so the context never sees undefined.
+        country={(snap.country ?? snap.business?.country) as SupportedCountry}
+        countries={snap.countries as Array<{ country: SupportedCountry; idTypes?: IdType[] }> | undefined}
         idTypes={snap.idTypes as IdType[] | undefined}
         metadata={snap.metadata}
+        userId={snap.userId}
         enableSelfie={snap.enableSelfie}
         enableDocumentCapture={snap.enableDocumentCapture}
         allowDocumentUpload={snap.allowDocumentUpload}
         enableLiveness={snap.enableLiveness}
+        livenessMode={snap.livenessMode as 'gestures' | 'flash' | 'both' | undefined}
         appearance={snap.appearance as KYCAppearance | undefined}
         consent={snap.consent as KYCConsentContent | undefined}
         success={snap.success as KYCSuccessContent | undefined}
+        questionnaire={snap.questionnaire as QuestionnaireConfig | undefined}
+        proofOfAddress={snap.proofOfAddress as ProofOfAddressConfig | undefined}
         userData={snap.userData}
         assetsBasePath={snap.assetsBasePath}
         deviceHandoff={false}
       >
         <HostedFlowInner
           voiceGuidance={snap.voiceGuidance as VoiceGuidanceOption | undefined}
-          enableLiveness={snap.enableLiveness}
+          // Business flows have no liveness step — never load the face model.
+          enableLiveness={isBusiness ? false : snap.enableLiveness}
           showThemeToggle={snap.showThemeToggle}
+          fullScreen={snap.fullScreen}
         />
       </KYCConfigProvider>
     </KYCProvider>
@@ -151,10 +166,12 @@ function HostedFlowInner({
   voiceGuidance,
   enableLiveness,
   showThemeToggle,
+  fullScreen,
 }: {
   voiceGuidance?: VoiceGuidanceOption;
   enableLiveness?: boolean;
   showThemeToggle?: boolean;
+  fullScreen?: boolean;
 }) {
   const { dispatch } = useKYCContext();
 
@@ -168,5 +185,5 @@ function HostedFlowInner({
   // On the phone there is nothing to "close" back to — the flow is the whole
   // page — so close is disabled. The terminal Submitted step ends the journey;
   // the desktop is notified via its session poll.
-  return <KYCModal open onClose={() => undefined} showThemeToggle={showThemeToggle} disableClose />;
+  return <KYCModal open onClose={() => undefined} showThemeToggle={showThemeToggle} disableClose fullScreen={fullScreen} />;
 }

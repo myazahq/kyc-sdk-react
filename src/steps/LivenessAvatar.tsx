@@ -11,7 +11,10 @@ import type { LivenessChallenge } from "../liveness/types";
 // Falls back to URL-based loading when assetsBasePath is explicitly provided.
 // ---------------------------------------------------------------------------
 
-const LABEL_MAP: Record<LivenessChallenge, string> = {
+// The flash challenge has no gesture to demonstrate — the avatar hides for it.
+type GestureChallenge = Exclude<LivenessChallenge, "flash">;
+
+const LABEL_MAP: Record<GestureChallenge, string> = {
 	nod: "Nod your head up and down",
 	turn: "Turn your head to either side",
 	blink: "Blink your eyes",
@@ -20,7 +23,7 @@ const LABEL_MAP: Record<LivenessChallenge, string> = {
 
 // Lazy loaders — each is a separate chunk in the ESM build (code splitting).
 // Imported as data URIs by esbuild so no static file serving is needed.
-const GIF_LOADERS: Record<LivenessChallenge, () => Promise<{ default: string }>> = {
+const GIF_LOADERS: Record<GestureChallenge, () => Promise<{ default: string }>> = {
 	nod: () => import("../../gifs/Nod.gif"),
 	turn: () => import("../../gifs/Turn.gif"),
 	blink: () => import("../../gifs/Blink.gif"),
@@ -40,24 +43,27 @@ interface LivenessAvatarProps {
 }
 
 export function LivenessAvatar({
-	gesture,
+	gesture: rawGesture,
 	visible,
 	assetsBasePath,
 	className,
 }: LivenessAvatarProps) {
-	const [displayed, setDisplayed] = useState<LivenessChallenge | null>(gesture);
+	// Flash has no demonstrable gesture — treat it as "no avatar".
+	const gesture: GestureChallenge | null =
+		rawGesture === "flash" ? null : rawGesture;
+	const [displayed, setDisplayed] = useState<GestureChallenge | null>(gesture);
 	const [slideState, setSlideState] = useState<"in" | "out-left" | "in-right">(
 		"in",
 	);
 	// Map of gesture → resolved src (data URI or URL)
-	const [gifSrcs, setGifSrcs] = useState<Partial<Record<LivenessChallenge, string>>>({});
-	const prevRef = useRef<LivenessChallenge | null>(null);
+	const [gifSrcs, setGifSrcs] = useState<Partial<Record<GestureChallenge, string>>>({});
+	const prevRef = useRef<GestureChallenge | null>(null);
 
 	// Load the GIF src for a gesture — either from the bundled data URI or URL.
-	const loadGif = (g: LivenessChallenge) => {
+	const loadGif = (g: GestureChallenge) => {
 		if (assetsBasePath) {
 			const base = assetsBasePath.replace(/\/$/, "");
-			const FILE_MAP: Record<LivenessChallenge, string> = {
+			const FILE_MAP: Record<GestureChallenge, string> = {
 				nod: "Nod.gif",
 				turn: "Turn.gif",
 				blink: "Blink.gif",

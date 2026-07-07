@@ -44,7 +44,7 @@ function ThemeToggle() {
   const toggle = () => {
     const next = !document.documentElement.classList.contains('dark');
     document.documentElement.classList.toggle('dark', next);
-    try { localStorage.setItem('theme', next ? 'dark' : 'light'); } catch { /* ignore */ }
+    try { localStorage.setItem('myaza-kyc-theme', next ? 'dark' : 'light'); } catch { /* ignore */ }
     rerender();
   };
   return (

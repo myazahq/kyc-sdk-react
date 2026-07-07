@@ -1,9 +1,12 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import type { SupportedCountry, IdType, KYCAppearance, KYCConsentContent, KYCSuccessContent } from '../types/config';
+import type { SupportedCountry, IdType, KYCAppearance, KYCConsentContent, KYCSuccessContent, QuestionnaireConfig, ProofOfAddressConfig } from '../types/config';
+import type { SubjectType, WorkflowBusinessConfig } from '../types/business';
 import type { KYCSubmission } from '../types/verification';
 import { createKYCApi, KYCApiError, type KYCApi, type SdkConfigIdType, type SdkConfigResponse, type SdkConfigBranding } from '../services/api';
+import { withPreviewMocks } from '../services/preview-mock';
+import { useKYCContext } from './KYCContext';
 import { resolveBaseUrl } from '../lib/resolve-url';
 import { KYCError, type KYCErrorCode } from '../types/verification';
 import { safeReportError } from '../lib/errors';
@@ -38,10 +41,36 @@ export interface KYCConfigValue {
   apiKey: string;
   /** Memoized API client, built from the resolved base URL + apiKey. */
   api: KYCApi;
+  /**
+   * The published flow ("flow_…") this mount was configured by, if any.
+   * Attribution only — sent with the verify submission so the resulting
+   * verification (and its webhooks) carry the flow.
+   */
+  workflowId?: string;
+  /**
+   * EFFECTIVE country for the session: the user's country-select choice (multi-
+   * region flows) or the configured default. Steps read this — they never need
+   * to know about the selection mechanics.
+   */
   country: SupportedCountry;
+  /**
+   * Multi-region configuration (>1 entry adds the country-select step). The
+   * effective `country`/`idTypes` above already reflect the picked entry.
+   */
+  countries?: Array<{ country: SupportedCountry; idTypes?: IdType[] }>;
+  /**
+   * What this session verifies. 'business' switches to the KYB flow (consent →
+   * business-details → questionnaire → submitted). Only ever set by a resolved
+   * workflow config / hosted session snapshot — never by consumer props.
+   */
+  subjectType?: SubjectType;
+  /** Business (KYB) configuration — present when `subjectType === 'business'`. */
+  business?: WorkflowBusinessConfig;
   /** Subset of ID types to offer. Only types valid for `country` will appear. */
   idTypes?: IdType[];
   metadata?: Record<string, string>;
+  /** The org's user reference → Entity.externalUserId at the seam (not matched). */
+  userId?: string;
   /** Pre-populated user data from the consuming app */
   userData?: { firstName?: string; lastName?: string; dateOfBirth?: string };
   enableSelfie?: boolean;
@@ -49,6 +78,10 @@ export interface KYCConfigValue {
   /** Allow picking a document photo from the device instead of the camera. Default true. */
   allowDocumentUpload?: boolean;
   enableLiveness?: boolean;
+  /** Presence Intelligence method: gestures (default) | flash | both. */
+  livenessMode?: 'gestures' | 'flash' | 'both';
+  /** Device Intelligence (device + IP analysis). On by default; false skips it (and its charge). */
+  deviceIntelligence?: boolean;
   /**
    * Show the "continue on another device" handoff option.
    * Desktop: shown as a pre-flow gate. Mobile: shown as a subtle link on the consent step.
@@ -67,10 +100,16 @@ export interface KYCConfigValue {
   consent?: KYCConsentContent;
   /** Success (submitted) screen copy overrides. */
   success?: KYCSuccessContent;
+  /** Extra-info questionnaire shown before submission (compliance declarations). */
+  questionnaire?: QuestionnaireConfig;
+  /** Proof of Address document collection (after capture). */
+  proofOfAddress?: ProofOfAddressConfig;
   onSubmit?: (submission: KYCSubmission) => void;
   onClose?: () => void;
   /** Fires for technical errors — including a fatal config-load auth failure. Receives a typed {@link KYCError}. */
   onError?: (error: KYCError) => void;
+  /** Preview/mock mode: writes (uploads, verify) are stubbed in the browser. */
+  previewMode?: boolean;
   /**
    * Server-driven config (fetched on mount): which IDs the org may use and
    * which SDK features are enabled per ID. Steps should consult this — it
@@ -160,10 +199,13 @@ export function KYCConfigProvider({ children, apiOverride, serverConfigOverride,
   // changes. An invalid key prefix throws here (fail-loud at integration time).
   // `apiOverride` short-circuits this (hosted mode) — `resolveBaseUrl` is never
   // called, so a session token doesn't trip its key-prefix validation.
-  const api = useMemo(
-    () => apiOverride ?? createKYCApi(resolveBaseUrl(config.apiKey, config.devUrl), config.apiKey),
-    [apiOverride, config.apiKey, config.devUrl],
-  );
+  const api = useMemo(() => {
+    const client =
+      apiOverride ?? createKYCApi(resolveBaseUrl(config.apiKey, config.devUrl), config.apiKey);
+    // Preview mode stubs every write (uploads, verify) in the browser; reads
+    // (config, workflow resolution) stay real so grants + branding are live.
+    return config.previewMode ? withPreviewMocks(client) : client;
+  }, [apiOverride, config.apiKey, config.devUrl, config.previewMode]);
 
   // Guards onError so a fatal config failure is reported to the consumer at
   // most once per API client (StrictMode mounts the effect twice in dev).
@@ -209,9 +251,23 @@ export function KYCConfigProvider({ children, apiOverride, serverConfigOverride,
     return map;
   }, [serverConfig.idTypes]);
 
+  // Multi-region: the user's country-select choice (reducer state) overrides
+  // the configured default, and the picked country's idTypes win. Steps only
+  // ever see the EFFECTIVE country/idTypes — no selection logic leaks out.
+  const { state } = useKYCContext();
+  const effectiveCountry = (state.selectedCountry ?? config.country) as SupportedCountry;
+  const countryEntry = config.countries?.find((c) => c.country === effectiveCountry);
+
+  // An empty idTypes list means "offer everything granted" (same as absent) —
+  // the server enforces that semantic, so a stray [] must not hide every ID.
+  const nonEmpty = (ids: IdType[] | undefined): IdType[] | undefined =>
+    ids && ids.length > 0 ? ids : undefined;
+
   const value = useMemo<KYCConfigValue>(
     () => ({
       ...config,
+      country: effectiveCountry,
+      idTypes: nonEmpty(countryEntry?.idTypes) ?? nonEmpty(config.idTypes),
       api,
       serverConfig,
       getIdTypeFeatures: (country, idType) =>
@@ -222,19 +278,30 @@ export function KYCConfigProvider({ children, apiOverride, serverConfigOverride,
       config.devUrl,
       config.apiKey,
       api,
+      config.workflowId,
       config.country,
+      config.countries,
+      config.subjectType,
+      config.business,
+      effectiveCountry,
+      countryEntry,
       config.idTypes,
       config.metadata,
+      config.userId,
       config.userData,
       config.enableSelfie,
       config.enableDocumentCapture,
       config.allowDocumentUpload,
       config.enableLiveness,
+      config.livenessMode,
+      config.deviceIntelligence,
       config.deviceHandoff,
       config.assetsBasePath,
       config.appearance,
       config.consent,
       config.success,
+      config.questionnaire,
+      config.proofOfAddress,
       config.onSubmit,
       config.onClose,
       config.onError,

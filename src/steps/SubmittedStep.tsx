@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useKYCContext } from "../context/KYCContext";
 import { useKYCConfig } from "../context/KYCConfigContext";
-import { isNumberOnlyIdType } from "../utils/countries";
 import { withRetry } from "../lib/retry";
 import { mapToKycError } from "../lib/errors";
 import { businessProductsForCountry, isBusinessFlow } from "../lib/business";
@@ -76,9 +75,10 @@ export function SubmittedStep() {
 			dispatch({ type: "SET_ERROR", payload: new KYCError("unknown", "Missing ID type.") });
 			return;
 		}
-		const idNumber =
-			isNumberOnlyIdType(state.selectedIdType) ? state.idNumber : undefined;
-		if (isNumberOnlyIdType(state.selectedIdType) && !idNumber) {
+		const isNumberOnly =
+			config.getIdTypeDefinition(state.selectedIdType)?.requiresDocumentCapture === false;
+		const idNumber = isNumberOnly ? state.idNumber : undefined;
+		if (isNumberOnly && !idNumber) {
 			dispatch({ type: "SET_ERROR", payload: new KYCError("unknown", "Missing ID number.") });
 			return;
 		}
@@ -144,9 +144,10 @@ export function SubmittedStep() {
 		// Put UI into loading state immediately
 		dispatch({ type: "SUBMIT_VERIFICATION" });
 		setRetryInfo(null);
-		const requestId = generateRequestId();
+		const business = isBusinessFlow(config);
+		const requestId = generateRequestId(business ? 'kyb' : 'kyc');
 		try {
-			if (isBusinessFlow(config)) await submitBusiness(requestId);
+			if (business) await submitBusiness(requestId);
 			else await submitIndividual(requestId);
 		} catch (err) {
 			// Retries (if any) are exhausted — surface a typed error.

@@ -5,7 +5,6 @@ import { StepHeader } from '../components/StepHeader';
 import { Button } from '../components/ui/button';
 import { useKYCContext } from '../context/KYCContext';
 import { useKYCConfig } from '../context/KYCConfigContext';
-import { isNumberOnlyIdType } from '../utils/countries';
 import { hasProofOfAddressStep } from '../lib/post-capture';
 import { isBusinessFlow } from '../lib/business';
 import { QuestionField } from './QuestionnaireFields';
@@ -41,7 +40,8 @@ export function QuestionnaireStep() {
         ? 'proof-of-address'
         : config.enableSelfie !== false
           ? 'liveness'
-          : state.selectedIdType && isNumberOnlyIdType(state.selectedIdType)
+          : state.selectedIdType &&
+              config.getIdTypeDefinition(state.selectedIdType)?.requiresDocumentCapture === false
             ? 'id-input'
             : 'document-capture';
     dispatch({ type: 'SET_STEP', payload: backTo });

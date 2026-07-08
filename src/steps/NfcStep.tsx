@@ -26,7 +26,7 @@ export function NfcStep() {
       ? config.getIdTypeFeatures(config.country, state.selectedIdType)?.livenessCheck ?? config.enableLiveness !== false
       : config.enableLiveness !== false);
 
-  const handleContinue = () => {
+  const advance = () => {
     if (hasLiveness) {
       dispatch({ type: 'SET_STEP', payload: 'liveness' });
       return;
@@ -38,6 +38,8 @@ export function NfcStep() {
       dispatch({ type: 'SET_STEP', payload: next });
     }
   };
+
+  const allowSkip = config.nfc?.allowSkip === true;
 
   return (
     <div className="space-y-6 animate-slide-up">
@@ -89,8 +91,22 @@ export function NfcStep() {
         step.
       </div>
 
+      {/* Skip affordance — shown when the workflow allows it, so a user whose
+          phone can't read the chip can still proceed. The native SDKs also
+          auto-skip on devices with no NFC radio; this is the manual escape
+          hatch on NFC-capable phones (and the preview always shows Continue). */}
+      {allowSkip && (
+        <Button
+          variant="ghost"
+          onClick={advance}
+          className="w-full h-11 rounded-xl text-sm font-medium text-muted-foreground"
+        >
+          My device can’t scan the chip — skip
+        </Button>
+      )}
+
       {config.previewMode && (
-        <Button onClick={handleContinue} className="w-full h-12 rounded-xl text-base font-medium">
+        <Button onClick={advance} className="w-full h-12 rounded-xl text-base font-medium">
           Continue
         </Button>
       )}

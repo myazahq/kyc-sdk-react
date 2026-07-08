@@ -15,7 +15,6 @@ import { Maximize2, Minimize2, Moon, Sun, X } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useKYCContext } from '../context/KYCContext';
 import { useKYCConfig } from '../context/KYCConfigContext';
-import { requiresDocumentCapture } from '../utils/countries';
 import { hasActiveQuestionnaire } from '../lib/questionnaire';
 import { hasProofOfAddressStep } from '../lib/post-capture';
 import { isBusinessFlow } from '../lib/business';
@@ -224,7 +223,8 @@ export function KYCModal({ open, onClose, showThemeToggle, disableClose, fullScr
   const dismissBlocked = isTerminal || disableClose === true;
   const isCaptureStep = CAPTURE_STEPS.includes(state.currentStep);
   const isBusiness = isBusinessFlow(config);
-  const hasDocCapture = state.selectedIdType ? requiresDocumentCapture(state.selectedIdType) : true;
+  const selectedDef = state.selectedIdType ? config.getIdTypeDefinition(state.selectedIdType) : null;
+  const hasDocCapture = selectedDef ? selectedDef.requiresDocumentCapture : true;
   const hasCountrySelect = (config.countries?.length ?? 0) > 1;
   const livenessFeatures = state.selectedIdType
     ? config.getIdTypeFeatures(config.country, state.selectedIdType)
@@ -314,8 +314,11 @@ export function KYCModal({ open, onClose, showThemeToggle, disableClose, fullScr
           </div>
 
           <KYCErrorBoundary>
+            {/* flex flex-col so a step that opts in (flex-1 + min-h-0, e.g. the
+                country picker) can fill this area and own its scroll; content
+                steps stay content-height and this container scrolls them. */}
             <div className={cn(
-              'flex-1 overflow-y-auto p-6 animate-slide-up',
+              'flex min-h-0 flex-1 flex-col overflow-y-auto p-6 animate-slide-up',
               fullscreen && 'xl:mx-auto xl:w-full xl:max-w-2xl',
             )} key={configError ? 'config-error' : state.currentStep}>
               {configError ? (

@@ -1,5 +1,11 @@
 import type { IdTypesByCountry } from '../types/config';
 
+// The CURATED local catalogue — hand-tuned labels + digits/pattern validation
+// for the five curated countries. NOT exhaustive: the server grants generic
+// document types (passport / drivers-license / national-id) in ANY ISO country
+// and supplies their metadata in its idTypes payload. Always resolve a pair
+// through `utils/id-definitions.ts` (`useKYCConfig().getIdTypeDefinition`),
+// which prefers these entries and synthesizes the rest from server rows.
 export const ID_TYPES: IdTypesByCountry = {
   NG: [
     { key: 'bvn',             label: 'BVN',                                 digits: 11,                    requiresDocumentCapture: false },
@@ -30,33 +36,6 @@ export const ID_TYPES: IdTypesByCountry = {
     { key: 'residence-card',  label: 'Residence Card',                                                     requiresDocumentCapture: true, scanSides: 'front_and_back'  },
   ],
 } as const;
-
-/**
- * Returns true for IDs that should skip document capture and go straight to
- * the id-input form (user types their number manually).
- * Nigeria: BVN, NIN, vNIN.
- */
-export function isNumberOnlyIdType(idType: string): boolean {
-  const def = Object.values(ID_TYPES).flat().find((t) => t.key === idType);
-  return def ? !def.requiresDocumentCapture : false;
-}
-
-/**
- * Returns true when the selected ID type requires a physical document scan.
- */
-export function requiresDocumentCapture(idType: string): boolean {
-  const def = Object.values(ID_TYPES).flat().find((t) => t.key === idType);
-  return def ? def.requiresDocumentCapture : true;
-}
-
-/**
- * Returns the scan-sides configuration for a document ID type.
- * Defaults to 'front_only' when not explicitly set.
- */
-export function getScanSides(idType: string): 'front_only' | 'front_and_back' {
-  const def = Object.values(ID_TYPES).flat().find((t) => t.key === idType);
-  return (def as { scanSides?: 'front_only' | 'front_and_back' })?.scanSides ?? 'front_only';
-}
 
 export const COUNTRY_LABELS: Record<string, string> = {
   NG: 'Nigeria',

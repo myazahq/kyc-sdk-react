@@ -27,6 +27,7 @@ const WORKFLOW_KEYS = [
   'success',
   'questionnaire',
   'proofOfAddress',
+  'nfc',
   'assetsBasePath',
 ] as const;
 

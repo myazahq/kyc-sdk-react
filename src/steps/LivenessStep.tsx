@@ -21,7 +21,6 @@ import { recordLivenessSignals } from '../lib/integrity-signals';
 import { withRetry } from '../lib/retry';
 import { mapToKycError, safeReportError } from '../lib/errors';
 import { KYCError } from '../types/verification';
-import { requiresDocumentCapture } from '../utils/countries';
 import {
   LIVENESS_VIDEO_BITRATE,
   createVideoRecorder,
@@ -271,7 +270,7 @@ export function LivenessStep() {
   const handleBack = () => {
     camera.stop();
     const hasDocCapture = kycState.selectedIdType
-      ? requiresDocumentCapture(kycState.selectedIdType)
+      ? config.getIdTypeDefinition(kycState.selectedIdType)?.requiresDocumentCapture ?? false
       : false;
     dispatch({ type: 'SET_STEP', payload: hasDocCapture ? 'document-capture' : 'id-input' });
   };

@@ -1,4 +1,4 @@
-import type { IdType, SupportedCountry } from '../types/config';
+import type { AnyIdType, AnyCountry } from '../types/config';
 
 export interface ValidationResult {
   valid: boolean;
@@ -58,7 +58,7 @@ const validators: Record<string, (value: string) => ValidationResult> = {
   'za-national-id': (v) => digitsExact(v, 13, 'National ID'),
 };
 
-function resolveKey(country: SupportedCountry, idType: IdType): string {
+function resolveKey(country: AnyCountry, idType: AnyIdType): string {
   // Some ID types share a name across countries (passport, drivers-license, national-id, voters).
   // We prefix with country code for those that need country-specific validation.
   const needsPrefix: Record<string, Set<string>> = {
@@ -76,9 +76,11 @@ function resolveKey(country: SupportedCountry, idType: IdType): string {
   return idType;
 }
 
+// Country/idType accept any ISO-2 / server-defined key (Global Documents) —
+// pairs without a curated validator fall through to the non-empty check below.
 export function validateIdNumber(
-  country: SupportedCountry,
-  idType: IdType,
+  country: AnyCountry,
+  idType: AnyIdType,
   value: string,
 ): ValidationResult {
   const trimmed = value.trim();

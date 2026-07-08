@@ -14,9 +14,9 @@ import { isDesktopDevice } from './lib/device';
 import { resolveBaseUrl } from './lib/resolve-url';
 import { createKYCApi, KYCApiError, type WorkflowResolutionResponse, type HandoffSessionSnapshot } from './services/api';
 import { KYCError } from './types/verification';
-import { ID_TYPES } from './utils/countries';
+import { listIdTypeDefinitions } from './utils/id-definitions';
 import { resetIntegritySignals } from './lib/integrity-signals';
-import type { MyazaKYCConfig, MyazaKYCProps, UseMyazaKYCReturn, KYCStep, SupportedCountry } from './types/config';
+import type { MyazaKYCConfig, MyazaKYCProps, UseMyazaKYCReturn, KYCStep, AnyCountry } from './types/config';
 import type { SubjectType, WorkflowBusinessConfig } from './types/business';
 
 // Lazy-loaded so the QR/handoff code (and qrcode.react) is code-split out of the
@@ -38,7 +38,9 @@ function PreviewStepDriver({ step }: { step: KYCStep | null | undefined }) {
     if (!step) return;
     const { selectedIdType, config: cfg } = stateRef.current;
     if (step === 'document-capture' || step === 'id-input' || step === 'liveness' || step === 'nfc') {
-      const all = ID_TYPES[cfg.country] ?? [];
+      // Local curated defs ∪ server-synthesized ones, so previews work for
+      // any ISO country the server grants (Global Documents).
+      const all = listIdTypeDefinitions(cfg.country, cfg.serverConfig.idTypes);
       const offered = cfg.idTypes?.length ? all.filter((t) => cfg.idTypes!.includes(t.key)) : all;
       const current = offered.find((t) => t.key === selectedIdType);
       const needsDocument = step === 'document-capture' || step === 'nfc';
@@ -68,7 +70,7 @@ function PreviewStepDriver({ step }: { step: KYCStep | null | undefined }) {
 // Inner component (has access to KYCContext)
 // ---------------------------------------------------------------------------
 
-type KYCInnerProps = MyazaKYCProps<SupportedCountry> & {
+type KYCInnerProps = MyazaKYCProps<AnyCountry> & {
   /**
    * Pre-resolved server config, provided by WorkflowGate (flow mode) so the
    * provider skips the /config fetch — the flow resolution already carried
@@ -115,6 +117,7 @@ function KYCInner({
   success,
   questionnaire,
   proofOfAddress,
+  nfc,
   ...triggerProps
 }: KYCInnerProps) {
   const { state, dispatch } = useKYCContext();
@@ -131,7 +134,7 @@ function KYCInner({
   // userData is included so greeting tokens work on the phone (the token URL is
   // already the secret, same risk level as a magic link).
   const handoffSnapshot = useMemo<HandoffSessionSnapshot>(() => ({
-    country: country as SupportedCountry,
+    country,
     ...(workflowId ? { workflowId } : {}),
     ...(idTypes ? { idTypes } : {}),
     ...(countries ? { countries } : {}),
@@ -150,11 +153,12 @@ function KYCInner({
     ...(success ? { success: success as Record<string, unknown> } : {}),
     ...(questionnaire ? { questionnaire: questionnaire as { fields: unknown[] } } : {}),
     ...(proofOfAddress ? { proofOfAddress } : {}),
+    ...(nfc ? { nfc } : {}),
     ...(metadata ? { metadata } : {}),
     ...(userId ? { userId } : {}),
     ...(userData ? { userData } : {}),
     ...(assetsBasePath ? { assetsBasePath } : {}),
-  }), [country, workflowId, idTypes, countries, enableSelfie, enableDocumentCapture, allowDocumentUpload, enableLiveness, livenessMode, deviceIntelligence, voiceGuidance, showThemeToggle, fullScreen, disableClose, appearance, consent, success, questionnaire, proofOfAddress, metadata, userId, userData, assetsBasePath]);
+  }), [country, workflowId, idTypes, countries, enableSelfie, enableDocumentCapture, allowDocumentUpload, enableLiveness, livenessMode, deviceIntelligence, voiceGuidance, showThemeToggle, fullScreen, disableClose, appearance, consent, success, questionnaire, proofOfAddress, nfc, metadata, userId, userData, assetsBasePath]);
 
   // Pre-load MediaPipe Face Mesh model as soon as the SDK mounts and apply the
   // voice-guidance config (enabled + language) for the spoken liveness prompts.
@@ -246,7 +250,7 @@ function KYCInner({
       serverConfigOverride={serverConfigOverride}
       subjectType={subjectType}
       business={business}
-      country={country as SupportedCountry}
+      country={country as AnyCountry}
       countries={countries}
       idTypes={idTypes}
       metadata={metadata}
@@ -264,6 +268,7 @@ function KYCInner({
       success={success}
       questionnaire={questionnaire}
       proofOfAddress={proofOfAddress}
+      nfc={nfc}
       previewMode={previewMode}
       onSubmit={onSubmit}
       onClose={handleClose}
@@ -398,7 +403,7 @@ function WorkflowGate(props: KYCInnerProps) {
     return (
       <KYCInner
         {...props}
-        country={(props.country ?? 'NG') as SupportedCountry}
+        country={props.country ?? 'NG'}
         serverConfigOverride={state.override}
       />
     );
@@ -425,7 +430,7 @@ function WorkflowGate(props: KYCInnerProps) {
 // Public component  <MyazaKYC />
 // ---------------------------------------------------------------------------
 
-export function MyazaKYC<C extends SupportedCountry>(props: MyazaKYCProps<C>) {
+export function MyazaKYC<C extends AnyCountry>(props: MyazaKYCProps<C>) {
   // Fail loud at integration time (same contract as an invalid key prefix):
   // without a flow there is nothing to derive the country from. Business (KYB)
   // configs carry their registry country on the business block instead.
@@ -450,7 +455,7 @@ export function MyazaKYC<C extends SupportedCountry>(props: MyazaKYCProps<C>) {
 // Public hook  useMyazaKYC()
 // ---------------------------------------------------------------------------
 
-export function useMyazaKYC<C extends SupportedCountry>(config: MyazaKYCConfig<C>): UseMyazaKYCReturn {
+export function useMyazaKYC<C extends AnyCountry>(config: MyazaKYCConfig<C>): UseMyazaKYCReturn {
   const { state, dispatch } = useKYCContext();
 
   const prevStepRef = useRef<KYCStep>(state.currentStep);

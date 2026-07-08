@@ -1,13 +1,14 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import type { SupportedCountry, IdType, KYCAppearance, KYCConsentContent, KYCSuccessContent, QuestionnaireConfig, ProofOfAddressConfig } from '../types/config';
+import type { AnyCountry, AnyIdType, IdTypeDefinition, KYCAppearance, KYCConsentContent, KYCSuccessContent, QuestionnaireConfig, ProofOfAddressConfig, NfcConfig } from '../types/config';
 import type { SubjectType, WorkflowBusinessConfig } from '../types/business';
 import type { KYCSubmission } from '../types/verification';
 import { createKYCApi, KYCApiError, type KYCApi, type SdkConfigIdType, type SdkConfigResponse, type SdkConfigBranding } from '../services/api';
 import { withPreviewMocks } from '../services/preview-mock';
 import { useKYCContext } from './KYCContext';
 import { resolveBaseUrl } from '../lib/resolve-url';
+import { resolveIdTypeDefinition } from '../utils/id-definitions';
 import { KYCError, type KYCErrorCode } from '../types/verification';
 import { safeReportError } from '../lib/errors';
 
@@ -52,12 +53,12 @@ export interface KYCConfigValue {
    * region flows) or the configured default. Steps read this — they never need
    * to know about the selection mechanics.
    */
-  country: SupportedCountry;
+  country: AnyCountry;
   /**
    * Multi-region configuration (>1 entry adds the country-select step). The
    * effective `country`/`idTypes` above already reflect the picked entry.
    */
-  countries?: Array<{ country: SupportedCountry; idTypes?: IdType[] }>;
+  countries?: Array<{ country: AnyCountry; idTypes?: AnyIdType[] }>;
   /**
    * What this session verifies. 'business' switches to the KYB flow (consent →
    * business-details → questionnaire → submitted). Only ever set by a resolved
@@ -67,7 +68,7 @@ export interface KYCConfigValue {
   /** Business (KYB) configuration — present when `subjectType === 'business'`. */
   business?: WorkflowBusinessConfig;
   /** Subset of ID types to offer. Only types valid for `country` will appear. */
-  idTypes?: IdType[];
+  idTypes?: AnyIdType[];
   metadata?: Record<string, string>;
   /** The org's user reference → Entity.externalUserId at the seam (not matched). */
   userId?: string;
@@ -104,6 +105,8 @@ export interface KYCConfigValue {
   questionnaire?: QuestionnaireConfig;
   /** Proof of Address document collection (after capture). */
   proofOfAddress?: ProofOfAddressConfig;
+  /** NFC chip verification (native SDKs; web renders it for preview only). */
+  nfc?: NfcConfig;
   onSubmit?: (submission: KYCSubmission) => void;
   onClose?: () => void;
   /** Fires for technical errors — including a fatal config-load auth failure. Receives a typed {@link KYCError}. */
@@ -124,6 +127,15 @@ export interface KYCConfigValue {
     country: string,
     idType: string,
   ) => SdkConfigIdType['features'] | null;
+  /**
+   * Resolver for `(country, idType)` display/flow definitions. Prefers the
+   * curated LOCAL entry (labels + digits/pattern validation for the five
+   * curated countries); otherwise synthesizes one from the server row's
+   * `label`/`requiresDocumentCapture`/`scanSides` (Global Documents — any ISO
+   * country). `country` defaults to the session's effective country. Steps
+   * consult this — never `ID_TYPES` directly.
+   */
+  getIdTypeDefinition: (idType: string, country?: string) => IdTypeDefinition | null;
 }
 
 const KYCConfigContext = createContext<KYCConfigValue | null>(null);
@@ -172,7 +184,7 @@ function describeConfigError(err: unknown): { message: string; statusCode?: numb
 // Provider
 // ---------------------------------------------------------------------------
 
-type KYCConfigProviderProps = Omit<KYCConfigValue, 'serverConfig' | 'getIdTypeFeatures' | 'api'> & {
+type KYCConfigProviderProps = Omit<KYCConfigValue, 'serverConfig' | 'getIdTypeFeatures' | 'getIdTypeDefinition' | 'api'> & {
   children: ReactNode;
   /**
    * Pre-built API client. Used by the hosted (continue-on-phone) entry, which
@@ -255,12 +267,12 @@ export function KYCConfigProvider({ children, apiOverride, serverConfigOverride,
   // the configured default, and the picked country's idTypes win. Steps only
   // ever see the EFFECTIVE country/idTypes — no selection logic leaks out.
   const { state } = useKYCContext();
-  const effectiveCountry = (state.selectedCountry ?? config.country) as SupportedCountry;
+  const effectiveCountry: AnyCountry = state.selectedCountry ?? config.country;
   const countryEntry = config.countries?.find((c) => c.country === effectiveCountry);
 
   // An empty idTypes list means "offer everything granted" (same as absent) —
   // the server enforces that semantic, so a stray [] must not hide every ID.
-  const nonEmpty = (ids: IdType[] | undefined): IdType[] | undefined =>
+  const nonEmpty = (ids: AnyIdType[] | undefined): AnyIdType[] | undefined =>
     ids && ids.length > 0 ? ids : undefined;
 
   const value = useMemo<KYCConfigValue>(
@@ -272,6 +284,8 @@ export function KYCConfigProvider({ children, apiOverride, serverConfigOverride,
       serverConfig,
       getIdTypeFeatures: (country, idType) =>
         idTypesByKey.get(`${country}/${idType}`)?.features ?? null,
+      getIdTypeDefinition: (idType, country) =>
+        resolveIdTypeDefinition(country ?? effectiveCountry, idType, serverConfig.idTypes),
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
@@ -302,6 +316,7 @@ export function KYCConfigProvider({ children, apiOverride, serverConfigOverride,
       config.success,
       config.questionnaire,
       config.proofOfAddress,
+      config.nfc,
       config.onSubmit,
       config.onClose,
       config.onError,

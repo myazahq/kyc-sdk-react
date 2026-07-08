@@ -9,8 +9,8 @@ import { collectWebDeviceMetadata } from '../utils/device-metadata';
 import { withRetry } from '../lib/retry';
 import type { KYCApi, VerifyRequest } from '../services/api';
 
-export function generateRequestId(): string {
-	return `kyc_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+export function generateRequestId(prefix: 'kyc' | 'kyb' = 'kyc'): string {
+	return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 }
 
 /** Replaces {firstName} / {lastName} tokens with the user's data (or ''). */

@@ -8,6 +8,7 @@ import {
   IdCard,
   Contact,
   BookUser,
+  Car,
 } from 'lucide-react';
 import { StepHeader } from '../components/StepHeader';
 import { Button } from '../components/ui/button';
@@ -17,15 +18,18 @@ import { Label } from '../components/ui/label';
 import { cn } from '../lib/utils';
 import { useKYCContext } from '../context/KYCContext';
 import { useKYCConfig } from '../context/KYCConfigContext';
-import { ID_TYPES, isNumberOnlyIdType } from '../utils/countries';
-import type { IdType, SupportedCountry, IdTypeDefinition } from '../types/config';
+import { listIdTypeDefinitions } from '../utils/id-definitions';
+import type { AnyIdType, AnyCountry, IdTypeDefinition } from '../types/config';
 
+// Keyed by idType key, so the generic Global-Documents types (passport /
+// drivers-license / national-id) get sensible icons in ANY country; unknown
+// keys fall back to the generic document icon (FileText) below.
 const ID_TYPE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   bvn: Landmark, // Bank Verification Number → bank/landmark
   nin: Fingerprint,
   vnin: Fingerprint,
   passport: BookUser,
-  'drivers-license': IdCard,
+  'drivers-license': Car,
   pvc: Contact, // Permanent Voter's Card
   'ghana-card': IdCard,
   voters: Contact,
@@ -36,8 +40,8 @@ const ID_TYPE_ICONS: Record<string, React.ComponentType<{ className?: string }>>
 };
 
 interface IdTypeStepProps {
-  country?: SupportedCountry;
-  allowedIdTypes?: IdType[];
+  country?: AnyCountry;
+  allowedIdTypes?: AnyIdType[];
 }
 
 export function IdTypeStep({ country, allowedIdTypes }: IdTypeStepProps = {}) {
@@ -46,9 +50,14 @@ export function IdTypeStep({ country, allowedIdTypes }: IdTypeStepProps = {}) {
   const { serverConfig } = config;
 
   // Determine which country to use — prop override or default to NG
-  const resolvedCountry: SupportedCountry = country ?? 'NG';
+  const resolvedCountry: AnyCountry = country ?? 'NG';
 
-  const allTypes: readonly IdTypeDefinition[] = ID_TYPES[resolvedCountry] ?? [];
+  // Local curated definitions ∪ server-synthesized ones (Global Documents) —
+  // countries with no local ID_TYPES entry render entirely from server rows.
+  const allTypes: readonly IdTypeDefinition[] = listIdTypeDefinitions(
+    resolvedCountry,
+    serverConfig.idTypes,
+  );
   // An empty allowlist means "offer everything granted", same as absent — the
   // server treats [] that way, so the picker must too.
   const propAllowed =
@@ -76,18 +85,19 @@ export function IdTypeStep({ country, allowedIdTypes }: IdTypeStepProps = {}) {
   // the live flow rather than still offering passports/licenses.
   const visibleTypes =
     config.enableDocumentCapture === false
-      ? grantedVisible.filter((t) => isNumberOnlyIdType(t.key))
+      ? grantedVisible.filter((t) => !t.requiresDocumentCapture)
       : grantedVisible;
 
   const handleSelect = (value: string) => {
-    dispatch({ type: 'SELECT_ID_TYPE', payload: value as IdType });
+    dispatch({ type: 'SELECT_ID_TYPE', payload: value });
   };
 
   const handleContinue = () => {
     if (!state.selectedIdType) return;
-    // BVN / NIN / vNIN are number-only — no document to scan, go straight to id-input
-    // All other IDs require a physical document scan via document-capture
-    const next = isNumberOnlyIdType(state.selectedIdType) ? 'id-input' : 'document-capture';
+    // Number-only IDs (e.g. BVN/NIN/vNIN) skip straight to id-input; every
+    // document-scanned ID goes through document-capture.
+    const def = config.getIdTypeDefinition(state.selectedIdType, resolvedCountry);
+    const next = def && !def.requiresDocumentCapture ? 'id-input' : 'document-capture';
     dispatch({ type: 'SET_STEP', payload: next });
   };
 

@@ -10,13 +10,14 @@ import { primeFaceMesh } from './liveness/face-mesh';
 import { configureSpeech } from './liveness/speech';
 import { createKYCApi, type HandoffBootstrapResponse, type KYCApi } from './services/api';
 import type {
-  SupportedCountry,
-  IdType,
+  AnyCountry,
+  AnyIdType,
   KYCAppearance,
   KYCConsentContent,
   KYCSuccessContent,
   QuestionnaireConfig,
   ProofOfAddressConfig,
+  NfcConfig,
   VoiceGuidanceOption,
 } from './types/config';
 import type { SubjectType, WorkflowBusinessConfig } from './types/business';
@@ -131,9 +132,9 @@ function HostedFlow({
         business={snap.business as WorkflowBusinessConfig | undefined}
         // Business snapshots carry no top-level country — the registry country
         // stands in so the context never sees undefined.
-        country={(snap.country ?? snap.business?.country) as SupportedCountry}
-        countries={snap.countries as Array<{ country: SupportedCountry; idTypes?: IdType[] }> | undefined}
-        idTypes={snap.idTypes as IdType[] | undefined}
+        country={(snap.country ?? snap.business?.country) as AnyCountry}
+        countries={snap.countries as Array<{ country: AnyCountry; idTypes?: AnyIdType[] }> | undefined}
+        idTypes={snap.idTypes as AnyIdType[] | undefined}
         metadata={snap.metadata}
         userId={snap.userId}
         enableSelfie={snap.enableSelfie}
@@ -146,6 +147,7 @@ function HostedFlow({
         success={snap.success as KYCSuccessContent | undefined}
         questionnaire={snap.questionnaire as QuestionnaireConfig | undefined}
         proofOfAddress={snap.proofOfAddress as ProofOfAddressConfig | undefined}
+        nfc={snap.nfc as NfcConfig | undefined}
         userData={snap.userData}
         assetsBasePath={snap.assetsBasePath}
         deviceHandoff={false}

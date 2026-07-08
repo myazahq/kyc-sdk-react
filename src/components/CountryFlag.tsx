@@ -1,15 +1,7 @@
 'use client';
 
 import React from 'react';
-import NG from 'country-flag-icons/react/3x2/NG';
-import GH from 'country-flag-icons/react/3x2/GH';
-import KE from 'country-flag-icons/react/3x2/KE';
-import ZA from 'country-flag-icons/react/3x2/ZA';
-import CI from 'country-flag-icons/react/3x2/CI';
-import US from 'country-flag-icons/react/3x2/US';
-import GB from 'country-flag-icons/react/3x2/GB';
-import EU from 'country-flag-icons/react/3x2/EU';
-import { BUSINESS_FLAGS } from './business-flags';
+import * as Flags from 'country-flag-icons/react/3x2';
 import { cn } from '../lib/utils';
 
 type FlagComponent = React.ComponentType<{
@@ -18,10 +10,11 @@ type FlagComponent = React.ComponentType<{
   className?: string;
 }>;
 
-// Only the flags we actually render are imported so the bundle doesn't pull in
-// the full set: the KYC countries + questionnaire money currencies (US/GB/EU)
-// + the business (KYB) registry catalogue. Mirrors the dashboard's CountryFlag.
-const FLAGS: Record<string, FlagComponent> = { ...BUSINESS_FLAGS, NG, GH, KE, ZA, CI, US, GB, EU };
+// The full ISO SVG flag set (same as the dashboard's CountryFlag). Global
+// Documents let the country-select step render ANY of ~200 countries, so a
+// curated subset would drop to the emoji fallback for most of them — importing
+// the whole set keeps every flag a real, circular SVG.
+const FLAGS = Flags as unknown as Record<string, FlagComponent>;
 
 /** Flag country code for a money-question currency (XOF → Côte d'Ivoire).
  *  Most ISO-4217 codes derive as their first two letters (JPY→JP, INR→IN);

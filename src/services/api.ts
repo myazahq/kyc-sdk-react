@@ -134,6 +134,13 @@ export interface VerificationStatusResponse {
   status: 'pending' | 'verified' | 'failed' | 'not_found' | 'error';
   reason?: string | null;
   reasonCode?: string | null;
+  /**
+   * How the identity was (or will be) established, on pending/verified rows:
+   * `'chip'` (NFC eMRTD read), `'gov_db'` (government-database lookup), or
+   * `'document'` (Document Intelligence — OCR + selfie↔document-portrait
+   * facial compare; the Global Documents path).
+   */
+  assuranceLevel?: 'chip' | 'gov_db' | 'document';
   createdAt: string;
   completedAt?: string;
 }
@@ -141,6 +148,15 @@ export interface VerificationStatusResponse {
 export interface SdkConfigIdType {
   country: string;
   idType: string;
+  /** Display name (e.g. "International Passport") — the source of truth for
+   *  pairs the SDK has no local definition for (Global Documents). */
+  label?: string;
+  /** false = number-only ID (the user types the number, no document scan). */
+  requiresDocumentCapture?: boolean;
+  /** How many document sides to scan (document-capture IDs). */
+  scanSides?: 'front_only' | 'front_and_back';
+  /** Whether the document carries an NFC-readable chip (native SDKs only). */
+  supportsNfc?: boolean;
   features: {
     documentVerification: boolean;
     livenessCheck: boolean;
@@ -213,6 +229,8 @@ export interface WorkflowConfigPayload {
   questionnaire?: { title?: string; description?: string; fields: unknown[] };
   /** Proof of Address step configuration. */
   proofOfAddress?: { enabled?: boolean; documentTypes?: string[]; maxAgeDays?: number };
+  /** NFC chip verification configuration (native SDKs; web = preview only). */
+  nfc?: { enabled?: boolean; idTypes?: string[]; allowSkip?: boolean };
   assetsBasePath?: string;
 }
 
@@ -273,6 +291,8 @@ export interface HandoffSessionSnapshot {
   questionnaire?: { title?: string; description?: string; fields: unknown[] };
   /** Proof of Address step configuration. */
   proofOfAddress?: { enabled?: boolean; documentTypes?: string[]; maxAgeDays?: number };
+  /** NFC chip verification configuration (native SDKs; web = preview only). */
+  nfc?: { enabled?: boolean; idTypes?: string[]; allowSkip?: boolean };
   metadata?: Record<string, string>;
   /** Opaque org user reference — rides the snapshot like metadata (not PII). */
   userId?: string;

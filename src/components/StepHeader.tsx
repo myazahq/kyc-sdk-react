@@ -5,14 +5,15 @@ import { MoveLeft } from 'lucide-react';
 import { Button } from './ui/button';
 import { CountryFlag } from './CountryFlag';
 import { cn } from '../lib/utils';
-import type { SupportedCountry } from '../types/config';
+import type { AnyCountry } from '../types/config';
 
 interface StepHeaderProps {
   title: string;
   description?: string;
   onBack?: () => void;
-  /** When set, a country flag is shown beside the title. */
-  country?: SupportedCountry;
+  /** When set, a country flag is shown beside the title (any ISO-2 code —
+   *  CountryFlag falls back to the emoji flag for unbundled SVGs). */
+  country?: AnyCountry;
   className?: string;
 }
 

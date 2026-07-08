@@ -6,7 +6,20 @@ import type { KYCSubmission, KYCError } from './verification';
 // Supported countries & ID types
 // ---------------------------------------------------------------------------
 
+/** The curated countries with LOCAL ID-type definitions (labels, digits/pattern
+ *  validation). Kept for compile-time ergonomics — autocomplete and per-country
+ *  `idTypes` narrowing. */
 export type SupportedCountry = 'NG' | 'GH' | 'KE' | 'ZA' | 'CI';
+
+/**
+ * Any ISO-2 country code. Individual KYC is no longer limited to the curated
+ * five — the server verifies generic document types (`passport`,
+ * `drivers-license`, `national-id`) in any country via Document Intelligence,
+ * and supplies the display metadata (label, capture requirements, scan sides)
+ * in its idTypes payload. The `(string & {})` keeps the curated literals in
+ * autocomplete while still accepting any code.
+ */
+export type AnyCountry = SupportedCountry | (string & {});
 
 export type NigeriaIdType = 'bvn' | 'bvn-premium' | 'nin' | 'vnin' | 'tax-id' | 'passport' | 'drivers-license' | 'pvc';
 export type GhanaIdType = 'ghana-card' | 'voters' | 'drivers-license' | 'ssnit' | 'passport';
@@ -21,17 +34,23 @@ export type IdType =
   | SouthAfricaIdType
   | IvoryCoastIdType;
 
-/** Maps a country code to the ID types available in that country. */
-export type IdTypeForCountry<C extends SupportedCountry> =
+/** Any ID-type key — curated literals stay in autocomplete, but server-defined
+ *  keys (Global Documents) are accepted too. */
+export type AnyIdType = IdType | (string & {});
+
+/** Maps a country code to the ID types available in that country. Unknown
+ *  (non-curated) countries fall back to `string` — their ID types are defined
+ *  server-side, not in the local catalogue. */
+export type IdTypeForCountry<C extends AnyCountry> =
   C extends 'NG' ? NigeriaIdType :
   C extends 'GH' ? GhanaIdType :
   C extends 'KE' ? KenyaIdType :
   C extends 'ZA' ? SouthAfricaIdType :
   C extends 'CI' ? IvoryCoastIdType :
-  never;
+  string;
 
 export interface IdTypeDefinition {
-  key: IdType;
+  key: AnyIdType;
   label: string;
   /**
    * What the user actually types when it differs from the ID's name — e.g.
@@ -88,6 +107,23 @@ export interface ProofOfAddressConfig {
   documentTypes?: PoaDocumentType[];
   /** Recency window the server checks the document date against (default 90). */
   maxAgeDays?: number;
+}
+
+// ---------------------------------------------------------------------------
+// NFC Chip Verification (eMRTD chip read — mobile SDKs; web = preview stand-in)
+// ---------------------------------------------------------------------------
+
+export interface NfcConfig {
+  /** Adds the chip-read step (native SDKs; the web SDK renders it for preview only). */
+  enabled?: boolean;
+  /** Which chip-capable IDs run the step, as "CC/idType" keys (absent = all). */
+  idTypes?: string[];
+  /**
+   * Show a manual "skip" affordance so a user without an NFC-capable device
+   * (or who can't complete the read) can proceed. Devices with no NFC radio
+   * auto-skip regardless — this is the escape hatch on NFC-capable phones.
+   */
+  allowSkip?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -235,7 +271,7 @@ export type VoiceGuidanceOption = boolean | VoiceGuidanceConfig;
 // Client-side SDK config  (<MyazaKYC /> props & useMyazaKYC options)
 // ---------------------------------------------------------------------------
 
-export interface MyazaKYCConfig<C extends SupportedCountry = SupportedCountry> {
+export interface MyazaKYCConfig<C extends AnyCountry = AnyCountry> {
   /**
    * Bearer token sent as the Authorization header. The key prefix is the single
    * source of truth for the environment — the SDK derives it (and the base URL)
@@ -265,10 +301,12 @@ export interface MyazaKYCConfig<C extends SupportedCountry = SupportedCountry> {
   workflowId?: string;
 
   /**
-   * Two-letter country code. Required unless {@link workflowId} is set (the flow
-   * carries the country) or {@link subjectType} is `'business'` (the business
-   * block carries its own registry country). When both are present the flow's
-   * country wins.
+   * Two-letter (ISO-2) country code. Required unless {@link workflowId} is set
+   * (the flow carries the country) or {@link subjectType} is `'business'` (the
+   * business block carries its own registry country). When both are present the
+   * flow's country wins. ANY ISO country works — non-curated countries render
+   * their ID types from the server's metadata (Global Documents); the org's
+   * grants are enforced server-side.
    */
   country?: C;
 
@@ -295,7 +333,7 @@ export interface MyazaKYCConfig<C extends SupportedCountry = SupportedCountry> {
    * the root {@link idTypes} list. `country` acts as the default/primary.
    * Typically supplied by a dashboard-built Workflow rather than hand-written.
    */
-  countries?: Array<{ country: SupportedCountry; idTypes?: IdType[] }>;
+  countries?: Array<{ country: AnyCountry; idTypes?: AnyIdType[] }>;
 
   /** Subset of ID types to offer. Only types valid for the given country are accepted. */
   idTypes?: IdTypeForCountry<C>[];
@@ -440,6 +478,15 @@ export interface MyazaKYCConfig<C extends SupportedCountry = SupportedCountry> {
   proofOfAddress?: ProofOfAddressConfig;
 
   /**
+   * NFC Chip Verification: read the ID's eMRTD chip (e-passports & chip eIDs)
+   * and run passive authentication server-side. Native (mobile) SDKs implement
+   * the real chip read; the web SDK renders the screen only for the builder
+   * preview (browsers can't do ISO-DEP). Usually configured in the workflow
+   * builder (rides `workflowId`).
+   */
+  nfc?: NfcConfig;
+
+  /**
    * Base path (or absolute URL) where the SDK's gesture GIF assets are served
    * from. These are used by the liveness step to animate each challenge gesture.
    *
@@ -497,7 +544,7 @@ export interface MyazaKYCConfig<C extends SupportedCountry = SupportedCountry> {
  * To build your own trigger element instead, use the `useMyazaKYC()` hook and
  * wire its `open()` to whatever you render.
  */
-export type MyazaKYCProps<C extends SupportedCountry = SupportedCountry> =
+export type MyazaKYCProps<C extends AnyCountry = AnyCountry> =
   MyazaKYCConfig<C> &
     Omit<ButtonHTMLAttributes<HTMLButtonElement>, keyof MyazaKYCConfig<C> | 'onClick'>;
 

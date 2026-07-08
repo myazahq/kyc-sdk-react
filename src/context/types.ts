@@ -1,4 +1,4 @@
-import type { KYCStep, IdType, SupportedCountry, QuestionnaireAnswerValue, PoaDocumentType } from '../types/config';
+import type { KYCStep, AnyIdType, AnyCountry, QuestionnaireAnswerValue, PoaDocumentType } from '../types/config';
 import type { ApiStatus, KYCError } from '../types/verification';
 
 // ---------------------------------------------------------------------------
@@ -36,10 +36,10 @@ export interface KYCState {
   isOpen: boolean;
 
   // Step 1b – country selection (multi-region flows; null = use config default)
-  selectedCountry: SupportedCountry | null;
+  selectedCountry: AnyCountry | null;
 
   // Step 2 – ID type selection
-  selectedIdType: IdType | null;
+  selectedIdType: AnyIdType | null;
 
   // Step 3 – Document capture (base64 previews for display only)
   documentFrontImage: string | null;
@@ -89,8 +89,8 @@ export type KYCAction =
   | { type: 'OPEN_MODAL' }
   | { type: 'CLOSE_MODAL' }
   | { type: 'SET_STEP'; payload: KYCStep }
-  | { type: 'SET_COUNTRY'; payload: SupportedCountry }
-  | { type: 'SELECT_ID_TYPE'; payload: IdType }
+  | { type: 'SET_COUNTRY'; payload: AnyCountry }
+  | { type: 'SELECT_ID_TYPE'; payload: AnyIdType }
   | { type: 'SET_ID_NUMBER'; payload: string }
   | { type: 'SET_USER_DATA'; payload: Partial<KYCUserData> }
   // Business (KYB) details

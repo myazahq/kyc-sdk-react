@@ -18,7 +18,6 @@ import { CameraPermissionPrimer } from "../components/CameraPermissionPrimer";
 import { useKYCContext } from "../context/KYCContext";
 import { useKYCConfig } from "../context/KYCConfigContext";
 import { stepAfterCapture } from "../lib/post-capture";
-import { ID_TYPES, getScanSides } from "../utils/countries";
 import { useCamera } from "../hooks/useCamera";
 import { useCameraPrimer } from "../hooks/useCameraPrimer";
 import {
@@ -99,16 +98,15 @@ export function DocumentCaptureStep() {
 	// picker / drag-and-drop) instead of capturing live. Default on.
 	const allowUpload = config.allowDocumentUpload !== false;
 
-	const idTypeLabel =
-		state.selectedIdType ?
-			(Object.values(ID_TYPES)
-				.flat()
-				.find((t) => t.key === state.selectedIdType)?.label ??
-			state.selectedIdType)
-		:	"ID Document";
+	// Label + scan sides come from the resolved definition — the curated local
+	// entry when one exists, else the server-supplied metadata (Global
+	// Documents: any ISO country).
+	const idTypeDef = state.selectedIdType
+		? config.getIdTypeDefinition(state.selectedIdType)
+		: null;
+	const idTypeLabel = idTypeDef?.label ?? state.selectedIdType ?? "ID Document";
 
-	const scanSides =
-		state.selectedIdType ? getScanSides(state.selectedIdType) : "front_only";
+	const scanSides = idTypeDef?.scanSides ?? "front_only";
 	const isTwoSided = scanSides === "front_and_back";
 
 	const initialPhase = (): ScanPhase => {

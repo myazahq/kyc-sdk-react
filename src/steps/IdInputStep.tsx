@@ -9,21 +9,23 @@ import { useKYCContext } from '../context/KYCContext';
 import { useKYCConfig } from '../context/KYCConfigContext';
 import { stepAfterCapture } from '../lib/post-capture';
 import { validateIdNumber } from '../utils/validators';
-import { ID_TYPES, isNumberOnlyIdType } from '../utils/countries';
-import type { SupportedCountry } from '../types/config';
+import type { AnyCountry } from '../types/config';
 
 interface IdInputStepProps {
-  country?: SupportedCountry;
+  country?: AnyCountry;
 }
 
 export function IdInputStep({ country }: IdInputStepProps = {}) {
   const { state, dispatch } = useKYCContext();
   const config = useKYCConfig();
 
-  const resolvedCountry: SupportedCountry = country ?? config.country ?? 'NG';
+  const resolvedCountry: AnyCountry = country ?? config.country ?? 'NG';
 
+  // Curated local definition (digits/pattern validation) when one exists,
+  // else the server-synthesized one — no digits/pattern, so the ID number
+  // falls back to a free-text input validated as non-empty.
   const idTypeDef = state.selectedIdType
-    ? (ID_TYPES[resolvedCountry] ?? []).find((t) => t.key === state.selectedIdType)
+    ? config.getIdTypeDefinition(state.selectedIdType, resolvedCountry)
     : null;
 
   // What the field asks for — e.g. Tax ID is looked up by the person's NIN.
@@ -69,7 +71,7 @@ export function IdInputStep({ country }: IdInputStepProps = {}) {
 
   const handleBack = () => {
     // Number-only IDs (BVN/NIN/vNIN) came from id-type, not document-capture
-    const prev = state.selectedIdType && isNumberOnlyIdType(state.selectedIdType)
+    const prev = idTypeDef && !idTypeDef.requiresDocumentCapture
       ? 'id-type'
       : 'document-capture';
     dispatch({ type: 'SET_STEP', payload: prev });

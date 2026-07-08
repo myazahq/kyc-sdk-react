@@ -7,7 +7,6 @@ import { Button } from '../components/ui/button';
 import { useKYCContext } from '../context/KYCContext';
 import { useKYCConfig } from '../context/KYCConfigContext';
 import { stepAfterCapture } from '../lib/post-capture';
-import { isNumberOnlyIdType } from '../utils/countries';
 
 /**
  * Builder-preview stand-in for the camera steps (document capture & liveness).
@@ -42,7 +41,8 @@ export function PreviewCapturePlaceholder({ kind }: { kind: 'document' | 'livene
     if (kind === 'document') {
       dispatch({ type: 'SET_STEP', payload: 'id-type' });
     } else {
-      const cameFromDocument = state.selectedIdType ? !isNumberOnlyIdType(state.selectedIdType) : true;
+      const def = state.selectedIdType ? config.getIdTypeDefinition(state.selectedIdType) : null;
+      const cameFromDocument = def ? def.requiresDocumentCapture : true;
       dispatch({ type: 'SET_STEP', payload: cameFromDocument ? 'document-capture' : 'id-input' });
     }
   };

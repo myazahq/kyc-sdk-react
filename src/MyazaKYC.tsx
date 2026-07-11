@@ -144,6 +144,7 @@ function KYCInner({
     ...(enableLiveness !== undefined ? { enableLiveness } : {}),
     ...(livenessMode !== undefined ? { livenessMode } : {}),
     ...(deviceIntelligence !== undefined ? { deviceIntelligence } : {}),
+    ...(deviceHandoff !== undefined ? { deviceHandoff } : {}),
     ...(voiceGuidance !== undefined ? { voiceGuidance } : {}),
     ...(showThemeToggle !== undefined ? { showThemeToggle } : {}),
     ...(fullScreen !== undefined ? { fullScreen } : {}),
@@ -158,14 +159,20 @@ function KYCInner({
     ...(userId ? { userId } : {}),
     ...(userData ? { userData } : {}),
     ...(assetsBasePath ? { assetsBasePath } : {}),
-  }), [country, workflowId, idTypes, countries, enableSelfie, enableDocumentCapture, allowDocumentUpload, enableLiveness, livenessMode, deviceIntelligence, voiceGuidance, showThemeToggle, fullScreen, disableClose, appearance, consent, success, questionnaire, proofOfAddress, nfc, metadata, userId, userData, assetsBasePath]);
+  }), [country, workflowId, idTypes, countries, enableSelfie, enableDocumentCapture, allowDocumentUpload, enableLiveness, livenessMode, deviceIntelligence, deviceHandoff, voiceGuidance, showThemeToggle, fullScreen, disableClose, appearance, consent, success, questionnaire, proofOfAddress, nfc, metadata, userId, userData, assetsBasePath]);
 
   // Pre-load MediaPipe Face Mesh model as soon as the SDK mounts and apply the
   // voice-guidance config (enabled + language) for the spoken liveness prompts.
   // Preview mode renders camera placeholders, so the ~4MB model is never needed.
   useEffect(() => {
-    // Business (KYB) flows have no camera/liveness step — never load the model.
-    if (enableLiveness !== false && !previewMode && subjectType !== 'business') primeFaceMesh();
+    // Business (KYB) flows have no camera/liveness step — never load the model
+    // — UNLESS the workflow verifies the applicant in-flow (the individual
+    // capture leg runs after the application steps).
+    const businessNeedsCapture =
+      subjectType === 'business' && business?.applicant?.verification === true;
+    if (enableLiveness !== false && !previewMode && (subjectType !== 'business' || businessNeedsCapture)) {
+      primeFaceMesh();
+    }
     configureSpeech(voiceGuidance);
   }, [voiceGuidance]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -196,11 +203,15 @@ function KYCInner({
     }
   }, [dispatch, userData]);
 
-  // Offer handoff only on desktop, when enabled, and when the flow plausibly
-  // needs a camera (skip pure number-only-no-liveness flows and business/KYB
-  // flows — a registry lookup has nothing to hand off to a phone for).
+  // Offer handoff only on desktop, when enabled, and when the flow has a
+  // capture/upload step a phone camera helps with. Individual flows: liveness or
+  // document capture (skips pure number-only-no-liveness flows). KYB flows: the
+  // applicant's in-flow KYC or company-document uploads — a bare registry lookup
+  // (all typed) has nothing to hand off to a phone for.
   const cameraNeeded =
-    subjectType !== 'business' && (enableLiveness !== false || enableDocumentCapture !== false);
+    subjectType === 'business'
+      ? business?.applicant?.verification === true || business?.documents?.enabled === true
+      : enableLiveness !== false || enableDocumentCapture !== false;
 
   const handleOpen = useCallback(() => {
     resetIntegritySignals(); // fresh capture-integrity slate per session

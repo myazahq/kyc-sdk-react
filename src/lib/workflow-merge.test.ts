@@ -12,6 +12,21 @@ describe('mergeWorkflowConfig', () => {
     expect(merged.enableLiveness).toBe(false);
   });
 
+  it('a flow can disable deviceHandoff (now flow-controlled); prop wins when the flow omits it', () => {
+    // Flow turns it off → flow wins over a consumer prop that left it on.
+    const off = mergeWorkflowConfig(
+      { country: 'NG', deviceHandoff: false },
+      { country: 'NG', deviceHandoff: true, apiKey: 'pk_test_x' },
+    );
+    expect(off.deviceHandoff).toBe(false);
+    // Flow omits it → the consumer prop survives (undefined flow values skip).
+    const kept = mergeWorkflowConfig(
+      { country: 'NG' },
+      { country: 'NG', deviceHandoff: false, apiKey: 'pk_test_x' },
+    );
+    expect(kept.deviceHandoff).toBe(false);
+  });
+
   it('props fill keys the flow does not define', () => {
     const merged = mergeWorkflowConfig(
       { country: 'NG' },

@@ -1,5 +1,6 @@
 import type { KYCStep, AnyIdType, AnyCountry, QuestionnaireAnswerValue, PoaDocumentType } from '../types/config';
 import type { ApiStatus, KYCError } from '../types/verification';
+import type { ApplicantRole, BusinessDocumentKey, KeyPersonRole } from '../types/business';
 
 // ---------------------------------------------------------------------------
 // State
@@ -18,6 +19,40 @@ export interface BusinessDetails {
   product: string | null;
   registrationNumber: string;
   registrationName: string;
+  /** Optional contact email for key-people (owner) verification invites. */
+  contactEmail: string;
+  // Company profile (collectCompanyInfo — default on): all optional inputs.
+  address: string;
+  email: string;
+  phone: string;
+  website: string;
+}
+
+/** One row on the business-key-people step. Inputs kept as strings for
+ *  controlled fields; the submit payload builder parses/filters them. */
+export interface KeyPersonEntry {
+  name: string;
+  role: KeyPersonRole;
+  email: string;
+  /** ISO-2 country of the person (drives their verification link's country). */
+  country: string;
+  /** Ownership percentage as typed (optional; validated 0–100 when present). */
+  ownershipPct: string;
+}
+
+/** One uploaded slot on the business-documents step. */
+export interface BusinessDocumentUpload {
+  type: BusinessDocumentKey;
+  mediaId: string;
+  fileName: string;
+}
+
+/** The KYB APPLICATION extras collected beyond the registration details. */
+export interface BusinessApplicationState {
+  keyPeople: KeyPersonEntry[];
+  documents: BusinessDocumentUpload[];
+  applicantRole: ApplicantRole | null;
+  applicantName: string;
 }
 
 export interface MediaIds {
@@ -63,6 +98,9 @@ export interface KYCState {
   // Step 2b — business (KYB) workflow details (replaces id-type/capture steps)
   business: BusinessDetails;
 
+  // Steps 2c/2d/2e — KYB application extras (key people, documents, applicant)
+  businessApplication: BusinessApplicationState;
+
   // Step 4b — extra-info questionnaire answers, keyed by question key
   questionnaireAnswers: Record<string, QuestionnaireAnswerValue>;
 
@@ -95,6 +133,8 @@ export type KYCAction =
   | { type: 'SET_USER_DATA'; payload: Partial<KYCUserData> }
   // Business (KYB) details
   | { type: 'SET_BUSINESS_DETAILS'; payload: Partial<BusinessDetails> }
+  // KYB application extras (key people / documents / applicant role+name)
+  | { type: 'SET_BUSINESS_APPLICATION'; payload: Partial<BusinessApplicationState> }
   // Document capture
   | { type: 'SET_DOCUMENT_FRONT'; payload: string }
   | { type: 'SET_DOCUMENT_BACK'; payload: string }

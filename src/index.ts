@@ -42,7 +42,17 @@ export type { WorkflowConfigPayload, WorkflowResolutionResponse } from './servic
 
 // Business (KYB) workflow types — workflow-required; the SDK enters the
 // business flow only when the resolved config carries subjectType 'business'.
-export type { SubjectType, WorkflowBusinessConfig } from './types/business';
+export type {
+  SubjectType,
+  WorkflowBusinessConfig,
+  WorkflowKeyPeopleConfig,
+  WorkflowBusinessDocumentsConfig,
+  WorkflowBusinessDocumentTypeConfig,
+  WorkflowBusinessApplicantConfig,
+  BusinessDocumentKey,
+  KeyPersonRole,
+  ApplicantRole,
+} from './types/business';
 
 // `KYCError` is a class (extends Error) — export it as a value so consumers can
 // `instanceof`-narrow the error passed to onError.

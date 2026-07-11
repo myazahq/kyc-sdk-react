@@ -5,6 +5,7 @@ import { Check, ChevronsUpDown, Search } from 'lucide-react';
 import { CountryFlag } from './CountryFlag';
 import { cn } from '../lib/utils';
 import { businessCountryName, groupBusinessCountries } from '../lib/business';
+import { groupCountriesByRegion } from '../lib/regions';
 
 /**
  * Registry-country picker for the business (KYB) details step: a searchable
@@ -20,11 +21,15 @@ export function BusinessCountrySelect({
   countries,
   value,
   onChange,
+  groupAll = false,
 }: {
   id?: string;
   countries: string[];
   value: string;
   onChange: (code: string) => void;
+  /** Group with the FULL ISO region map (person-country pickers) instead of
+   *  the business-registry map. */
+  groupAll?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -39,8 +44,11 @@ export function BusinessCountrySelect({
             businessCountryName(code).toLowerCase().includes(q) || code.toLowerCase().includes(q),
         )
       : countries;
+    if (groupAll) {
+      return groupCountriesByRegion(visible).map((g) => ({ label: g.region, countries: g.countries }));
+    }
     return groupBusinessCountries(visible);
-  }, [countries, query]);
+  }, [countries, query, groupAll]);
 
   // Close on outside click / Escape; focus the search box when opened.
   useEffect(() => {

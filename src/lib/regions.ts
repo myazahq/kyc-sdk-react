@@ -68,6 +68,9 @@ for (const [region, codes] of Object.entries(REGION_SETS) as Array<[Region, stri
   for (const code of codes) BY_CODE.set(code, region);
 }
 
+/** Every ISO code in the region map — the "all countries" picker source. */
+export const ALL_REGION_CODES: string[] = Object.values(REGION_SETS).flat();
+
 export interface RegionGroup {
   region: Region;
   countries: Array<{ code: string; name: string }>;

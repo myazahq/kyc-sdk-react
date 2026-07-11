@@ -7,6 +7,7 @@ import { useKYCContext } from '../context/KYCContext';
 import { useKYCConfig } from '../context/KYCConfigContext';
 import { hasProofOfAddressStep } from '../lib/post-capture';
 import { isBusinessFlow } from '../lib/business';
+import { hasApplicantVerification, lastBusinessSectionStep } from '../lib/business-application';
 import { QuestionField } from './QuestionnaireFields';
 import type { QuestionnaireAnswerValue } from '../types/config';
 
@@ -32,11 +33,18 @@ export function QuestionnaireStep() {
   };
 
   const handleBack = () => {
-    // Mirror the forward path: business details for KYB flows; otherwise Proof
-    // of Address when it ran, else liveness, else the capture step.
-    const backTo = isBusinessFlow(config)
-      ? 'business-details'
-      : hasProofOfAddressStep(config.proofOfAddress)
+    // Mirror the forward path. Business flows return to the last application
+    // step — unless the workflow ran the applicant capture leg, which ends the
+    // same way an individual flow does (liveness / capture), handled below.
+    const business = isBusinessFlow(config);
+    if (business && !hasApplicantVerification(config.business)) {
+      dispatch({ type: 'SET_STEP', payload: lastBusinessSectionStep(config.business) });
+      return;
+    }
+    // Individual capture leg (classic KYC, or the applicant's within KYB):
+    // Proof of Address when it ran (never on KYB), else liveness, else capture.
+    const backTo =
+      !business && hasProofOfAddressStep(config.proofOfAddress)
         ? 'proof-of-address'
         : config.enableSelfie !== false
           ? 'liveness'

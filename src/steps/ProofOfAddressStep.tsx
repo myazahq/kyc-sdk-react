@@ -2,6 +2,7 @@
 
 import React, { useRef, useState } from 'react';
 import { CheckCircle2, FileText, Loader2, Upload, X } from 'lucide-react';
+import { UploadedFileThumb } from '../components/UploadedFilePreview';
 import { StepHeader } from '../components/StepHeader';
 import { Button } from '../components/ui/button';
 import { useKYCContext } from '../context/KYCContext';
@@ -32,12 +33,20 @@ export function ProofOfAddressStep() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // In-memory File for tap-to-preview (lost on remount — row degrades cleanly).
+  const [pickedFile, setPickedFile] = useState<File | null>(null);
 
   const offeredTypes =
     config.proofOfAddress?.documentTypes && config.proofOfAddress.documentTypes.length > 0
       ? config.proofOfAddress.documentTypes
       : ALL_TYPES;
   const selectedType = state.poaDocumentType ?? offeredTypes[0]!;
+  // The org can rename the 'other' kind in the workflow builder (e.g. "Council
+  // tax letter"); fall back to the generic label when unset.
+  const labelFor = (type: PoaDocumentType) =>
+    type === 'other' && config.proofOfAddress?.otherLabel?.trim()
+      ? config.proofOfAddress.otherLabel.trim()
+      : TYPE_LABELS[type];
   const maxAgeDays = config.proofOfAddress?.maxAgeDays ?? 90;
   const uploaded = Boolean(state.mediaIds.proofOfAddress);
 
@@ -54,6 +63,7 @@ export function ProofOfAddressStep() {
     setUploading(true);
     try {
       const mediaId = await config.api.upload(file, 'proof_of_address');
+      setPickedFile(file);
       dispatch({ type: 'SET_MEDIA_ID', payload: { mediaType: 'proofOfAddress', mediaId } });
       dispatch({
         type: 'SET_POA_DOCUMENT',
@@ -115,7 +125,7 @@ export function ProofOfAddressStep() {
               )}
             >
               <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
-              {TYPE_LABELS[type]}
+              {labelFor(type)}
             </button>
           ))}
         </div>
@@ -135,15 +145,22 @@ export function ProofOfAddressStep() {
 
       {uploaded ? (
         <div className="flex items-center gap-3 rounded-xl border border-border bg-muted/30 p-4">
-          <CheckCircle2 className="h-5 w-5 shrink-0 text-[var(--kyc-success,#0DA211)]" />
+          {pickedFile ? (
+            <UploadedFileThumb file={pickedFile} label={labelFor(selectedType)} />
+          ) : (
+            <CheckCircle2 className="h-5 w-5 shrink-0 text-[var(--kyc-success,#0DA211)]" />
+          )}
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium">{state.poaFileName || 'Document uploaded'}</p>
-            <p className="text-xs text-muted-foreground">{TYPE_LABELS[selectedType]}</p>
+            <p className="text-xs text-muted-foreground">{labelFor(selectedType)}</p>
           </div>
           <button
             type="button"
             aria-label="Remove document"
-            onClick={() => dispatch({ type: 'CLEAR_POA_DOCUMENT' })}
+            onClick={() => {
+              setPickedFile(null);
+              dispatch({ type: 'CLEAR_POA_DOCUMENT' });
+            }}
             className="rounded-full p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
             <X className="h-4 w-4" />
@@ -162,7 +179,7 @@ export function ProofOfAddressStep() {
             <Upload className="h-8 w-8 text-muted-foreground" />
           )}
           <span className="text-sm font-medium">
-            {uploading ? 'Uploading…' : `Upload your ${TYPE_LABELS[selectedType].toLowerCase()}`}
+            {uploading ? 'Uploading…' : `Upload your ${labelFor(selectedType).toLowerCase()}`}
           </span>
           <span className="text-xs text-muted-foreground">Photo or PDF, up to 20MB</span>
         </button>

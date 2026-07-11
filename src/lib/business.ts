@@ -7,7 +7,7 @@
 // is rejected at POST /verify with `product_unsupported`.
 // ---------------------------------------------------------------------------
 
-import type { SubjectType, WorkflowBusinessConfig } from '../types/business';
+import type { KeyPersonRole, SubjectType, WorkflowBusinessConfig } from '../types/business';
 
 export interface BusinessProductDef {
   key: string;
@@ -148,4 +148,40 @@ export function isBusinessFlow(config: {
   business?: WorkflowBusinessConfig;
 }): boolean {
   return config.subjectType === 'business' && !!config.business;
+}
+
+/** All key-person roles — the in-scope set when `keyPeople.roles` is absent/empty. */
+const KEY_PERSON_ROLES: KeyPersonRole[] = ['director', 'beneficial_owner', 'signatory', 'shareholder'];
+
+/**
+ * Whether the business-details step should collect a contact email for
+ * key-people verification: the workflow's `keyPeople` block is enabled, invites
+ * go out by email, and at least one in-scope role resolves to full KYC
+ * (`perRole[role] ?? level ?? 'screening_only'` — mirrors the server).
+ */
+export function keyPeopleNeedsContactEmail(business: WorkflowBusinessConfig | undefined): boolean {
+  const keyPeople = business?.keyPeople;
+  if (!keyPeople?.enabled || keyPeople.invite?.channel !== 'email') return false;
+  const roles = keyPeople.roles && keyPeople.roles.length > 0 ? keyPeople.roles : KEY_PERSON_ROLES;
+  return roles.some((role) => (keyPeople.perRole?.[role] ?? keyPeople.level ?? 'screening_only') === 'full_kyc');
+}
+
+/** Format-only email check for the optional contact email (validated when non-empty). */
+export function isValidContactEmail(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) && value.length <= 254;
+}
+
+/** Effective per-field company-profile mode: collectCompanyInfo false ⇒ all
+ *  off; absent field = 'optional'. Mirrors the server's resolution exactly. */
+export function companyInfoFieldModes(
+  business: import('../types/business').WorkflowBusinessConfig | undefined,
+): Record<import('../types/business').CompanyInfoField, import('../types/business').CompanyInfoMode> {
+  const off = business?.collectCompanyInfo === false;
+  const modes = business?.companyInfo ?? {};
+  return {
+    address: off ? 'off' : (modes.address ?? 'optional'),
+    email: off ? 'off' : (modes.email ?? 'optional'),
+    phone: off ? 'off' : (modes.phone ?? 'optional'),
+    website: off ? 'off' : (modes.website ?? 'optional'),
+  };
 }

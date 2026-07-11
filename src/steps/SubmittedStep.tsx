@@ -5,9 +5,11 @@ import { useKYCContext } from "../context/KYCContext";
 import { useKYCConfig } from "../context/KYCConfigContext";
 import { withRetry } from "../lib/retry";
 import { mapToKycError } from "../lib/errors";
-import { businessProductsForCountry, isBusinessFlow } from "../lib/business";
+import { isBusinessFlow } from "../lib/business";
 import { KYCError } from "../types/verification";
 import { generateRequestId, fillTokens, buildSubmitMetadata, uploadCaptureVideos } from "./submit-helpers";
+import { submitBusinessApplication } from "./submit-business";
+import { KeyPeopleInviteLinks, type KeyPersonInvite } from "./KeyPeopleInviteLinks";
 import { SubmittingScreen, SubmitErrorScreen, SubmitSuccessScreen } from "./SubmittedScreens";
 
 export function SubmittedStep() {
@@ -20,6 +22,7 @@ export function SubmittedStep() {
 
 	// While a transient failure is being retried, surface "Retrying (n/total)…"
 	// under the spinner so the user knows the SDK hasn't frozen.
+	const [invites, setInvites] = useState<KeyPersonInvite[]>([]);
 	const [retryInfo, setRetryInfo] = useState<{ attempt: number; total: number } | null>(null);
 	const onRetry = (attempt: number, total: number) => setRetryInfo({ attempt, total });
 
@@ -33,40 +36,16 @@ export function SubmittedStep() {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [submitTrigger]);
 
-	// Business (KYB) flow — a registry lookup, no media, no capture. A published
-	// KYB workflow is required server-side; a stale one surfaces as a typed error.
+	// Business (KYB) APPLICATION — registry details + documents/key-people/
+	// applicant extras, then (fire-and-forget) the applicant's own individual
+	// verification. Extracted to submit-business.ts per the 200-line rule.
 	async function submitBusiness(requestId: string): Promise<void> {
-		const business = config.business!;
-		const registrationNumber = state.business.registrationNumber.trim();
-		const registrationName = state.business.registrationName.trim();
-		// Multi-registry workflows: the picked country (step state) wins over the
-		// workflow's primary; products were already narrowed to that country.
-		const country = state.business.country ?? business.country;
-		const product = state.business.product ?? businessProductsForCountry(business, country)[0]!;
-		if (!registrationNumber) {
+		if (!state.business.registrationNumber.trim()) {
 			dispatch({ type: "SET_ERROR", payload: new KYCError("unknown", "Missing registration number.") });
 			return;
 		}
-		const result = await withRetry(
-			() =>
-				config.api.verify({
-					country,
-					// The product key rides on idType for transport symmetry.
-					idType: product,
-					business: {
-						registrationNumber,
-						...(registrationName ? { registrationName } : {}),
-						product,
-					},
-					...(config.workflowId ? { workflowId: config.workflowId } : {}),
-					...(config.userId ? { userId: config.userId } : {}),
-					...(Object.keys(state.questionnaireAnswers).length > 0
-						? { questionnaire: state.questionnaireAnswers }
-						: {}),
-					metadata: buildSubmitMetadata(config.metadata, requestId, config.deviceIntelligence !== false),
-				}),
-			{ onRetry },
-		);
+		const result = await submitBusinessApplication({ config, state, requestId, onRetry });
+		setInvites(result.keyPeopleInvites);
 		finishSubmit(result.verificationId, requestId);
 	}
 
@@ -185,6 +164,7 @@ export function SubmittedStep() {
 		<SubmitSuccessScreen
 			title={successTitle}
 			description={successDescription}
+			extra={invites.length > 0 ? <KeyPeopleInviteLinks invites={invites} /> : undefined}
 			onDone={() => config.onClose?.()}
 		/>
 	);

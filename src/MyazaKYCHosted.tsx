@@ -1,14 +1,19 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { KYCProvider, useKYCContext } from './context/KYCContext';
 import { KYCConfigProvider, type ServerSdkConfig } from './context/KYCConfigContext';
 import { KYCModal } from './components/KYCModal';
 import { buildThemeVars } from './lib/theme';
+import { isDesktopDevice } from './lib/device';
 import { primeFaceMesh } from './liveness/face-mesh';
 import { configureSpeech } from './liveness/speech';
-import { createKYCApi, type HandoffBootstrapResponse, type KYCApi } from './services/api';
+import { createKYCApi, type HandoffBootstrapResponse, type HandoffSessionSnapshot, type KYCApi } from './services/api';
+
+// Lazy-loaded so the QR/handoff code (+ qrcode.react) stays out of the initial
+// hosted bundle — it only loads when a DESKTOP visitor reaches the gate.
+const DeviceHandoffGate = lazy(() => import('./components/DeviceHandoffGate'));
 import type {
   AnyCountry,
   AnyIdType,
@@ -115,6 +120,16 @@ function HostedFlow({
 }) {
   const snap = bootstrap.configSnapshot;
   const isBusiness = snap.subjectType === 'business' && !!snap.business;
+  // Offer "continue on your phone" only when the flow has a capture/upload step
+  // a phone camera actually helps with (mirrors <MyazaKYC/>). Individual flows:
+  // liveness or document capture. KYB flows: the applicant's in-flow KYC or
+  // company-document uploads (photograph on a phone) — a bare registry lookup
+  // (all typed) gains nothing. The workflow/hosted-link can also switch handoff
+  // off (`deviceHandoff: false`); default on.
+  const captureNeeded = isBusiness
+    ? snap.business?.applicant?.verification === true || snap.business?.documents?.enabled === true
+    : snap.enableLiveness !== false || snap.enableDocumentCapture !== false;
+  const cameraNeeded = snap.deviceHandoff !== false && captureNeeded;
   const serverConfigOverride: ServerSdkConfig = {
     status: 'ready',
     idTypes: bootstrap.idTypes,
@@ -142,6 +157,7 @@ function HostedFlow({
         allowDocumentUpload={snap.allowDocumentUpload}
         enableLiveness={snap.enableLiveness}
         livenessMode={snap.livenessMode as 'gestures' | 'flash' | 'both' | undefined}
+        deviceHandoff={snap.deviceHandoff}
         appearance={snap.appearance as KYCAppearance | undefined}
         consent={snap.consent as KYCConsentContent | undefined}
         success={snap.success as KYCSuccessContent | undefined}
@@ -150,12 +166,18 @@ function HostedFlow({
         nfc={snap.nfc as NfcConfig | undefined}
         userData={snap.userData}
         assetsBasePath={snap.assetsBasePath}
-        deviceHandoff={false}
       >
         <HostedFlowInner
+          snapshot={snap}
+          cameraNeeded={cameraNeeded}
           voiceGuidance={snap.voiceGuidance as VoiceGuidanceOption | undefined}
-          // Business flows have no liveness step — never load the face model.
-          enableLiveness={isBusiness ? false : snap.enableLiveness}
+          // Business flows have no liveness step — never load the face model —
+          // unless the workflow runs the applicant's own capture leg in-flow.
+          enableLiveness={
+            isBusiness && snap.business?.applicant?.verification !== true
+              ? false
+              : snap.enableLiveness
+          }
           showThemeToggle={snap.showThemeToggle}
           fullScreen={snap.fullScreen}
         />
@@ -165,27 +187,62 @@ function HostedFlow({
 }
 
 function HostedFlowInner({
+  snapshot,
+  cameraNeeded,
   voiceGuidance,
   enableLiveness,
   showThemeToggle,
   fullScreen,
 }: {
+  snapshot: HandoffSessionSnapshot;
+  cameraNeeded: boolean;
   voiceGuidance?: VoiceGuidanceOption;
   enableLiveness?: boolean;
   showThemeToggle?: boolean;
   fullScreen?: boolean;
 }) {
-  const { dispatch } = useKYCContext();
+  const { state, dispatch } = useKYCContext();
+  // A DESKTOP hosted-link visitor is offered the "continue on your phone" gate
+  // first (the gate mints a CHILD handoff session for the phone and polls it).
+  // A phone visitor — the common hosted case — or a no-camera flow goes straight
+  // into the modal.
+  const [gateOpen, setGateOpen] = useState(false);
 
   useEffect(() => {
-    dispatch({ type: 'OPEN_MODAL' });
+    if (cameraNeeded && isDesktopDevice()) {
+      setGateOpen(true);
+    } else {
+      dispatch({ type: 'OPEN_MODAL' });
+    }
     if (enableLiveness !== false) primeFaceMesh();
     configureSpeech(voiceGuidance);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Verify on this computer instead: leave the gate, run the flow here.
+  const continueHere = () => {
+    setGateOpen(false);
+    dispatch({ type: 'OPEN_MODAL' });
+  };
+
   // On the phone there is nothing to "close" back to — the flow is the whole
   // page — so close is disabled. The terminal Submitted step ends the journey;
   // the desktop is notified via its session poll.
-  return <KYCModal open onClose={() => undefined} showThemeToggle={showThemeToggle} disableClose fullScreen={fullScreen} />;
+  return (
+    <>
+      {gateOpen && (
+        <Suspense fallback={null}>
+          <DeviceHandoffGate
+            snapshot={snapshot}
+            onContinueHere={continueHere}
+            // No parent surface to return to on the hosted page — dismissing the
+            // gate simply falls through to verifying on this device.
+            onClose={continueHere}
+            showThemeToggle={showThemeToggle}
+          />
+        </Suspense>
+      )}
+      <KYCModal open={state.isOpen} onClose={() => undefined} showThemeToggle={showThemeToggle} disableClose fullScreen={fullScreen} />
+    </>
+  );
 }

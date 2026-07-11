@@ -52,7 +52,8 @@ export type MediaUploadType =
   | 'document_front_video'
   | 'document_back_video'
   | 'liveness_video'
-  | 'proof_of_address';
+  | 'proof_of_address'
+  | 'business_document';
 
 /** Response from `POST /api/kyc/upload` — the stored mediaId. */
 export interface UploadResponse {
@@ -73,6 +74,34 @@ export interface VerifyRequest {
     registrationNumber: string;
     registrationName?: string;
     product?: string;
+    /**
+     * Contact email for key-people verification — the server emails this
+     * address the invite links when the workflow's `keyPeople.invite.channel`
+     * is 'email' and a role needs full KYC. Optional; sent only when non-empty.
+     */
+    contactEmail?: string;
+    /** Company profile (collectCompanyInfo fields) — echoed on the org's
+     *  webhook and address-matched against the registry. */
+    address?: string;
+    email?: string;
+    phone?: string;
+    website?: string;
+    /** Uploaded supporting documents (only honored when the workflow's
+     *  `business.documents` block configures them). */
+    documents?: Array<{ type: string; mediaId: string }>;
+    /** Applicant-declared directors & owners (≤20; `email` drives auto-sent
+     *  invites; only honored when the workflow sets `keyPeople.collect`). */
+    keyPeople?: Array<{
+      name: string;
+      role: import('../types/business').KeyPersonRole;
+      email?: string;
+      /** The person's ISO-2 country — drives their verification link's country. */
+      country?: string;
+      ownershipPct?: number;
+    }>;
+    /** The applicant's declared role (+ optional name — the server backfills
+     *  it from their verified KYC when absent). */
+    applicant?: { role: import('../types/business').ApplicantRole; name?: string };
   };
   /**
    * Attribution: the published flow ("flow_…") that configured this SDK mount.
@@ -118,6 +147,16 @@ export interface VerifyRequest {
 export interface VerifyResponse {
   verificationId: string;
   status: 'pending';
+  /**
+   * Business submissions only: the KeyPerson id minted for the applicant when
+   * the workflow requires applicant verification. The SDK immediately submits
+   * the applicant's own INDIVIDUAL verification with
+   * `metadata.userId = applicantKeyPersonId` so the server links it back.
+   */
+  applicantKeyPersonId?: string | null;
+  /** Business submissions only: copyable verification links for the key people
+   *  the applicant listed — shown on the success screen to send on. */
+  keyPeopleInvites?: Array<{ keyPersonId: string; name: string; inviteUrl: string }>;
 }
 
 /**
@@ -206,6 +245,12 @@ export interface WorkflowConfigPayload {
     /** Offered product keys (absent = ['business']). */
     products?: string[];
     requireRegistrationName?: boolean;
+    /** Key-people (director/owner) verification configuration. */
+    keyPeople?: import('../types/business').WorkflowKeyPeopleConfig;
+    /** Supporting-document collection configuration. */
+    documents?: import('../types/business').WorkflowBusinessDocumentsConfig;
+    /** Applicant (submitter) identity verification configuration. */
+    applicant?: import('../types/business').WorkflowBusinessApplicantConfig;
   };
   /** Absent for business workflows — the business block carries its own country. */
   country?: string;
@@ -218,6 +263,8 @@ export interface WorkflowConfigPayload {
   enableLiveness?: boolean;
   /** Presence Intelligence method: gestures (default) | flash | both. */
   livenessMode?: string;
+  /** "Continue on your phone" desktop QR gate. On by default; false disables it. */
+  deviceHandoff?: boolean;
   voiceGuidance?: unknown;
   showThemeToggle?: boolean;
   fullScreen?: boolean;
@@ -264,6 +311,9 @@ export interface HandoffSessionSnapshot {
     country: string;
     products?: string[];
     requireRegistrationName?: boolean;
+    keyPeople?: import('../types/business').WorkflowKeyPeopleConfig;
+    documents?: import('../types/business').WorkflowBusinessDocumentsConfig;
+    applicant?: import('../types/business').WorkflowBusinessApplicantConfig;
   };
   /**
    * Attribution ride-along when the desktop SDK was configured by a published
@@ -280,6 +330,8 @@ export interface HandoffSessionSnapshot {
   enableLiveness?: boolean;
   /** Presence Intelligence method: gestures (default) | flash | both. */
   livenessMode?: string;
+  /** "Continue on your phone" desktop QR gate. On by default; false disables it. */
+  deviceHandoff?: boolean;
   voiceGuidance?: unknown;
   showThemeToggle?: boolean;
   fullScreen?: boolean;
@@ -340,8 +392,8 @@ const VIDEO_MIME_TYPES = ['video/webm', 'video/mp4'] as const;
 function normalizeMimeType(blobType: string, type: MediaUploadType): string {
   const base = (blobType.split(';')[0] || '').trim().toLowerCase();
   const isVideo = type.endsWith('_video');
-  // Proof-of-address documents may be PDFs (bank statements, e-bills).
-  if (type === 'proof_of_address' && base === 'application/pdf') return base;
+  // Proof-of-address + business documents may be PDFs (statements, certificates).
+  if ((type === 'proof_of_address' || type === 'business_document') && base === 'application/pdf') return base;
   const allowed: readonly string[] = isVideo ? VIDEO_MIME_TYPES : IMAGE_MIME_TYPES;
   if (allowed.includes(base)) return base;
   return isVideo ? 'video/webm' : 'image/jpeg';

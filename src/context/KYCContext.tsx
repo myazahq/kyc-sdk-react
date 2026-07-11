@@ -18,7 +18,8 @@ export const initialKYCState: KYCState = {
   mediaIds: {},
   idNumber: '',
   userData: { firstName: '', lastName: '', dateOfBirth: '' },
-  business: { country: null, product: null, registrationNumber: '', registrationName: '' },
+  business: { country: null, product: null, registrationNumber: '', registrationName: '', contactEmail: '', address: '', email: '', phone: '', website: '' },
+  businessApplication: { keyPeople: [], documents: [], applicantRole: null, applicantName: '' },
   selfieImage: null,
   documentFrontVideoBlob: null,
   documentBackVideoBlob: null,
@@ -65,6 +66,9 @@ export function kycReducer(state: KYCState, action: KYCAction): KYCState {
 
     case 'SET_BUSINESS_DETAILS':
       return { ...state, business: { ...state.business, ...action.payload } };
+
+    case 'SET_BUSINESS_APPLICATION':
+      return { ...state, businessApplication: { ...state.businessApplication, ...action.payload } };
 
     // ── Document capture ────────────────────────────────────────────────────
 

@@ -22,7 +22,9 @@ export function withPreviewMocks(api: KYCApi): KYCApi {
 
     async verify(): Promise<VerifyResponse> {
       await delay(500);
-      return { verificationId: 'preview_verification', status: 'pending' };
+      // applicantKeyPersonId stays null so the KYB applicant double-submit
+      // never fires in preview (nothing real to link it to).
+      return { verificationId: 'preview_verification', status: 'pending', applicantKeyPersonId: null, keyPeopleInvites: [] };
     },
 
     async status(verificationId: string): Promise<VerificationStatusResponse> {

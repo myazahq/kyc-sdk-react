@@ -8,6 +8,8 @@
 
 import { KYCApiError } from '../services/api';
 import { KYCError, type KYCErrorCode } from '../types/verification';
+import { BUSINESS_DOCUMENT_LABELS } from './business-application';
+import type { BusinessDocumentKey } from '../types/business';
 
 /** Which operation failed — picks the fallback code for non-HTTP failures. */
 export type ErrorContext = 'upload' | 'verify';
@@ -90,6 +92,20 @@ const CODED_ERRORS: Record<string, { code: KYCErrorCode; message: string }> = {
  */
 export function mapToKycError(err: unknown, context: ErrorContext): KYCError {
   if (err instanceof KYCApiError) {
+    // 422 missing_documents carries the missing doc keys — name them so the
+    // user knows exactly which required business documents to go back for.
+    if (err.code === 'missing_documents') {
+      const missing = Array.isArray(err.body?.missing) ? (err.body.missing as string[]) : [];
+      const labels = missing.map(
+        (key) => BUSINESS_DOCUMENT_LABELS[key as BusinessDocumentKey] ?? key,
+      );
+      return new KYCError(
+        'unknown',
+        labels.length > 0
+          ? `Required business documents are missing: ${labels.join(', ')}. Please go back and upload them.`
+          : 'Some required business documents are missing. Please go back and upload them.',
+      );
+    }
     const coded = err.code ? CODED_ERRORS[err.code] : undefined;
     if (coded) {
       return new KYCError(coded.code, coded.message);

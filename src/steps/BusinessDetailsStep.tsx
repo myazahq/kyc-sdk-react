@@ -1,30 +1,26 @@
 'use client';
 
 import React from 'react';
-import { Building2, Landmark, FileText, ReceiptText } from 'lucide-react';
 import { StepHeader } from '../components/StepHeader';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import { RadioGroup, RadioGroupItem } from '../components/ui/radio-group';
-import { Card } from '../components/ui/card';
 import { BusinessCountrySelect } from '../components/BusinessCountrySelect';
-import { cn } from '../lib/utils';
+import { BusinessProductPicker } from '../components/BusinessProductPicker';
+import { BusinessContactEmailField } from '../components/BusinessContactEmailField';
+import { BusinessCompanyInfoFields } from '../components/BusinessCompanyInfoFields';
 import { useKYCContext } from '../context/KYCContext';
 import { useKYCConfig } from '../context/KYCConfigContext';
 import {
   businessCountriesFor,
   businessProductsForCountry,
+  companyInfoFieldModes,
   getBusinessProductDef,
+  isValidContactEmail,
+  keyPeopleNeedsContactEmail,
 } from '../lib/business';
-import { hasActiveQuestionnaire } from '../lib/questionnaire';
-
-const PRODUCT_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
-  business: Building2,
-  'business-tax': Landmark,
-  'business-taxid': FileText,
-  'business-tin': ReceiptText,
-};
+import { nextBusinessStep } from '../lib/business-application';
+import { registrationNumberHint } from '../lib/registration-hint';
 
 /**
  * Business (KYB) details step — replaces id-type/capture for business
@@ -54,9 +50,36 @@ export function BusinessDetailsStep() {
   const registrationName = state.business.registrationName;
   const nameRequired = business?.requireRegistrationName === true;
 
-  const numberValid = registrationNumber.trim().length >= 2;
+  // Key-people email invites: optional, but format-validated when typed.
+  const showContactEmail = keyPeopleNeedsContactEmail(business);
+  const contactEmail = state.business.contactEmail;
+  const emailValid = contactEmail.trim() === '' || isValidContactEmail(contactEmail.trim());
+
+  // Company profile (address / email / phone / website): per-field modes from
+  // the workflow config; the address is registry-cross-checked server-side
+  // (business.addressMatch). Required fields block Continue.
+  const infoModes = companyInfoFieldModes(business);
+  const showCompanyInfo = Object.values(infoModes).some((m) => m !== 'off');
+  const businessEmailValid =
+    state.business.email.trim() === '' || isValidContactEmail(state.business.email.trim());
+  const companyInfoComplete = (['address', 'email', 'phone', 'website'] as const).every(
+    (f) => infoModes[f] !== 'required' || state.business[f].trim() !== '',
+  );
+
+  // Country-aware registration-number guidance (NG: CAC prefix rules +
+  // format validation; elsewhere: a generic registry tip).
+  const regHint = registrationNumberHint(country, productDef);
+  const formatOk =
+    !regHint.isValidFormat ||
+    registrationNumber.trim() === '' ||
+    regHint.isValidFormat(registrationNumber);
+  const numberValid = registrationNumber.trim().length >= 2 && formatOk;
   const isFormValid =
-    !!product && numberValid && (!nameRequired || registrationName.trim() !== '');
+    !!product &&
+    numberValid &&
+    (!nameRequired || registrationName.trim() !== '') &&
+    (!showContactEmail || emailValid) &&
+    (!showCompanyInfo || (businessEmailValid && companyInfoComplete));
 
   const setDetails = (payload: Partial<typeof state.business>) =>
     dispatch({ type: 'SET_BUSINESS_DETAILS', payload });
@@ -67,10 +90,13 @@ export function BusinessDetailsStep() {
     if (product && (state.business.product !== product || state.business.country !== country)) {
       setDetails({ product, country });
     }
-    if (hasActiveQuestionnaire(config.questionnaire)) {
-      dispatch({ type: 'SET_STEP', payload: 'questionnaire' });
-    } else {
+    // KYB application steps (key people / documents / applicant), then the
+    // questionnaire, then submission — the sequencing lives in one helper.
+    const next = nextBusinessStep('business-details', config);
+    if (next === 'submitted') {
       dispatch({ type: 'SUBMIT_VERIFICATION' });
+    } else {
+      dispatch({ type: 'SET_STEP', payload: next });
     }
   };
 
@@ -98,38 +124,11 @@ export function BusinessDetailsStep() {
       )}
 
       {showPicker && (
-        <RadioGroup
-          value={pickedProduct ?? ''}
-          onValueChange={(value) => setDetails({ product: value })}
-          className="grid grid-cols-1 sm:grid-cols-2 gap-3"
-        >
-          {offered.map((key) => {
-            const def = getBusinessProductDef(key);
-            const Icon = PRODUCT_ICONS[key] ?? Building2;
-            const isSelected = pickedProduct === key;
-            return (
-              <Label key={key} htmlFor={`product-${key}`} className="cursor-pointer">
-                <Card
-                  className={cn(
-                    'flex items-center gap-3 p-4 transition-colors',
-                    isSelected ? 'border-primary bg-primary/5' : 'hover:border-muted-foreground/30',
-                  )}
-                >
-                  <div
-                    className={cn(
-                      'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg',
-                      isSelected ? 'bg-primary/10 text-primary' : 'bg-secondary text-muted-foreground',
-                    )}
-                  >
-                    <Icon className="h-5 w-5" />
-                  </div>
-                  <span className="flex-1 text-sm font-medium">{def.label}</span>
-                  <RadioGroupItem value={key} id={`product-${key}`} />
-                </Card>
-              </Label>
-            );
-          })}
-        </RadioGroup>
+        <BusinessProductPicker
+          offered={offered}
+          picked={pickedProduct}
+          onPick={(value) => setDetails({ product: value })}
+        />
       )}
 
       <div className="space-y-4">
@@ -137,15 +136,19 @@ export function BusinessDetailsStep() {
           <Label htmlFor="registrationNumber">{productDef.inputLabel}</Label>
           <Input
             id="registrationNumber"
-            placeholder={productDef.placeholder}
+            placeholder={regHint.placeholder}
             value={registrationNumber}
             onChange={(e) => setDetails({ registrationNumber: e.target.value })}
             className={registrationNumber && !numberValid ? 'border-destructive' : ''}
           />
-          {registrationNumber !== '' && !numberValid && (
+          {registrationNumber !== '' && !numberValid ? (
             <p className="text-sm text-destructive">
-              Enter a valid {productDef.inputLabel.toLowerCase()}.
+              {!formatOk && regHint.formatError
+                ? regHint.formatError
+                : `Enter a valid ${productDef.inputLabel.toLowerCase()}.`}
             </p>
+          ) : (
+            regHint.tip && <p className="text-xs text-muted-foreground">{regHint.tip}</p>
           )}
         </div>
 
@@ -161,6 +164,28 @@ export function BusinessDetailsStep() {
             onChange={(e) => setDetails({ registrationName: e.target.value })}
           />
         </div>
+
+        {showCompanyInfo && (
+          <BusinessCompanyInfoFields
+            values={{
+              address: state.business.address,
+              email: state.business.email,
+              phone: state.business.phone,
+              website: state.business.website,
+            }}
+            modes={infoModes}
+            emailValid={businessEmailValid}
+            onChange={(patch) => setDetails(patch)}
+          />
+        )}
+
+        {showContactEmail && (
+          <BusinessContactEmailField
+            value={contactEmail}
+            valid={emailValid}
+            onChange={(value) => setDetails({ contactEmail: value })}
+          />
+        )}
       </div>
 
       <Button onClick={handleContinue} disabled={!isFormValid} className="w-full">

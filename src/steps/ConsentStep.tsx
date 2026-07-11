@@ -5,7 +5,9 @@ import {
   ShieldCheck,
   BadgeCheck,
   Building2,
+  FileText,
   UserRound,
+  UsersRound,
   ScanLine,
   ScanFace,
   Lock,
@@ -17,6 +19,11 @@ import { cn } from '../lib/utils';
 import { useKYCContext } from '../context/KYCContext';
 import { useKYCConfig } from '../context/KYCConfigContext';
 import { isBusinessFlow } from '../lib/business';
+import {
+  hasApplicantVerification,
+  hasBusinessDocumentsStep,
+  hasKeyPeopleCollection,
+} from '../lib/business-application';
 import { MobileHandoffSheet } from '../components/MobileHandoffSheet';
 
 interface ProcessStep {
@@ -89,6 +96,15 @@ export function ConsentStep() {
   }
   if (!isBusiness && config.enableSelfie !== false) {
     steps.push({ icon: ScanFace, label: 'Take a selfie for facial verification' });
+  }
+  if (isBusiness && hasKeyPeopleCollection(config.business)) {
+    steps.push({ icon: UsersRound, label: "List the company's directors and owners" });
+  }
+  if (isBusiness && hasBusinessDocumentsStep(config.business)) {
+    steps.push({ icon: FileText, label: 'Upload supporting business documents' });
+  }
+  if (isBusiness && hasApplicantVerification(config.business)) {
+    steps.push({ icon: ScanFace, label: 'Verify your own identity' });
   }
 
   return (

@@ -18,12 +18,16 @@ import { useKYCConfig } from '../context/KYCConfigContext';
 import { hasActiveQuestionnaire } from '../lib/questionnaire';
 import { hasProofOfAddressStep } from '../lib/post-capture';
 import { isBusinessFlow } from '../lib/business';
+import { getStepProgress } from '../lib/step-order';
 import { ProofOfAddressStep } from '../steps/ProofOfAddressStep';
 import type { KYCStep } from '../types/config';
 import { VisuallyHidden } from './VisuallyHidden';
 import { KYCErrorBoundary } from './KYCErrorBoundary';
 
+import { ApplicantRoleStep } from '../steps/ApplicantRoleStep';
 import { BusinessDetailsStep } from '../steps/BusinessDetailsStep';
+import { BusinessDocumentsStep } from '../steps/BusinessDocumentsStep';
+import { BusinessKeyPeopleStep } from '../steps/BusinessKeyPeopleStep';
 import { ConsentStep } from '../steps/ConsentStep';
 import { CountrySelectStep } from '../steps/CountrySelectStep';
 import { IdTypeStep } from '../steps/IdTypeStep';
@@ -101,45 +105,8 @@ function HeaderBrand() {
 }
 
 // ---------------------------------------------------------------------------
-// Step ordering — 5 steps each flow path
-// ---------------------------------------------------------------------------
-
-function buildStepOrder(
-  isBusiness: boolean,
-  hasDocCapture: boolean,
-  hasLiveness: boolean,
-  hasCountrySelect: boolean,
-  hasPoa: boolean,
-  hasQuestionnaire: boolean,
-): KYCStep[] {
-  // Business (KYB) flow — no id-type, no capture, no liveness, no PoA.
-  if (isBusiness) {
-    return ['consent', 'business-details', ...(hasQuestionnaire ? (['questionnaire'] as KYCStep[]) : []), 'submitted'];
-  }
-  const middle: KYCStep[] = hasDocCapture ? ['document-capture'] : ['id-input'];
-  if (hasLiveness) middle.push('liveness');
-  if (hasPoa) middle.push('proof-of-address');
-  if (hasQuestionnaire) middle.push('questionnaire');
-  return ['consent', ...(hasCountrySelect ? (['country-select'] as KYCStep[]) : []), 'id-type', ...middle, 'submitted'];
-}
-
-function getStepProgress(
-  step: KYCStep,
-  isBusiness: boolean,
-  hasDocCapture: boolean,
-  hasLiveness: boolean,
-  hasCountrySelect: boolean,
-  hasPoa: boolean,
-  hasQuestionnaire: boolean,
-): number {
-  const order = buildStepOrder(isBusiness, hasDocCapture, hasLiveness, hasCountrySelect, hasPoa, hasQuestionnaire);
-  // The preview-only nfc step sits right after document capture in the mobile
-  // flow — borrow that slot so the progress bar reads sensibly.
-  const index = order.indexOf(step === 'nfc' ? 'document-capture' : step);
-  if (index === -1) return 0;
-  return Math.round(((index + 1) / order.length) * 100);
-}
-
+// Step ordering — buildStepOrder/getStepProgress live in lib/step-order.ts
+// (KYB application steps + the individual flow paths).
 // ---------------------------------------------------------------------------
 // Config error screen — shown when the SDK can't load its server config because
 // of a fatal auth failure (e.g. a wrong API key). Blocks the flow so the user
@@ -201,6 +168,12 @@ function CurrentStep() {
       return <NfcStep />;
     case 'business-details':
       return <BusinessDetailsStep />;
+    case 'business-key-people':
+      return <BusinessKeyPeopleStep />;
+    case 'business-documents':
+      return <BusinessDocumentsStep />;
+    case 'applicant-role':
+      return <ApplicantRoleStep />;
     case 'liveness':
       return config.previewMode ? <PreviewCapturePlaceholder kind="liveness" /> : <LivenessStep />;
     case 'proof-of-address':
@@ -273,7 +246,18 @@ export function KYCModal({ open, onClose, showThemeToggle, disableClose, fullScr
         <div className="flex h-full flex-col overflow-hidden rounded-[inherit]">
           <div className="relative shrink-0">
             {!configError && (
-              <Progress value={getStepProgress(state.currentStep, isBusiness, hasDocCapture, hasLiveness, hasCountrySelect, hasPoa, hasQuestionnaire)} className="absolute inset-x-0 top-0 z-10 rounded-none" />
+              <Progress
+                value={getStepProgress(state.currentStep, {
+                  isBusiness,
+                  business: config.business,
+                  hasDocCapture,
+                  hasLiveness,
+                  hasCountrySelect,
+                  hasPoa,
+                  hasQuestionnaire,
+                })}
+                className="absolute inset-x-0 top-0 z-10 rounded-none"
+              />
             )}
 
             {/* Header row — org brand top-left, controls top-right.

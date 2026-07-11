@@ -89,6 +89,10 @@ export type KYCStep =
   // builder preview, where it stands in for the visually-identical mobile UI.
   | 'nfc'
   | 'business-details'
+  // KYB application steps — present only when the workflow configures them.
+  | 'business-key-people'
+  | 'business-documents'
+  | 'applicant-role'
   | 'liveness'
   | 'proof-of-address'
   | 'questionnaire'
@@ -105,6 +109,8 @@ export interface ProofOfAddressConfig {
   enabled?: boolean;
   /** Accepted document kinds (absent = all). */
   documentTypes?: PoaDocumentType[];
+  /** Custom label shown for the 'other' document kind (absent = "Other document"). */
+  otherLabel?: string;
   /** Recency window the server checks the document date against (default 90). */
   maxAgeDays?: number;
 }

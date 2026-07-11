@@ -2,9 +2,11 @@ import type { WorkflowConfigPayload } from '../services/api';
 
 /**
  * The prop keys a published flow may override. Exactly the template surface —
- * runtime data (apiKey, devUrl, userId, userData, metadata, deviceHandoff,
- * defaultOpen, callbacks, button attrs) is never flow-controlled and always
- * comes from the consumer's code.
+ * runtime data (apiKey, devUrl, userId, userData, metadata, defaultOpen,
+ * callbacks, button attrs) is never flow-controlled and always comes from the
+ * consumer's code. `deviceHandoff` IS flow-controlled (a workflow/hosted-link
+ * can disable the "continue on your phone" gate); when the flow omits it the
+ * consumer prop still wins (undefined flow values are skipped below).
  */
 const WORKFLOW_KEYS = [
   'subjectType',
@@ -18,6 +20,7 @@ const WORKFLOW_KEYS = [
   'enableLiveness',
   'livenessMode',
   'deviceIntelligence',
+  'deviceHandoff',
   'voiceGuidance',
   'showThemeToggle',
   'fullScreen',

@@ -80,10 +80,14 @@ export function SubmitSuccessScreen({
 	title,
 	description,
 	onDone,
+	extra,
 }: {
 	title: string;
 	description: string;
 	onDone: () => void;
+	/** Optional block between the message and the Done button (e.g. the KYB
+	 *  key-people invite links). */
+	extra?: React.ReactNode;
 }) {
 	return (
 		<div className='flex flex-col items-center gap-6 py-6 animate-fade-in'>
@@ -110,6 +114,8 @@ export function SubmitSuccessScreen({
 				<h2 className='text-xl font-semibold font-heading'>{title}</h2>
 				<p className='text-sm text-muted-foreground'>{description}</p>
 			</div>
+
+			{extra}
 
 			<Button className='w-full' onClick={onDone}>
 				Done

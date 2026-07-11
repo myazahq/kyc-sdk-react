@@ -19,6 +19,7 @@ import { cn } from '../lib/utils';
 import { useKYCContext } from '../context/KYCContext';
 import { useKYCConfig } from '../context/KYCConfigContext';
 import { listIdTypeDefinitions } from '../utils/id-definitions';
+import { isBusinessFlow } from '../lib/business';
 import type { AnyIdType, AnyCountry, IdTypeDefinition } from '../types/config';
 
 // Keyed by idType key, so the generic Global-Documents types (passport /
@@ -102,9 +103,15 @@ export function IdTypeStep({ country, allowedIdTypes }: IdTypeStepProps = {}) {
   };
 
   const handleBack = () => {
+    // Applicant mode (KYB applicant-verification leg): id-type was reached from
+    // the applicant-role step, not consent/country-select.
     dispatch({
       type: 'SET_STEP',
-      payload: (config.countries?.length ?? 0) > 1 ? 'country-select' : 'consent',
+      payload: isBusinessFlow(config)
+        ? 'applicant-role'
+        : (config.countries?.length ?? 0) > 1
+          ? 'country-select'
+          : 'consent',
     });
   };
 

@@ -28,6 +28,8 @@ const WORKFLOW_KEYS = [
   'appearance',
   'consent',
   'success',
+  'emailVerification',
+  'phoneVerification',
   'questionnaire',
   'proofOfAddress',
   'nfc',

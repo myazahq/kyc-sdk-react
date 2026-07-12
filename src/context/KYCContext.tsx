@@ -24,6 +24,7 @@ export const initialKYCState: KYCState = {
   documentFrontVideoBlob: null,
   documentBackVideoBlob: null,
   livenessVideoBlob: null,
+  contact: { emailToken: null, emailAddress: null, phoneToken: null, phoneNumber: null },
   questionnaireAnswers: {},
   poaDocumentType: null,
   poaFileName: null,
@@ -147,6 +148,21 @@ export function kycReducer(state: KYCState, action: KYCAction): KYCState {
 
     case 'CLEAR_LIVENESS_VIDEO':
       return { ...state, livenessVideoBlob: null };
+
+    // ── Contact verification ────────────────────────────────────────────────
+
+    case 'SET_CONTACT_PROOF':
+      // Verified proofs survive RETRY on purpose — the user shouldn't have to
+      // re-OTP after a failed submission (the server proof stays valid ~30 min).
+      return action.payload.channel === 'email'
+        ? {
+            ...state,
+            contact: { ...state.contact, emailToken: action.payload.token, emailAddress: action.payload.destination },
+          }
+        : {
+            ...state,
+            contact: { ...state.contact, phoneToken: action.payload.token, phoneNumber: action.payload.destination },
+          };
 
     // ── Questionnaire ───────────────────────────────────────────────────────
 

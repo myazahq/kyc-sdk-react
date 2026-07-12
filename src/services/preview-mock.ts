@@ -35,6 +35,22 @@ export function withPreviewMocks(api: KYCApi): KYCApi {
       };
     },
 
+    // Contact verification: nothing is sent and any code passes — walking the
+    // OTP steps in the builder preview stays side-effect free.
+    async contactSend(body: { channel: 'email' | 'phone' }) {
+      await delay(350);
+      return {
+        challengeId: `preview_challenge_${body.channel}`,
+        expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+        deliveryChannel: 'test',
+      };
+    },
+
+    async contactCheck() {
+      await delay(300);
+      return { verified: true, token: 'preview_contact_proof' };
+    },
+
     async createHandoffSession(): Promise<never> {
       throw new Error('Device handoff is unavailable in preview mode.');
     },

@@ -101,6 +101,16 @@ export interface KYCState {
   // Steps 2c/2d/2e — KYB application extras (key people, documents, applicant)
   businessApplication: BusinessApplicationState;
 
+  // Steps 1b/1c — contact verification (email/phone OTP). The proof tokens are
+  // single-use server mints submitted with /verify; destinations are kept for
+  // display ("Verified a***@gmail.com").
+  contact: {
+    emailToken: string | null;
+    emailAddress: string | null;
+    phoneToken: string | null;
+    phoneNumber: string | null;
+  };
+
   // Step 4b — extra-info questionnaire answers, keyed by question key
   questionnaireAnswers: Record<string, QuestionnaireAnswerValue>;
 
@@ -152,6 +162,8 @@ export type KYCAction =
   | { type: 'SET_DOCUMENT_BACK_VIDEO'; payload: Blob }
   | { type: 'SET_LIVENESS_VIDEO'; payload: Blob }
   | { type: 'CLEAR_LIVENESS_VIDEO' }
+  // Contact verification (email/phone OTP proof)
+  | { type: 'SET_CONTACT_PROOF'; payload: { channel: 'email' | 'phone'; token: string; destination: string } }
   // Questionnaire
   | { type: 'SET_QUESTIONNAIRE_ANSWER'; payload: { key: string; value: QuestionnaireAnswerValue | undefined } }
   // Proof of Address

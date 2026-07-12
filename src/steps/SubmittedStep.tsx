@@ -95,6 +95,15 @@ export function SubmittedStep() {
 					...(Object.keys(state.questionnaireAnswers).length > 0
 						? { questionnaire: state.questionnaireAnswers }
 						: {}),
+					// Contact-verification proof tokens (email/phone OTP steps).
+					...(state.contact.emailToken || state.contact.phoneToken
+						? {
+								contact: {
+									...(state.contact.emailToken ? { emailToken: state.contact.emailToken } : {}),
+									...(state.contact.phoneToken ? { phoneToken: state.contact.phoneToken } : {}),
+								},
+							}
+						: {}),
 					mediaIds: {
 						documentFront: state.mediaIds.documentFront,
 						documentBack: state.mediaIds.documentBack,

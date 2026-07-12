@@ -67,6 +67,10 @@ const config: Config = {
           "50%":  { transform: "rotateY(90deg)" },
           "100%": { transform: "rotateY(0deg)" },
         },
+        "caret-blink": {
+          "0%,70%,100%": { opacity: "1" },
+          "20%,50%": { opacity: "0" },
+        },
       },
       animation: {
         "slide-up": "slide-up 300ms ease-out",
@@ -74,6 +78,7 @@ const config: Config = {
         "checkmark": "checkmark-draw 500ms ease-out forwards",
         "pulse-ring": "pulse-ring 2s ease-in-out infinite",
         "card-flip": "card-flip 600ms ease-in-out",
+        "caret-blink": "caret-blink 1.25s ease-out infinite",
       },
     },
   },

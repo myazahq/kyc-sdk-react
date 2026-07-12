@@ -19,6 +19,7 @@ import { cn } from '../lib/utils';
 import { useKYCContext } from '../context/KYCContext';
 import { useKYCConfig } from '../context/KYCConfigContext';
 import { isBusinessFlow } from '../lib/business';
+import { firstStepAfterConsent, hasEmailVerificationStep, hasPhoneVerificationStep } from '../lib/contact-steps';
 import {
   hasApplicantVerification,
   hasBusinessDocumentsStep,
@@ -70,15 +71,14 @@ export function ConsentStep() {
       : DEFAULT_CONSENT_DESCRIPTION;
 
   const handleContinue = () => {
-    // Business (KYB) flows go straight to the details form. Multi-region
-    // individual flows pick the country first; single-region skips straight
-    // to the ID-type list.
-    if (isBusiness) {
-      dispatch({ type: 'SET_STEP', payload: 'business-details' });
-      return;
-    }
-    const multiRegion = (config.countries?.length ?? 0) > 1;
-    dispatch({ type: 'SET_STEP', payload: multiRegion ? 'country-select' : 'id-type' });
+    // Contact-verification steps (when enabled) come first — a cheap
+    // pre-filter before capture/registry spend. Then business flows go to the
+    // details form; multi-region individual flows pick the country; single-
+    // region goes straight to the ID-type list.
+    dispatch({
+      type: 'SET_STEP',
+      payload: firstStepAfterConsent({ ...config, subjectTypeIsBusiness: isBusiness }),
+    });
   };
 
   // Reflect the actually-enabled features so the list matches the real flow.
@@ -91,6 +91,9 @@ export function ConsentStep() {
         { icon: BadgeCheck, label: 'Verify your government-issued ID' },
         { icon: UserRound, label: 'Collect basic personal information' },
       ];
+  if (hasEmailVerificationStep(config.emailVerification) || hasPhoneVerificationStep(config.phoneVerification)) {
+    steps.push({ icon: Lock, label: 'Confirm your contact details with a one-time code' });
+  }
   if (!isBusiness && config.enableDocumentCapture !== false) {
     steps.push({ icon: ScanLine, label: 'Capture a photo of your ID document' });
   }

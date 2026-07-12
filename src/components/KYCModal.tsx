@@ -17,6 +17,7 @@ import { useKYCContext } from '../context/KYCContext';
 import { useKYCConfig } from '../context/KYCConfigContext';
 import { hasActiveQuestionnaire } from '../lib/questionnaire';
 import { hasProofOfAddressStep } from '../lib/post-capture';
+import { hasEmailVerificationStep, hasPhoneVerificationStep } from '../lib/contact-steps';
 import { isBusinessFlow } from '../lib/business';
 import { getStepProgress } from '../lib/step-order';
 import { ProofOfAddressStep } from '../steps/ProofOfAddressStep';
@@ -29,6 +30,7 @@ import { BusinessDetailsStep } from '../steps/BusinessDetailsStep';
 import { BusinessDocumentsStep } from '../steps/BusinessDocumentsStep';
 import { BusinessKeyPeopleStep } from '../steps/BusinessKeyPeopleStep';
 import { ConsentStep } from '../steps/ConsentStep';
+import { ContactVerificationStep } from '../steps/ContactVerificationStep';
 import { CountrySelectStep } from '../steps/CountrySelectStep';
 import { IdTypeStep } from '../steps/IdTypeStep';
 import { IdInputStep } from '../steps/IdInputStep';
@@ -151,6 +153,10 @@ function CurrentStep() {
   switch (state.currentStep) {
     case 'consent':
       return <ConsentStep />;
+    case 'email-verification':
+      return <ContactVerificationStep channel="email" />;
+    case 'phone-verification':
+      return <ContactVerificationStep channel="phone" />;
     case 'country-select':
       return <CountrySelectStep />;
     case 'id-type':
@@ -210,6 +216,8 @@ export function KYCModal({ open, onClose, showThemeToggle, disableClose, fullScr
     (livenessFeatures ? livenessFeatures.livenessCheck : config.enableLiveness !== false);
   const hasQuestionnaire = hasActiveQuestionnaire(config.questionnaire);
   const hasPoa = hasProofOfAddressStep(config.proofOfAddress);
+  const hasEmailVerification = hasEmailVerificationStep(config.emailVerification);
+  const hasPhoneVerification = hasPhoneVerificationStep(config.phoneVerification);
   const [expanded, setExpanded] = useState(false);
   // `fullScreen` (config) forces the fullscreen layout on every device and
   // hides the expand/collapse control; otherwise the user toggles it.
@@ -253,6 +261,8 @@ export function KYCModal({ open, onClose, showThemeToggle, disableClose, fullScr
                   hasDocCapture,
                   hasLiveness,
                   hasCountrySelect,
+                  hasEmailVerification,
+                  hasPhoneVerification,
                   hasPoa,
                   hasQuestionnaire,
                 })}

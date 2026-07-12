@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import type { AnyCountry, AnyIdType, IdTypeDefinition, KYCAppearance, KYCConsentContent, KYCSuccessContent, QuestionnaireConfig, ProofOfAddressConfig, NfcConfig } from '../types/config';
+import type { AnyCountry, AnyIdType, EmailVerificationConfig, IdTypeDefinition, KYCAppearance, KYCConsentContent, KYCSuccessContent, PhoneVerificationConfig, QuestionnaireConfig, ProofOfAddressConfig, NfcConfig } from '../types/config';
 import type { SubjectType, WorkflowBusinessConfig } from '../types/business';
 import type { KYCSubmission } from '../types/verification';
 import { createKYCApi, KYCApiError, type KYCApi, type SdkConfigIdType, type SdkConfigResponse, type SdkConfigBranding } from '../services/api';
@@ -101,6 +101,10 @@ export interface KYCConfigValue {
   consent?: KYCConsentContent;
   /** Success (submitted) screen copy overrides. */
   success?: KYCSuccessContent;
+  /** Email OTP possession check (right after consent). */
+  emailVerification?: EmailVerificationConfig;
+  /** Phone OTP possession check (right after consent / email verification). */
+  phoneVerification?: PhoneVerificationConfig;
   /** Extra-info questionnaire shown before submission (compliance declarations). */
   questionnaire?: QuestionnaireConfig;
   /** Proof of Address document collection (after capture). */
@@ -314,6 +318,8 @@ export function KYCConfigProvider({ children, apiOverride, serverConfigOverride,
       config.appearance,
       config.consent,
       config.success,
+      config.emailVerification,
+      config.phoneVerification,
       config.questionnaire,
       config.proofOfAddress,
       config.nfc,

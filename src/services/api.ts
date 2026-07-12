@@ -127,6 +127,12 @@ export interface VerifyRequest {
   };
   /** Extra-info questionnaire answers, validated server-side against the published definition. */
   questionnaire?: Record<string, string | number | boolean | string[]>;
+  /**
+   * Contact-verification proof tokens (minted by `POST /contact/check`).
+   * Single-use; the server validates + claims them onto the verification —
+   * an invalid/expired proof is dropped, a workflow-required missing one 422s.
+   */
+  contact?: { emailToken?: string; phoneToken?: string };
   /** Captured media references. Omitted for business (KYB) submissions — no capture. */
   mediaIds?: {
     documentFront?: string;
@@ -272,6 +278,17 @@ export interface WorkflowConfigPayload {
   appearance?: Record<string, unknown>;
   consent?: Record<string, unknown>;
   success?: Record<string, unknown>;
+  /** Contact verification step configurations (email/phone OTP). */
+  emailVerification?: { enabled?: boolean; required?: boolean; codeLength?: number; maxAttempts?: number; inputStyle?: 'segmented' | 'text' };
+  phoneVerification?: {
+    enabled?: boolean;
+    required?: boolean;
+    codeLength?: number;
+    maxAttempts?: number;
+    inputStyle?: 'segmented' | 'text';
+    channels?: Array<'sms' | 'whatsapp'>;
+    defaultCountry?: string;
+  };
   /** Extra-info questionnaire definition (compliance declarations). */
   questionnaire?: { title?: string; description?: string; fields: unknown[] };
   /** Proof of Address step configuration. */
@@ -339,6 +356,17 @@ export interface HandoffSessionSnapshot {
   appearance?: Record<string, unknown>;
   consent?: Record<string, unknown>;
   success?: Record<string, unknown>;
+  /** Contact verification step configurations (email/phone OTP). */
+  emailVerification?: { enabled?: boolean; required?: boolean; codeLength?: number; maxAttempts?: number; inputStyle?: 'segmented' | 'text' };
+  phoneVerification?: {
+    enabled?: boolean;
+    required?: boolean;
+    codeLength?: number;
+    maxAttempts?: number;
+    inputStyle?: 'segmented' | 'text';
+    channels?: Array<'sms' | 'whatsapp'>;
+    defaultCountry?: string;
+  };
   /** Extra-info questionnaire definition (compliance declarations). */
   questionnaire?: { title?: string; description?: string; fields: unknown[] };
   /** Proof of Address step configuration. */
@@ -464,6 +492,32 @@ export function createKYCApi(baseUrl: string, apiKey: string) {
         method: 'POST',
         body: JSON.stringify(body),
       });
+    },
+
+    // ── Contact verification (email/phone OTP) ──────────────────────────────
+
+    /** Send an OTP to an email address or phone number. */
+    async contactSend(body: {
+      channel: 'email' | 'phone';
+      destination: string;
+      /** ISO-2 default country for national phone formats (the flow's country). */
+      country?: string;
+      /** Phone delivery channel preference (default sms). */
+      via?: 'sms' | 'whatsapp';
+      /** Org-configured code length (server clamps 4–8). */
+      codeLength?: number;
+      /** Org-configured attempt budget (server clamps 1–5). */
+      maxAttempts?: number;
+    }): Promise<{ challengeId: string; expiresAt: string; deliveryChannel: string }> {
+      return request('/contact/send', { method: 'POST', body: JSON.stringify(body) });
+    },
+
+    /** Check the typed code — returns the single-use proof token for /verify. */
+    async contactCheck(body: {
+      challengeId: string;
+      code: string;
+    }): Promise<{ verified: boolean; token: string }> {
+      return request('/contact/check', { method: 'POST', body: JSON.stringify(body) });
     },
 
     // Minimal, publishable-safe status (no PII). The full result lives behind a

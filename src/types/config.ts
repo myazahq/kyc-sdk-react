@@ -80,6 +80,10 @@ export type IdTypesByCountry = {
 
 export type KYCStep =
   | 'consent'
+  // Contact-verification OTP steps — right after consent (cheap pre-filter
+  // before document/liveness spend). Present when the workflow/props enable them.
+  | 'email-verification'
+  | 'phone-verification'
   | 'country-select'
   | 'id-type'
   | 'id-input'
@@ -130,6 +134,47 @@ export interface NfcConfig {
    * auto-skip regardless — this is the escape hatch on NFC-capable phones.
    */
   allowSkip?: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Contact verification (email / phone OTP possession checks)
+// ---------------------------------------------------------------------------
+
+/** Which code field the SDK renders — the org picks this in the builder. */
+export type OtpInputStyle = 'segmented' | 'text';
+
+export interface EmailVerificationConfig {
+  /** Adds the email OTP step (right after consent). */
+  enabled?: boolean;
+  /**
+   * Whether a verified email is required to proceed (default true when
+   * enabled). `false` shows a "skip for now" affordance and the server accepts
+   * a submission without the proof.
+   */
+  required?: boolean;
+  /** Number of digits in the code (4–8; default 6). Drives the OTP-input slots. */
+  codeLength?: number;
+  /** Wrong-code entries allowed per code before it's dead (1–5; default 3). */
+  maxAttempts?: number;
+  /** Code field style: 'segmented' boxes (default) or a plain 'text' input. */
+  inputStyle?: OtpInputStyle;
+}
+
+export interface PhoneVerificationConfig {
+  /** Adds the phone OTP step (right after consent / email verification). */
+  enabled?: boolean;
+  /** Required to proceed (default true when enabled); `false` adds a skip. */
+  required?: boolean;
+  /** Number of digits in the code (4–8; default 6). Drives the OTP-input slots. */
+  codeLength?: number;
+  /** Wrong-code entries allowed per code before it's dead (1–5; default 3). */
+  maxAttempts?: number;
+  /** Code field style: 'segmented' boxes (default) or a plain 'text' input. */
+  inputStyle?: OtpInputStyle;
+  /** Offered delivery channels (default ['sms']). */
+  channels?: Array<'sms' | 'whatsapp'>;
+  /** Default dial-code country for the phone input (falls back to the flow's country). */
+  defaultCountry?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -473,6 +518,24 @@ export interface MyazaKYCConfig<C extends AnyCountry = AnyCountry> {
    * delivered in `data.questionnaire` on verification webhooks.
    */
   questionnaire?: QuestionnaireConfig;
+
+  /**
+   * Email Verification: an in-flow OTP possession check right after consent.
+   * The user enters their email, receives a code, and types it in; the
+   * verified contact + signals (disposable domain, free provider) are
+   * delivered in `data.emailVerification` on verification webhooks and are
+   * branchable in workflow decisioning (`email.*`). Usually configured in the
+   * workflow builder (rides `workflowId`).
+   */
+  emailVerification?: EmailVerificationConfig;
+
+  /**
+   * Phone Verification: an in-flow OTP possession check (SMS/WhatsApp) right
+   * after consent. Delivered in `data.phoneVerification` on webhooks and
+   * branchable in decisioning (`phone.*`). Usually configured in the workflow
+   * builder (rides `workflowId`).
+   */
+  phoneVerification?: PhoneVerificationConfig;
 
   /**
    * Proof of Address: collect a PoA document (utility bill, bank statement,

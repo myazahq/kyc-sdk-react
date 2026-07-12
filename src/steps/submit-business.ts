@@ -93,6 +93,15 @@ export async function submitBusinessApplication({
         ...(Object.keys(state.questionnaireAnswers).length > 0
           ? { questionnaire: state.questionnaireAnswers }
           : {}),
+        // Contact-verification proof tokens (the applicant's email/phone OTP).
+        ...(state.contact.emailToken || state.contact.phoneToken
+          ? {
+              contact: {
+                ...(state.contact.emailToken ? { emailToken: state.contact.emailToken } : {}),
+                ...(state.contact.phoneToken ? { phoneToken: state.contact.phoneToken } : {}),
+              },
+            }
+          : {}),
         metadata: buildSubmitMetadata(config.metadata, requestId, config.deviceIntelligence !== false),
       }),
     { onRetry },

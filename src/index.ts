@@ -28,6 +28,9 @@ export type {
   QuestionnaireField,
   QuestionnaireFieldOption,
   QuestionnaireAnswerValue,
+  EmailVerificationConfig,
+  PhoneVerificationConfig,
+  OtpInputStyle,
 } from './types/config';
 
 export type {

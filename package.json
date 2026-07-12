@@ -1,6 +1,6 @@
 {
   "name": "@myazahq/kyc-sdk-react",
-  "version": "2.4.0",
+  "version": "2.5.0",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -52,6 +52,8 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "country-flag-icons": "^1.6.17",
+    "input-otp": "^1.4.2",
+    "libphonenumber-js": "^1.13.8",
     "lucide-react": "^1.7.0",
     "qrcode.react": "^4.2.0",
     "react-day-picker": "^10.0.1",

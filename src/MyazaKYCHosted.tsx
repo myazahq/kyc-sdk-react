@@ -17,9 +17,11 @@ const DeviceHandoffGate = lazy(() => import('./components/DeviceHandoffGate'));
 import type {
   AnyCountry,
   AnyIdType,
+  EmailVerificationConfig,
   KYCAppearance,
   KYCConsentContent,
   KYCSuccessContent,
+  PhoneVerificationConfig,
   QuestionnaireConfig,
   ProofOfAddressConfig,
   NfcConfig,
@@ -161,6 +163,8 @@ function HostedFlow({
         appearance={snap.appearance as KYCAppearance | undefined}
         consent={snap.consent as KYCConsentContent | undefined}
         success={snap.success as KYCSuccessContent | undefined}
+        emailVerification={snap.emailVerification as EmailVerificationConfig | undefined}
+        phoneVerification={snap.phoneVerification as PhoneVerificationConfig | undefined}
         questionnaire={snap.questionnaire as QuestionnaireConfig | undefined}
         proofOfAddress={snap.proofOfAddress as ProofOfAddressConfig | undefined}
         nfc={snap.nfc as NfcConfig | undefined}

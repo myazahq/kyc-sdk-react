@@ -115,6 +115,8 @@ function KYCInner({
   appearance,
   consent,
   success,
+  emailVerification,
+  phoneVerification,
   questionnaire,
   proofOfAddress,
   nfc,
@@ -153,13 +155,15 @@ function KYCInner({
     ...(consent ? { consent: consent as Record<string, unknown> } : {}),
     ...(success ? { success: success as Record<string, unknown> } : {}),
     ...(questionnaire ? { questionnaire: questionnaire as { fields: unknown[] } } : {}),
+    ...(emailVerification ? { emailVerification } : {}),
+    ...(phoneVerification ? { phoneVerification } : {}),
     ...(proofOfAddress ? { proofOfAddress } : {}),
     ...(nfc ? { nfc } : {}),
     ...(metadata ? { metadata } : {}),
     ...(userId ? { userId } : {}),
     ...(userData ? { userData } : {}),
     ...(assetsBasePath ? { assetsBasePath } : {}),
-  }), [country, workflowId, idTypes, countries, enableSelfie, enableDocumentCapture, allowDocumentUpload, enableLiveness, livenessMode, deviceIntelligence, deviceHandoff, voiceGuidance, showThemeToggle, fullScreen, disableClose, appearance, consent, success, questionnaire, proofOfAddress, nfc, metadata, userId, userData, assetsBasePath]);
+  }), [country, workflowId, idTypes, countries, enableSelfie, enableDocumentCapture, allowDocumentUpload, enableLiveness, livenessMode, deviceIntelligence, deviceHandoff, voiceGuidance, showThemeToggle, fullScreen, disableClose, appearance, consent, success, emailVerification, phoneVerification, questionnaire, proofOfAddress, nfc, metadata, userId, userData, assetsBasePath]);
 
   // Pre-load MediaPipe Face Mesh model as soon as the SDK mounts and apply the
   // voice-guidance config (enabled + language) for the spoken liveness prompts.
@@ -277,6 +281,8 @@ function KYCInner({
       appearance={appearance}
       consent={consent}
       success={success}
+      emailVerification={emailVerification}
+      phoneVerification={phoneVerification}
       questionnaire={questionnaire}
       proofOfAddress={proofOfAddress}
       nfc={nfc}

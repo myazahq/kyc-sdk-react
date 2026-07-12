@@ -17,15 +17,26 @@ export interface StepOrderOptions {
   hasDocCapture: boolean;
   hasLiveness: boolean;
   hasCountrySelect: boolean;
+  hasEmailVerification: boolean;
+  hasPhoneVerification: boolean;
   hasPoa: boolean;
   hasQuestionnaire: boolean;
+}
+
+// Contact-verification OTP steps sit right after consent (both flows) — a
+// cheap pre-filter before capture/registry spend; email before phone.
+function contactSteps(o: StepOrderOptions): KYCStep[] {
+  return [
+    ...(o.hasEmailVerification ? (['email-verification'] as KYCStep[]) : []),
+    ...(o.hasPhoneVerification ? (['phone-verification'] as KYCStep[]) : []),
+  ];
 }
 
 export function buildStepOrder(o: StepOrderOptions): KYCStep[] {
   // Business (KYB) flow — the application section, then (when the workflow
   // requires applicant verification) the ordinary individual capture leg.
   if (o.isBusiness) {
-    const steps: KYCStep[] = ['consent', ...businessSectionSteps(o.business)];
+    const steps: KYCStep[] = ['consent', ...contactSteps(o), ...businessSectionSteps(o.business)];
     if (hasApplicantVerification(o.business)) {
       steps.push('id-type', o.hasDocCapture ? 'document-capture' : 'id-input');
       if (o.hasLiveness) steps.push('liveness');
@@ -40,6 +51,7 @@ export function buildStepOrder(o: StepOrderOptions): KYCStep[] {
   if (o.hasQuestionnaire) middle.push('questionnaire');
   return [
     'consent',
+    ...contactSteps(o),
     ...(o.hasCountrySelect ? (['country-select'] as KYCStep[]) : []),
     'id-type',
     ...middle,

@@ -40,7 +40,7 @@ export interface FlashResult {
   inconclusive: boolean;
 }
 
-export function generateFlashSequence(count = 3): FlashColor[] {
+export function generateFlashSequence(count = 4): FlashColor[] {
   const pool = [...PALETTE];
   for (let i = pool.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));

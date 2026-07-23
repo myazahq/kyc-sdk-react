@@ -160,11 +160,15 @@ export function SubmittedStep() {
 
 	const firstName = config.userData?.firstName || state.userData.firstName;
 	const lastName = config.userData?.lastName || state.userData.lastName;
+	// The applicant has entered the registration name by this screen, so
+	// {businessName} resolves from real data (falling back to any upfront value).
+	const businessName = state.business.registrationName.trim() || config.userData?.businessName;
+	const tokens = { firstName, lastName, businessName };
 	const successTitle = config.success?.title
-		? fillTokens(config.success.title, firstName, lastName)
+		? fillTokens(config.success.title, tokens)
 		: "Verification Submitted!";
 	const successDescription = config.success?.description
-		? fillTokens(config.success.description, firstName, lastName)
+		? fillTokens(config.success.description, tokens)
 		: isBusinessFlow(config)
 			? "Your business verification has been submitted for review. You'll be notified of the result."
 			: "Your identity verification has been submitted for review. You'll be notified of the result.";

@@ -117,6 +117,7 @@ export interface VerifyRequest {
    * wins over this server-side. Absent ⇒ gestures.
    */
   livenessMode?: 'gestures' | 'flash' | 'both';
+  flashSequenceLength?: number;
   deviceIntelligence?: boolean;
   /** What kind of proof-of-address document `mediaIds.proofOfAddress` is. */
   proofOfAddressType?: 'utility_bill' | 'bank_statement' | 'tenancy_agreement' | 'other';
@@ -230,6 +231,48 @@ export interface SdkConfigResponse {
 }
 
 // ---------------------------------------------------------------------------
+// Biometric re-authentication (returning-user "prove it's still you")
+// ---------------------------------------------------------------------------
+
+/** The client-asserted liveness claim sent with a re-auth attempt. */
+export interface BiometricLivenessClaim {
+  mode: 'gestures' | 'flash' | 'both';
+  passed: boolean;
+  flash?: { passed?: boolean };
+}
+
+/** Request body for `POST /api/kyc/biometric/authenticate`. */
+export interface BiometricAuthRequest {
+  /** The org's user reference (Entity.externalUserId) being re-authenticated. */
+  externalUserId: string;
+  /** A mediaId from `upload(blob, 'selfie')` — the live selfie. */
+  selfie: string;
+  liveness?: BiometricLivenessClaim;
+}
+
+/**
+ * Response from `POST /api/kyc/biometric/authenticate`. Publishable-safe: the
+ * match verdict + confidence + a single-use proof token (redeem from your
+ * backend with a secret key at `/biometric/verify-proof`). No PII.
+ */
+export interface BiometricAuthResponse {
+  authenticated: boolean;
+  status: 'authenticated' | 'no_match' | 'liveness_failed';
+  confidence: number | null;
+  live: boolean;
+  attemptId: string;
+  /** Present only on `authenticated` — the single-use proof token. */
+  token?: string;
+}
+
+/** Response from `GET /api/kyc/biometric/status/:externalUserId`. */
+export interface BiometricStatusResponse {
+  enrolled: boolean;
+  enrolledAt?: string;
+  lastAuthenticatedAt?: string | null;
+}
+
+// ---------------------------------------------------------------------------
 // Verification Flows (dashboard-built SDK configuration templates)
 // ---------------------------------------------------------------------------
 
@@ -269,8 +312,11 @@ export interface WorkflowConfigPayload {
   enableLiveness?: boolean;
   /** Presence Intelligence method: gestures (default) | flash | both. */
   livenessMode?: string;
+  flashSequenceLength?: number;
   /** "Continue on your phone" desktop QR gate. On by default; false disables it. */
   deviceHandoff?: boolean;
+  /** Mobile-only: the flow may not run on a desktop (hardware-confirmed). Off by default. */
+  requireMobileDevice?: boolean;
   voiceGuidance?: unknown;
   showThemeToggle?: boolean;
   fullScreen?: boolean;
@@ -347,8 +393,11 @@ export interface HandoffSessionSnapshot {
   enableLiveness?: boolean;
   /** Presence Intelligence method: gestures (default) | flash | both. */
   livenessMode?: string;
+  flashSequenceLength?: number;
   /** "Continue on your phone" desktop QR gate. On by default; false disables it. */
   deviceHandoff?: boolean;
+  /** Mobile-only: the flow may not run on a desktop (hardware-confirmed). Off by default. */
+  requireMobileDevice?: boolean;
   voiceGuidance?: unknown;
   showThemeToggle?: boolean;
   fullScreen?: boolean;
@@ -492,6 +541,26 @@ export function createKYCApi(baseUrl: string, apiKey: string) {
         method: 'POST',
         body: JSON.stringify(body),
       });
+    },
+
+    // ── Biometric re-authentication ─────────────────────────────────────────
+
+    /**
+     * Re-authenticate a verified user by matching a live selfie 1:1 against
+     * their KYC enrollment selfie. Publishable-safe. Uniform 404 `not_enrolled`.
+     */
+    async authenticate(body: BiometricAuthRequest): Promise<BiometricAuthResponse> {
+      return request<BiometricAuthResponse>('/biometric/authenticate', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+    },
+
+    /** Whether a user is enrolled for face re-auth (whether to OFFER it). */
+    async getBiometricStatus(externalUserId: string): Promise<BiometricStatusResponse> {
+      return request<BiometricStatusResponse>(
+        `/biometric/status/${encodeURIComponent(externalUserId)}`,
+      );
     },
 
     // ── Contact verification (email/phone OTP) ──────────────────────────────

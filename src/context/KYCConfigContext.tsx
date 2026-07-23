@@ -73,7 +73,7 @@ export interface KYCConfigValue {
   /** The org's user reference → Entity.externalUserId at the seam (not matched). */
   userId?: string;
   /** Pre-populated user data from the consuming app */
-  userData?: { firstName?: string; lastName?: string; dateOfBirth?: string };
+  userData?: { firstName?: string; lastName?: string; dateOfBirth?: string; businessName?: string };
   enableSelfie?: boolean;
   enableDocumentCapture?: boolean;
   /** Allow picking a document photo from the device instead of the camera. Default true. */
@@ -81,6 +81,8 @@ export interface KYCConfigValue {
   enableLiveness?: boolean;
   /** Presence Intelligence method: gestures (default) | flash | both. */
   livenessMode?: 'gestures' | 'flash' | 'both';
+  /** Flash-liveness sequence length (colours) for flash/both. 2–5, default 4. */
+  flashSequenceLength?: number;
   /** Device Intelligence (device + IP analysis). On by default; false skips it (and its charge). */
   deviceIntelligence?: boolean;
   /**
@@ -89,6 +91,12 @@ export interface KYCConfigValue {
    * Default true.
    */
   deviceHandoff?: boolean;
+  /**
+   * Mobile-only workflow: the flow runs only on a hardware-confirmed handheld.
+   * Enforced before the flow opens (see lib/device-class.ts) and re-checked
+   * server-side at submit. Default false.
+   */
+  requireMobileDevice?: boolean;
   /**
    * Base path (or absolute URL) where gesture GIFs are served from.
    * Defaults to `'/kyc-assets'`. Copy `node_modules/@myazahq/kyc-sdk-react/gifs/`
@@ -312,8 +320,10 @@ export function KYCConfigProvider({ children, apiOverride, serverConfigOverride,
       config.allowDocumentUpload,
       config.enableLiveness,
       config.livenessMode,
+      config.flashSequenceLength,
       config.deviceIntelligence,
       config.deviceHandoff,
+      config.requireMobileDevice,
       config.assetsBasePath,
       config.appearance,
       config.consent,

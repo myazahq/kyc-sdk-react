@@ -89,7 +89,7 @@ export type LivenessState =
   | { phase: 'positioning'; guidance: string }
   | { phase: 'challenge'; index: number; challenge: ChallengeConfig; timeRemaining: number; warning?: string }
   | { phase: 'challenge_passed'; index: number }
-  | { phase: 'capturing' }
+  | { phase: 'capturing'; guidance?: string }
   | { phase: 'complete'; selfieBase64: string }
   | { phase: 'failed'; reason: 'timeout' | 'face_lost' | 'no_camera' | 'load_error' | 'flash_failed' | 'face_swap' };
 
@@ -105,6 +105,8 @@ export interface LivenessConfig {
   positioningTimeout: number;
   /** gestures (default) | flash (screen-reflection only) | both (gestures + flash). */
   mode: LivenessMode;
+  /** Flash sequence length (colours). Undefined ⇒ the generator default (4). */
+  flashSequenceLength?: number;
 }
 
 export const DEFAULT_LIVENESS_CONFIG: LivenessConfig = {

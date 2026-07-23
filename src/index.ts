@@ -1,6 +1,11 @@
 // Components
 export { MyazaKYC, useMyazaKYC } from './MyazaKYC';
 
+// Biometric face re-authentication — the returning-user "prove it's still you"
+// flow (a verified user re-authenticates with a live selfie, no re-KYC).
+export { MyazaBiometricAuth } from './MyazaBiometricAuth';
+export type { MyazaBiometricAuthProps, MyazaBiometricAuthConfig } from './MyazaBiometricAuth';
+
 // Hosted "continue on your phone" entry — mounted by the Myaza-hosted
 // verification page (`/verify/<token>`), not by integrators directly.
 export { MyazaKYCHosted } from './MyazaKYCHosted';

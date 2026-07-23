@@ -329,3 +329,36 @@
 .kyc-root .rounded-3xl, .kyc-root.rounded-3xl { border-radius: 1.5rem; }
 .kyc-root .rounded-full, .kyc-root.rounded-full { border-radius: 3.40282e+38px; }
 .kyc-root .rounded-none, .kyc-root.rounded-none { border-radius: 0; }
+
+/* ─── Reduced motion ──────────────────────────────────────────────────────────
+   The SDK is a full-screen identity flow on someone else's device, so honouring
+   the OS motion preference is not optional. Two tiers rather than a blanket
+   `animation: none`:
+
+   1. Decorative loops (pulse rings, the liveness avatar's demo gestures, caret
+      blink) are switched OFF — they repeat forever and convey nothing a static
+      frame doesn't.
+   2. One-shot entrances are collapsed to ~1ms instead of removed, so elements
+      still arrive in their final state without a transition.
+
+   Functional indicators (spinners, progress) are deliberately left alone: they
+   communicate that work is happening, and freezing them would read as a hang. */
+@media (prefers-reduced-motion: reduce) {
+  .kyc-root .animate-pulse-ring,
+  .kyc-root .animate-caret-blink,
+  .kyc-root .animate-avatar-nod,
+  .kyc-root .animate-avatar-turn,
+  .kyc-root .animate-avatar-blink,
+  .kyc-root .animate-avatar-smile {
+    animation: none;
+  }
+
+  .kyc-root .animate-fade-in,
+  .kyc-root .animate-slide-up,
+  .kyc-root .animate-lighting-in,
+  .kyc-root .animate-checkmark,
+  .kyc-root .animate-avatar-slide-in {
+    animation-duration: 1ms;
+    animation-iteration-count: 1;
+  }
+}

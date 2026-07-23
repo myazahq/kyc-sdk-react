@@ -15,13 +15,14 @@ import type {
   LivenessConfig,
   NormalizedLandmark,
 } from '../liveness/types';
-import { runFlashSequence } from '../liveness/flash-detector';
+import { generateFlashSequence, runFlashSequence } from '../liveness/flash-detector';
 import { recordLivenessSignals } from '../lib/integrity-signals';
 import { speak, stopSpeaking } from '../liveness/speech';
 import type { LightLevel } from './useLightLevel';
 import {
   CAPTURE_FRAMERATE,
   LIVENESS_VIDEO_BITRATE,
+  SELFIE_IMAGE_QUALITY,
   createVideoRecorder,
   logCaptureSize,
 } from '../lib/capture-settings';
@@ -35,6 +36,31 @@ function lightingGuidance(level: LightLevel): string | null {
   if (level === 'dark') return 'Move to a brighter area';
   if (level === 'bright') return 'Too bright — reduce glare';
   return null;
+}
+
+// Draw the current video frame into the buffer canvas, mirrored to match the
+// selfie capture (useImageCapture is mounted with mirror:true). Reuses the
+// canvas across frames. Used to snapshot the exact frame FaceMesh analyzes so
+// the auto-captured selfie can't be a later, faceless frame.
+function drawAnalyzedFrame(
+  video: HTMLVideoElement,
+  ref: React.MutableRefObject<HTMLCanvasElement | null>,
+): void {
+  const w = video.videoWidth;
+  const h = video.videoHeight;
+  if (!w || !h) return;
+  let canvas = ref.current;
+  if (!canvas) {
+    canvas = document.createElement('canvas');
+    ref.current = canvas;
+  }
+  if (canvas.width !== w) canvas.width = w;
+  if (canvas.height !== h) canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  ctx.setTransform(-1, 0, 0, 1, w, 0); // horizontal mirror
+  ctx.drawImage(video, 0, 0, w, h);
+  ctx.setTransform(1, 0, 0, 1, 0, 0); // reset for the next drawImage
 }
 
 // ---------------------------------------------------------------------------
@@ -104,6 +130,9 @@ export function useLiveness({
   const nodHistoryRef = useRef<number[]>([]);
   const blinkHistoryRef = useRef<number[]>([]);
   const positionStableRef = useRef<number>(0);
+  // Last guidance shown during the capturing phase — so we only re-render when
+  // it actually changes (the phase runs every frame).
+  const capturingGuidanceRef = useRef<string | null>(null);
 
   // Cooldown: skip detection for N frames after a new challenge starts
   // This prevents the next gesture from passing on residual face state
@@ -117,6 +146,14 @@ export function useLiveness({
   const [flashColor, setFlashColor] = useState<string | null>(null);
   const flashSessionRef = useRef(0); // bumped on retry/unmount to abort a running sequence
   const flashRunningRef = useRef(false);
+  // Consecutive no-face frames during the flash → abort (the user pulled away).
+  const flashNoFaceFramesRef = useRef(0);
+
+  // Snapshot of the exact video frame FaceMesh last analyzed, taken at send-time
+  // in the detection loop. The selfie is captured from THIS frame — the one that
+  // confirmed a centered face — instead of a later frame that (after FaceMesh's
+  // processing latency) may already be faceless, which produced blank selfies.
+  const analyzedFrameRef = useRef<HTMLCanvasElement | null>(null);
 
   // Face-continuity guard: a real face can't teleport between consecutive
   // frames — landmark jumps (position/scale) flag face swaps & spliced feeds.
@@ -169,7 +206,7 @@ export function useLiveness({
         }
         break;
       case 'capturing':
-        textToSpeak = 'Kindly hold still';
+        textToSpeak = next.guidance ?? 'Kindly hold still';
         break;
       case 'challenge_passed':
         textToSpeak = 'Great!';
@@ -276,7 +313,20 @@ export function useLiveness({
   const doCapture = useCallback(async () => {
     stopRecording();
 
-    const base64 = captureFrameRef.current();
+    // Capture from the exact frame FaceMesh confirmed a centered face on
+    // (snapshotted at send-time), so the selfie matches the landmarks even if
+    // the camera has since moved on — no blank/faceless capture. Fall back to
+    // the live frame only if the snapshot is somehow unavailable.
+    let base64: string | null = null;
+    const snap = analyzedFrameRef.current;
+    if (snap && snap.width > 0 && snap.height > 0) {
+      try {
+        base64 = snap.toDataURL('image/jpeg', SELFIE_IMAGE_QUALITY);
+      } catch {
+        base64 = null;
+      }
+    }
+    if (!base64) base64 = captureFrameRef.current();
     if (!base64) {
       setPhase({ phase: 'failed', reason: 'face_lost' });
       return;
@@ -335,6 +385,7 @@ export function useLiveness({
       } else {
         // All challenges passed — wait for steady face then capture
         positionStableRef.current = 0;
+        capturingGuidanceRef.current = null;
         setPhase({ phase: 'capturing' });
       }
     }, 1800);
@@ -354,7 +405,12 @@ export function useLiveness({
     const isActive = () =>
       mountedRef.current && flashSessionRef.current === session && phaseRef.current === 'challenge';
 
-    runFlashSequence(video, setFlashColor, isActive)
+    runFlashSequence(
+      video,
+      setFlashColor,
+      isActive,
+      generateFlashSequence(config?.flashSequenceLength),
+    )
       .then((result) => {
         flashRunningRef.current = false;
         recordLivenessSignals({
@@ -394,14 +450,33 @@ export function useLiveness({
     // No face detected
     if (!landmarks) {
       setIsFaceDetected(false);
-      // Only reset position stability during positioning
       if (phase === 'positioning' || phase === 'loading') {
+        positionStableRef.current = 0;
+      } else if (phase === 'challenge' && tracker?.current?.config.type === 'flash') {
+        // Face pulled away DURING the flash — abort after a short grace. The
+        // colour flashes can briefly disturb face tracking, so a genuine
+        // removal must persist for several frames before we fail it.
+        flashNoFaceFramesRef.current++;
+        if (flashNoFaceFramesRef.current > 15) {
+          flashNoFaceFramesRef.current = 0;
+          flashSessionRef.current++; // abort the running flash sequence
+          setFlashColor(null);
+          clearChallengeTimer();
+          stopRecording();
+          tracker.markCurrentFailed();
+          setChallenges([...tracker.all]);
+          setPhase({ phase: 'failed', reason: 'face_lost' });
+        }
+      } else if (phase === 'capturing') {
+        // Face left while waiting to auto-capture — reset progress so we never
+        // snap a blank selfie the moment the face reappears.
         positionStableRef.current = 0;
       }
       return;
     }
 
     setIsFaceDetected(true);
+    flashNoFaceFramesRef.current = 0;
 
     // --- Multiple faces: pause and ask for a single face -------------------
     // More than one face is both a quality and a spoofing concern, so we never
@@ -600,8 +675,10 @@ export function useLiveness({
     // --- Capturing phase: wait for steady face before taking selfie ---
     if (phase === 'capturing') {
       // Don't auto-capture the selfie while lighting is poor.
-      if (lightingGuidance(lightLevelRef.current)) {
+      const light = lightingGuidance(lightLevelRef.current);
+      if (light) {
         positionStableRef.current = 0;
+        setPhase({ phase: 'capturing', guidance: light });
         return;
       }
       const pos = checkFacePosition(landmarks);
@@ -610,9 +687,20 @@ export function useLiveness({
         // Need ~15 stable frames (~0.5s) for a clear photo
         if (positionStableRef.current > 15) {
           doCapture();
+        } else if (capturingGuidanceRef.current) {
+          // Was showing "move closer" etc.; face is good now → back to hold-still.
+          capturingGuidanceRef.current = null;
+          setPhase({ phase: 'capturing' });
         }
       } else {
         positionStableRef.current = Math.max(0, positionStableRef.current - 3);
+        // Surface WHY we're not capturing (too far / off-centre) instead of a
+        // silent "hold still" the user can't act on.
+        const guidance = pos.guidance ?? 'Kindly hold still';
+        if (capturingGuidanceRef.current !== guidance) {
+          capturingGuidanceRef.current = guidance;
+          setPhase({ phase: 'capturing', guidance });
+        }
       }
     }
   };
@@ -633,6 +721,11 @@ export function useLiveness({
 
     if (!processingRef.current) {
       processingRef.current = true;
+      // While waiting to auto-capture, snapshot the EXACT frame we're about to
+      // analyze. doCapture reads this back, so the selfie is the frame whose
+      // landmarks confirmed a centered face — not a later, post-latency frame
+      // that may already be blank.
+      if (phaseRef.current === 'capturing') drawAnalyzedFrame(video, analyzedFrameRef);
       mesh
         .send(video)
         .catch(() => {

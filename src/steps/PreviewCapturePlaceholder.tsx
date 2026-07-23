@@ -1,9 +1,11 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Camera, ScanFace, Video } from 'lucide-react';
 import { StepHeader } from '../components/StepHeader';
 import { Button } from '../components/ui/button';
+import { ReadyPrimer } from '../components/ReadyPrimer';
+import { READY_DOCUMENT, READY_LIVENESS } from '../components/ready-primer-content';
 import { useKYCContext } from '../context/KYCContext';
 import { useKYCConfig } from '../context/KYCConfigContext';
 import { stepAfterCapture } from '../lib/post-capture';
@@ -18,6 +20,11 @@ import { stepAfterCapture } from '../lib/post-capture';
 export function PreviewCapturePlaceholder({ kind }: { kind: 'document' | 'liveness' }) {
   const { state, dispatch } = useKYCContext();
   const config = useKYCConfig();
+  // The real steps open with a "here's what happens next" screen before the
+  // camera. Preview mode swaps the WHOLE step for this placeholder, so without
+  // repeating the gate here the builder would show a flow its end users never
+  // get — the one thing this preview must never do.
+  const [ready, setReady] = useState(false);
 
   const hasLiveness =
     config.enableSelfie !== false &&
@@ -59,7 +66,14 @@ export function PreviewCapturePlaceholder({ kind }: { kind: 'document' | 'livene
         onBack={handleBack}
       />
 
-      {kind === 'document' ? (
+      {!ready ? (
+        // Same gate the real steps open with, so the builder shows the flow end
+        // users actually walk. Continuing lands on the camera stand-in below.
+        <ReadyPrimer
+          {...(kind === 'document' ? READY_DOCUMENT : READY_LIVENESS)}
+          onReady={() => setReady(true)}
+        />
+      ) : kind === 'document' ? (
         // Document frame — ID-card aspect ratio.
         <div className="mx-auto flex aspect-[1.586] w-full max-w-sm flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-border bg-muted/40">
           <Camera className="h-8 w-8 text-muted-foreground/60" />
@@ -77,14 +91,21 @@ export function PreviewCapturePlaceholder({ kind }: { kind: 'document' | 'livene
         </div>
       )}
 
-      <div className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
-        <Video className="h-3.5 w-3.5" />
-        The camera only activates for real users — this is a builder preview.
-      </div>
+      {/* The preview note and Continue belong to the camera stand-in — while the
+          ready screen is up it owns the only call to action, exactly as it does
+          for real users. */}
+      {ready && (
+        <>
+          <div className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
+            <Video className="h-3.5 w-3.5" />
+            The camera only activates for real users — this is a builder preview.
+          </div>
 
-      <Button onClick={handleContinue} className="w-full h-12 rounded-xl text-base font-medium">
-        Continue
-      </Button>
+          <Button onClick={handleContinue} className="w-full h-12 rounded-xl text-base font-medium">
+            Continue
+          </Button>
+        </>
+      )}
     </div>
   );
 }

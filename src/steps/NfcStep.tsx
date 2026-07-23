@@ -1,8 +1,9 @@
 'use client';
 
 import React from 'react';
-import { Nfc, Smartphone } from 'lucide-react';
+import { Smartphone } from 'lucide-react';
 import { StepHeader } from '../components/StepHeader';
+import { PassportIllustration } from '../components/PassportIllustration';
 import { Button } from '../components/ui/button';
 import { useKYCContext } from '../context/KYCContext';
 import { useKYCConfig } from '../context/KYCConfigContext';
@@ -49,36 +50,7 @@ export function NfcStep() {
         onBack={() => dispatch({ type: 'SET_STEP', payload: 'document-capture' })}
       />
 
-      {/* Document card with its contact chip + the phone tapping it. */}
-      <div className="relative mx-auto aspect-[1.586] w-full max-w-sm rounded-xl border-2 border-border bg-muted/40 p-4">
-        {/* eMRTD contact-chip glyph */}
-        <div className="absolute left-4 top-4 h-7 w-9 rounded-md border border-amber-500/50 bg-amber-400/30">
-          <div className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-amber-500/50" />
-          <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-amber-500/50" />
-        </div>
-        {/* Ghost biodata lines so the card reads as an ID document */}
-        <div className="absolute bottom-4 left-4 space-y-1.5">
-          <div className="h-1.5 w-24 rounded-full bg-border" />
-          <div className="h-1.5 w-16 rounded-full bg-border" />
-          <div className="h-1.5 w-20 rounded-full bg-border" />
-        </div>
-
-        {/* Pulsing NFC contact point */}
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="relative flex h-16 w-16 items-center justify-center">
-            <span className="absolute inset-0 animate-ping rounded-full bg-primary/20" />
-            <span className="absolute inset-2 animate-pulse rounded-full bg-primary/15" />
-            <span className="relative flex h-11 w-11 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg">
-              <Nfc className="h-5 w-5" />
-            </span>
-          </div>
-        </div>
-
-        {/* Phone silhouette sliding over the card's corner */}
-        <div className="absolute -bottom-3 -right-2 flex h-24 w-14 items-start justify-center rounded-xl border-2 border-foreground/30 bg-background/90 pt-2 shadow-md">
-          <span className="h-1 w-6 rounded-full bg-foreground/20" />
-        </div>
-      </div>
+      <PassportIllustration />
 
       <p className="animate-pulse text-center text-sm text-muted-foreground">
         Waiting for your document…

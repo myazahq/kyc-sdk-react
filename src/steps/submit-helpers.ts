@@ -9,16 +9,12 @@ import { collectWebDeviceMetadata } from '../utils/device-metadata';
 import { withRetry } from '../lib/retry';
 import type { KYCApi, VerifyRequest } from '../services/api';
 
+// Re-exported so existing `./submit-helpers` importers keep working; the token
+// logic now lives in one place (shared with ConsentStep).
+export { fillTokens } from '../lib/tokens';
+
 export function generateRequestId(prefix: 'kyc' | 'kyb' = 'kyc'): string {
 	return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-}
-
-/** Replaces {firstName} / {lastName} tokens with the user's data (or ''). */
-export function fillTokens(template: string, firstName?: string, lastName?: string): string {
-	return template
-		.replace(/\{firstName\}/g, firstName ?? '')
-		.replace(/\{lastName\}/g, lastName ?? '')
-		.trim();
 }
 
 /**

@@ -34,6 +34,15 @@ interface DeviceHandoffGateProps {
   /** Mirror the modal's controls. */
   showThemeToggle?: boolean;
   disableClose?: boolean;
+  /**
+   * Mobile-only workflow (`requireMobileDevice`): there is no "continue on this
+   * device" escape — the phone is the ONLY way forward. Every fallback to the
+   * local flow is removed, including the one that normally rescues a failed
+   * session mint.
+   */
+  mobileOnly?: boolean;
+  /** No handoff configured on a mobile-only workflow: show a plain notice, mint nothing. */
+  noHandoff?: boolean;
 }
 
 // Minimal theme toggle, mirroring KYCModal's (kept local — the modal's isn't
@@ -81,9 +90,13 @@ export default function DeviceHandoffGate({
   onClose,
   showThemeToggle,
   disableClose,
+  mobileOnly,
+  noHandoff,
 }: DeviceHandoffGateProps) {
   const config = useKYCConfig();
-  const handoff = useDeviceHandoff(config.api, snapshot, true);
+  // A mobile-only workflow with handoff switched off has nothing to hand off
+  // to — don't mint a session just to render a notice.
+  const handoff = useDeviceHandoff(config.api, snapshot, !noHandoff);
   const [copied, setCopied] = useState(false);
   const [noCamera, setNoCamera] = useState(false);
   const submittedRef = useRef(false);
@@ -105,9 +118,11 @@ export default function DeviceHandoffGate({
   // If the session can't be created (server not running, endpoint not deployed,
   // network error), silently fall through to the local flow. The user sees a
   // brief spinner, then the normal modal opens — no error screen.
+  // EXCEPT on a mobile-only workflow: falling through would run the flow on the
+  // very device the workflow forbids, so the error surfaces as a retry instead.
   useEffect(() => {
-    if (handoff.phase === 'error') onContinueHere();
-  }, [handoff.phase, onContinueHere]);
+    if (handoff.phase === 'error' && !mobileOnly) onContinueHere();
+  }, [handoff.phase, onContinueHere, mobileOnly]);
 
   // Fire onSubmit EXACTLY ONCE when the phone completes. The desktop never
   // enters the verification flow, so it never calls api.verify — this is the
@@ -173,6 +188,8 @@ export default function DeviceHandoffGate({
               code={handoff.code}
               noCamera={noCamera}
               copied={copied}
+              mobileOnly={mobileOnly === true}
+              noHandoff={noHandoff === true}
               onCopyLink={copyLink}
               onContinueHere={onContinueHere}
               onRegenerate={handoff.regenerate}
@@ -195,6 +212,10 @@ interface GateBodyProps {
   code: string | null;
   noCamera: boolean;
   copied: boolean;
+  /** Mobile-only workflow: no "continue on this device" anywhere. */
+  mobileOnly: boolean;
+  /** Mobile-only AND handoff disabled: a notice, no QR. */
+  noHandoff: boolean;
   onCopyLink: () => void;
   onContinueHere: () => void;
   onRegenerate: () => void;
@@ -202,9 +223,28 @@ interface GateBodyProps {
 }
 
 function GateBody({
-  phase, url, code, noCamera, copied,
+  phase, url, code, noCamera, copied, mobileOnly, noHandoff,
   onCopyLink, onContinueHere, onRegenerate, onDone,
 }: GateBodyProps) {
+  // Mobile-only with handoff off: nothing to scan — the user must reopen the
+  // flow on a phone themselves.
+  if (noHandoff) {
+    return (
+      <div className="flex flex-col items-center gap-6 py-8 animate-fade-in">
+        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
+          <Smartphone className="h-7 w-7 text-primary" />
+        </div>
+        <div className="max-w-sm text-center space-y-1">
+          <h2 className="text-xl font-semibold font-heading">Continue on a mobile device</h2>
+          <p className="text-sm text-muted-foreground">
+            This verification can only be completed on a phone or tablet. Open it on your mobile
+            device to continue.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   if (phase === 'submitted') {
     return (
       <div className="flex flex-col items-center gap-6 py-8 animate-fade-in">
@@ -234,8 +274,29 @@ function GateBody({
         </div>
         <div className="flex w-full flex-col gap-2">
           <Button className="w-full" onClick={onRegenerate}>Generate a new link</Button>
-          <Button variant="ghost" className="w-full" onClick={onContinueHere}>Continue on this device</Button>
+          {!mobileOnly && (
+            <Button variant="ghost" className="w-full" onClick={onContinueHere}>Continue on this device</Button>
+          )}
         </div>
+      </div>
+    );
+  }
+
+  // Mobile-only: a failed mint can't fall through to the local flow (the parent
+  // suppresses that), so it needs its own retry.
+  if (phase === 'error' && mobileOnly) {
+    return (
+      <div className="flex flex-col items-center gap-6 py-8 animate-fade-in">
+        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted">
+          <RefreshCcw className="h-7 w-7 text-muted-foreground" />
+        </div>
+        <div className="max-w-sm text-center space-y-1">
+          <h2 className="text-lg font-semibold font-heading">Couldn’t create the link</h2>
+          <p className="text-sm text-muted-foreground">
+            This verification must be completed on a mobile device. Try generating the link again.
+          </p>
+        </div>
+        <Button className="w-full" onClick={onRegenerate}>Try again</Button>
       </div>
     );
   }
@@ -252,9 +313,11 @@ function GateBody({
         </div>
         <h2 className="text-xl font-semibold font-heading">Continue on your phone</h2>
         <p className="max-w-sm text-sm text-muted-foreground">
-          {noCamera
-            ? 'This device has no camera. Scan the QR code with your phone to finish your verification there.'
-            : 'Scan the QR code with your phone to continue your verification there — handy for capturing your ID and selfie.'}
+          {mobileOnly
+            ? 'This verification can only be completed on a mobile device. Scan the QR code with your phone to continue there.'
+            : noCamera
+              ? 'This device has no camera. Scan the QR code with your phone to finish your verification there.'
+              : 'Scan the QR code with your phone to continue your verification there — handy for capturing your ID and selfie.'}
         </p>
       </div>
 
@@ -286,17 +349,25 @@ function GateBody({
         </p>
       )}
 
-      {/* Continue here — disabled once the phone has opened the link */}
+      {/* Continue here — disabled once the phone has opened the link. A
+          mobile-only workflow has no such escape: the phone is the only path. */}
       <div className="w-full border-t border-border pt-4">
-        <Button
-          variant="ghost"
-          className={cn('w-full gap-2', phase === 'opened' && 'pointer-events-none opacity-50')}
-          onClick={onContinueHere}
-          disabled={phase === 'opened'}
-        >
-          <Monitor className="h-4 w-4" />
-          Continue on this device
-        </Button>
+        {mobileOnly ? (
+          <p className="flex items-center justify-center gap-2 text-center text-xs text-muted-foreground">
+            <Monitor className="h-3.5 w-3.5 shrink-0" />
+            This verification can’t be completed on a computer.
+          </p>
+        ) : (
+          <Button
+            variant="ghost"
+            className={cn('w-full gap-2', phase === 'opened' && 'pointer-events-none opacity-50')}
+            onClick={onContinueHere}
+            disabled={phase === 'opened'}
+          >
+            <Monitor className="h-4 w-4" />
+            Continue on this device
+          </Button>
+        )}
       </div>
     </div>
   );

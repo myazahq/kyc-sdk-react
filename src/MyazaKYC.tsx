@@ -11,6 +11,7 @@ import { configureSpeech } from './liveness/speech';
 import { mergeWorkflowConfig } from './lib/workflow-merge';
 import { safeReportError } from './lib/errors';
 import { isDesktopDevice } from './lib/device';
+import { confirmMobileDevice, type DeviceClassResult } from './lib/device-class';
 import { resolveBaseUrl } from './lib/resolve-url';
 import { createKYCApi, KYCApiError, type WorkflowResolutionResponse, type HandoffSessionSnapshot } from './services/api';
 import { KYCError } from './types/verification';
@@ -97,12 +98,14 @@ function KYCInner({
   allowDocumentUpload,
   enableLiveness,
   livenessMode,
+  flashSequenceLength,
   deviceIntelligence,
   voiceGuidance,
   showThemeToggle,
   fullScreen,
   disableClose,
   deviceHandoff,
+  requireMobileDevice,
   defaultOpen,
   previewMode,
   previewStep,
@@ -145,8 +148,10 @@ function KYCInner({
     ...(allowDocumentUpload !== undefined ? { allowDocumentUpload } : {}),
     ...(enableLiveness !== undefined ? { enableLiveness } : {}),
     ...(livenessMode !== undefined ? { livenessMode } : {}),
+    ...(flashSequenceLength !== undefined ? { flashSequenceLength } : {}),
     ...(deviceIntelligence !== undefined ? { deviceIntelligence } : {}),
     ...(deviceHandoff !== undefined ? { deviceHandoff } : {}),
+    ...(requireMobileDevice !== undefined ? { requireMobileDevice } : {}),
     ...(voiceGuidance !== undefined ? { voiceGuidance } : {}),
     ...(showThemeToggle !== undefined ? { showThemeToggle } : {}),
     ...(fullScreen !== undefined ? { fullScreen } : {}),
@@ -163,7 +168,7 @@ function KYCInner({
     ...(userId ? { userId } : {}),
     ...(userData ? { userData } : {}),
     ...(assetsBasePath ? { assetsBasePath } : {}),
-  }), [country, workflowId, idTypes, countries, enableSelfie, enableDocumentCapture, allowDocumentUpload, enableLiveness, livenessMode, deviceIntelligence, deviceHandoff, voiceGuidance, showThemeToggle, fullScreen, disableClose, appearance, consent, success, emailVerification, phoneVerification, questionnaire, proofOfAddress, nfc, metadata, userId, userData, assetsBasePath]);
+  }), [country, workflowId, idTypes, countries, enableSelfie, enableDocumentCapture, allowDocumentUpload, enableLiveness, livenessMode, flashSequenceLength, deviceIntelligence, deviceHandoff, requireMobileDevice, voiceGuidance, showThemeToggle, fullScreen, disableClose, appearance, consent, success, emailVerification, phoneVerification, questionnaire, proofOfAddress, nfc, metadata, userId, userData, assetsBasePath]);
 
   // Pre-load MediaPipe Face Mesh model as soon as the SDK mounts and apply the
   // voice-guidance config (enabled + language) for the spoken liveness prompts.
@@ -217,16 +222,43 @@ function KYCInner({
       ? business?.applicant?.verification === true || business?.documents?.enabled === true
       : enableLiveness !== false || enableDocumentCapture !== false;
 
-  const handleOpen = useCallback(() => {
+  // Mobile-only workflows: kick off the hardware confirmation as soon as the
+  // SDK mounts. The motion probe listens for up to ~1s, so doing it here keeps
+  // the trigger click instant; handleOpen just awaits the same promise.
+  const deviceCheckRef = useRef<Promise<DeviceClassResult> | null>(null);
+  const confirmDevice = useCallback(() => {
+    deviceCheckRef.current = deviceCheckRef.current ?? confirmMobileDevice();
+    return deviceCheckRef.current;
+  }, []);
+  useEffect(() => {
+    if (requireMobileDevice === true && !previewMode) void confirmDevice();
+  }, [requireMobileDevice, previewMode, confirmDevice]);
+
+  const handleOpen = useCallback(async () => {
     resetIntegritySignals(); // fresh capture-integrity slate per session
     seedUserData();
     onStart?.();
+
+    // Mobile-only workflow: the flow may start ONLY on a confirmed handheld.
+    // confirmMobileDevice reads hardware (GPU renderer + motion sensor), so a
+    // desktop in responsive/device-emulation mode is rejected. Preview mode is
+    // exempt — the builder preview always runs on the author's desktop.
+    if (requireMobileDevice === true && !previewMode) {
+      const { deviceClass } = await confirmDevice();
+      if (deviceClass !== 'mobile') {
+        setGateOpen(true); // QR gate, or the notice when handoff is off
+        return;
+      }
+      dispatch({ type: 'OPEN_MODAL' });
+      return;
+    }
+
     if (deviceHandoff !== false && cameraNeeded && isDesktopDevice()) {
       setGateOpen(true);
     } else {
       dispatch({ type: 'OPEN_MODAL' });
     }
-  }, [dispatch, onStart, seedUserData, deviceHandoff, cameraNeeded]);
+  }, [dispatch, onStart, seedUserData, deviceHandoff, cameraNeeded, requireMobileDevice, previewMode, confirmDevice]);
 
   // Preview/embedded surfaces: start the flow immediately, no trigger button.
   // Skips the handoff gate — an auto-opened preview never hands off.
@@ -237,6 +269,15 @@ function KYCInner({
     resetIntegritySignals();
     seedUserData();
     onStart?.();
+    // A mobile-only workflow gates the auto-open too — otherwise `defaultOpen`
+    // would be a silent bypass of the whole setting.
+    if (requireMobileDevice === true && !previewMode) {
+      void confirmDevice().then(({ deviceClass }) => {
+        if (deviceClass === 'mobile') dispatch({ type: 'OPEN_MODAL' });
+        else setGateOpen(true);
+      });
+      return;
+    }
     dispatch({ type: 'OPEN_MODAL' });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [defaultOpen]);
@@ -276,7 +317,9 @@ function KYCInner({
       allowDocumentUpload={allowDocumentUpload}
       enableLiveness={enableLiveness}
       livenessMode={livenessMode}
+      flashSequenceLength={flashSequenceLength}
       deviceHandoff={deviceHandoff}
+      requireMobileDevice={requireMobileDevice}
       assetsBasePath={assetsBasePath}
       appearance={appearance}
       consent={consent}
@@ -295,7 +338,7 @@ function KYCInner({
       {!defaultOpen && (
         <Button
           {...triggerProps}
-          onClick={handleOpen}
+          onClick={() => void handleOpen()}
           style={{ ...buildThemeVars(appearance), ...triggerProps.style }}
         >
           {triggerProps.children ??
@@ -313,6 +356,8 @@ function KYCInner({
             onClose={handleGateClose}
             showThemeToggle={showThemeToggle}
             disableClose={disableClose}
+            mobileOnly={requireMobileDevice === true}
+            noHandoff={requireMobileDevice === true && deviceHandoff === false}
           />
         </Suspense>
       )}

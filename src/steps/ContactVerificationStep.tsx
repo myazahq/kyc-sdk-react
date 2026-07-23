@@ -8,6 +8,7 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { PhoneNumberInput } from '../components/PhoneNumberInput';
 import { ContactCodeEntry } from './ContactCodeEntry';
+import { ExpiryCountdown } from '../components/ExpiryCountdown';
 import { useKYCContext } from '../context/KYCContext';
 import { useKYCConfig } from '../context/KYCConfigContext';
 import { stepAfterContact } from '../lib/contact-steps';
@@ -44,6 +45,7 @@ export function ContactVerificationStep({ channel }: { channel: 'email' | 'phone
   const canSend = config.previewMode || (isEmail ? /.+@.+\..+/.test(destination) : phone.isValid);
 
   const [challengeId, setChallengeId] = useState<string | null>(null);
+  const [expiresAt, setExpiresAt] = useState<string | null>(null);
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -69,6 +71,7 @@ export function ContactVerificationStep({ channel }: { channel: 'email' | 'phone
         ...(isEmail ? {} : { via: config.phoneVerification?.channels?.[0] ?? 'sms' }),
       });
       setChallengeId(res.challengeId);
+      setExpiresAt(res.expiresAt ?? null);
       setCode('');
     } catch (err) {
       setError(describeSendError(err));
@@ -151,7 +154,7 @@ export function ContactVerificationStep({ channel }: { channel: 'email' | 'phone
             onComplete={(c) => check(c)}
           />
           <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>The code expires in 5 minutes.</span>
+            {expiresAt ? <ExpiryCountdown expiresAt={expiresAt} /> : <span>The code expires in 5 minutes.</span>}
             <button type="button" className="font-medium text-primary hover:underline disabled:opacity-50" onClick={send} disabled={busy}>
               Resend code
             </button>

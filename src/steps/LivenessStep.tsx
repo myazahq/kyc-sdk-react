@@ -6,6 +6,8 @@ import { cn } from '../lib/utils';
 import { StepHeader } from '../components/StepHeader';
 import { Button } from '../components/ui/button';
 import { CameraPermissionPrimer } from '../components/CameraPermissionPrimer';
+import { ReadyPrimer } from '../components/ReadyPrimer';
+import { READY_LIVENESS } from '../components/ready-primer-content';
 import { LivenessAvatar } from './LivenessAvatar';
 import { useKYCContext } from '../context/KYCContext';
 import { useKYCConfig } from '../context/KYCConfigContext';
@@ -45,11 +47,15 @@ export function LivenessStep() {
   // OS prompt only fires — once the user taps "Grant access".
   const primerStatus = useCameraPrimer();
   const [primed, setPrimed] = useState(false);
-  const needsPrimer = primerStatus === 'needed' && !primed && !preview;
+  // "Here's what happens next" gate — the selfie camera never opens
+  // unannounced. A returning user with a captured selfie skips it.
+  const [ready, setReady] = useState(false);
+  const showReadyPrimer = !ready && !preview;
+  const needsPrimer = ready && primerStatus === 'needed' && !primed && !preview;
 
   const camera = useCamera({
     facingMode: 'user',
-    enabled: !preview && (primerStatus === 'granted' || primed),
+    enabled: ready && !preview && (primerStatus === 'granted' || primed),
   });
   const { capture } = useImageCapture({ videoRef: camera.videoRef, mirror: true });
   const { compress, isCompressing } = useImageCompress();
@@ -74,7 +80,7 @@ export function LivenessStep() {
     captureFrame: capture,
     compressImage: compress,
     lightLevel,
-    config: { mode: livenessMode },
+    config: { mode: livenessMode, flashSequenceLength: config.flashSequenceLength },
   });
 
   // Record the mode once for the submit's integrity metadata (flash results
@@ -358,6 +364,27 @@ export function LivenessStep() {
   // Camera permission primer (before the OS prompt)
   // ---------------------------------------------------------------------------
 
+  if (showReadyPrimer) {
+    return (
+      <div className="space-y-5 animate-slide-up">
+        <StepHeader
+          title="Liveness Check"
+          description="We'll use your camera to verify you're a real person."
+          onBack={handleBack}
+        />
+        <ReadyPrimer
+          {...READY_LIVENESS}
+          onReady={() => {
+            // Speech needs a user gesture to start — prime it on this tap, the
+            // same way the permission primer does.
+            primeSpeech();
+            setReady(true);
+          }}
+        />
+      </div>
+    );
+  }
+
   if (needsPrimer) {
     return (
       <div className="space-y-5 animate-slide-up">
@@ -423,13 +450,22 @@ export function LivenessStep() {
   return (
     <div className="space-y-5 animate-slide-up">
       {/* Screen-reflection flash overlay: painted over the WHOLE viewport so
-          the display emits enough light for the face to reflect. Fixed +
-          max z so it covers the modal chrome; pointer-events pass through. */}
+          the display emits enough light for the face to reflect. Fixed + z-[90]
+          so it covers the modal chrome; pointer-events pass through. The preview
+          circle below is lifted to z-[95] so it sits ABOVE this overlay — the
+          live face stays visible while the rest of the screen flashes. (A
+          computed radial "hole" was unreliable: the overlay is contained by the
+          modal's transformed scroll container, so viewport-based coordinates
+          didn't line up. z-index needs no coordinates.) */}
       {liveness.flashColor && (
         <div
           aria-hidden
           className="pointer-events-none fixed inset-0 z-[90]"
-          style={{ backgroundColor: liveness.flashColor, opacity: 0.96, transition: 'background-color 120ms linear' }}
+          style={{
+            backgroundColor: liveness.flashColor,
+            opacity: 0.96,
+            transition: 'background-color 120ms linear',
+          }}
         />
       )}
 
@@ -453,8 +489,10 @@ export function LivenessStep() {
           {isLoading ? 'Setting up...' : hasWrongGesture ? 'Wrong gesture' : instructionText}
         </p>
 
-        {/* Circular camera view */}
-        <div className="relative">
+        {/* Circular camera view. z-[95] keeps it ABOVE the flash overlay
+            (z-[90]) so the live face stays visible during the flash sequence
+            while the rest of the screen emits colour. */}
+        <div className="relative z-[95]">
           <div
             className={cn(
               'relative h-64 w-64 sm:h-80 sm:w-80 overflow-hidden rounded-full border-4 transition-colors duration-300',
@@ -628,7 +666,7 @@ function getInstructionText(state: ReturnType<typeof useLiveness>['state']): str
     case 'challenge_passed':
       return 'Great!';
     case 'capturing':
-      return 'Kindly hold still...';
+      return state.guidance ?? 'Kindly hold still...';
     case 'complete':
       return 'Liveness verified!';
     case 'failed':

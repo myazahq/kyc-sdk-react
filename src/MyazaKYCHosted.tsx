@@ -7,6 +7,7 @@ import { KYCConfigProvider, type ServerSdkConfig } from './context/KYCConfigCont
 import { KYCModal } from './components/KYCModal';
 import { buildThemeVars } from './lib/theme';
 import { isDesktopDevice } from './lib/device';
+import { confirmMobileDevice } from './lib/device-class';
 import { primeFaceMesh } from './liveness/face-mesh';
 import { configureSpeech } from './liveness/speech';
 import { createKYCApi, type HandoffBootstrapResponse, type HandoffSessionSnapshot, type KYCApi } from './services/api';
@@ -159,7 +160,9 @@ function HostedFlow({
         allowDocumentUpload={snap.allowDocumentUpload}
         enableLiveness={snap.enableLiveness}
         livenessMode={snap.livenessMode as 'gestures' | 'flash' | 'both' | undefined}
+        flashSequenceLength={snap.flashSequenceLength as number | undefined}
         deviceHandoff={snap.deviceHandoff}
+        requireMobileDevice={snap.requireMobileDevice}
         appearance={snap.appearance as KYCAppearance | undefined}
         consent={snap.consent as KYCConsentContent | undefined}
         success={snap.success as KYCSuccessContent | undefined}
@@ -174,6 +177,8 @@ function HostedFlow({
         <HostedFlowInner
           snapshot={snap}
           cameraNeeded={cameraNeeded}
+          mobileOnly={snap.requireMobileDevice === true}
+          handoffDisabled={snap.deviceHandoff === false}
           voiceGuidance={snap.voiceGuidance as VoiceGuidanceOption | undefined}
           // Business flows have no liveness step — never load the face model —
           // unless the workflow runs the applicant's own capture leg in-flow.
@@ -193,6 +198,8 @@ function HostedFlow({
 function HostedFlowInner({
   snapshot,
   cameraNeeded,
+  mobileOnly,
+  handoffDisabled,
   voiceGuidance,
   enableLiveness,
   showThemeToggle,
@@ -200,6 +207,9 @@ function HostedFlowInner({
 }: {
   snapshot: HandoffSessionSnapshot;
   cameraNeeded: boolean;
+  /** Mobile-only workflow — the flow may not run on this device unless it's a confirmed handheld. */
+  mobileOnly: boolean;
+  handoffDisabled: boolean;
   voiceGuidance?: VoiceGuidanceOption;
   enableLiveness?: boolean;
   showThemeToggle?: boolean;
@@ -213,7 +223,15 @@ function HostedFlowInner({
   const [gateOpen, setGateOpen] = useState(false);
 
   useEffect(() => {
-    if (cameraNeeded && isDesktopDevice()) {
+    // Mobile-only workflow: the flow opens only on a hardware-confirmed
+    // handheld (GPU + motion, not viewport — see lib/device-class.ts). Anything
+    // else lands on the gate, which offers the phone QR and no way through.
+    if (mobileOnly) {
+      void confirmMobileDevice().then(({ deviceClass }) => {
+        if (deviceClass === 'mobile') dispatch({ type: 'OPEN_MODAL' });
+        else setGateOpen(true);
+      });
+    } else if (cameraNeeded && isDesktopDevice()) {
       setGateOpen(true);
     } else {
       dispatch({ type: 'OPEN_MODAL' });
@@ -223,8 +241,10 @@ function HostedFlowInner({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Verify on this computer instead: leave the gate, run the flow here.
+  // Verify on this computer instead: leave the gate, run the flow here. Never
+  // reachable on a mobile-only workflow — the gate hides every path to it.
   const continueHere = () => {
+    if (mobileOnly) return;
     setGateOpen(false);
     dispatch({ type: 'OPEN_MODAL' });
   };
@@ -240,9 +260,15 @@ function HostedFlowInner({
             snapshot={snapshot}
             onContinueHere={continueHere}
             // No parent surface to return to on the hosted page — dismissing the
-            // gate simply falls through to verifying on this device.
+            // gate simply falls through to verifying on this device (a
+            // mobile-only flow makes both a no-op and keeps the gate up).
             onClose={continueHere}
             showThemeToggle={showThemeToggle}
+            mobileOnly={mobileOnly}
+            noHandoff={mobileOnly && handoffDisabled}
+            // Nothing to dismiss to on a mobile-only hosted link — hide the X
+            // rather than leave a button that does nothing.
+            disableClose={mobileOnly}
           />
         </Suspense>
       )}

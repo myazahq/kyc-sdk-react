@@ -11,7 +11,6 @@ import {
   Car,
 } from 'lucide-react';
 import { StepHeader } from '../components/StepHeader';
-import { Button } from '../components/ui/button';
 import { RadioGroup, RadioGroupItem } from '../components/ui/radio-group';
 import { Card } from '../components/ui/card';
 import { Label } from '../components/ui/label';
@@ -89,15 +88,20 @@ export function IdTypeStep({ country, allowedIdTypes }: IdTypeStepProps = {}) {
       ? grantedVisible.filter((t) => !t.requiresDocumentCapture)
       : grantedVisible;
 
+  // Picking an ID type ADVANCES — there is no Continue button. This is a
+  // single-select list with nothing else on the step to confirm, so a second
+  // tap only restates a decision already made. It also matches country-select,
+  // which advances on tap: having one list advance and the next one not was the
+  // inconsistency worth removing. A mis-tap costs one Back.
+  //
+  // NOTE: navigate off `value`, not `state.selectedIdType` — the dispatch above
+  // hasn't been applied yet within this handler, so the state read would be a
+  // step behind (and empty on the very first selection).
   const handleSelect = (value: string) => {
     dispatch({ type: 'SELECT_ID_TYPE', payload: value });
-  };
-
-  const handleContinue = () => {
-    if (!state.selectedIdType) return;
     // Number-only IDs (e.g. BVN/NIN/vNIN) skip straight to id-input; every
     // document-scanned ID goes through document-capture.
-    const def = config.getIdTypeDefinition(state.selectedIdType, resolvedCountry);
+    const def = config.getIdTypeDefinition(value, resolvedCountry);
     const next = def && !def.requiresDocumentCapture ? 'id-input' : 'document-capture';
     dispatch({ type: 'SET_STEP', payload: next });
   };
@@ -171,13 +175,6 @@ export function IdTypeStep({ country, allowedIdTypes }: IdTypeStepProps = {}) {
         })}
       </RadioGroup>
 
-      <Button
-        onClick={handleContinue}
-        disabled={!state.selectedIdType}
-        className="w-full"
-      >
-        Continue
-      </Button>
     </div>
   );
 }

@@ -11,6 +11,8 @@ import {
 	CreditCard,
 } from "lucide-react";
 import { StepHeader } from "../components/StepHeader";
+import { ReadyPrimer } from "../components/ReadyPrimer";
+import { READY_DOCUMENT } from "../components/ready-primer-content";
 import { ImageCropper } from "../components/ImageCropper";
 import { Button } from "../components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "../components/ui/alert";
@@ -160,14 +162,19 @@ export function DocumentCaptureStep() {
 	// OS prompt only fires — once the user taps "Grant access".
 	const primerStatus = useCameraPrimer();
 	const [primed, setPrimed] = useState(false);
-	const needsPrimer = cameraActive && primerStatus === "needed" && !primed;
+	// "Here's what happens next" gate — shown once before the camera opens, so
+	// the viewfinder never appears unannounced. The permission primer (and the
+	// OS prompt behind it) follows only after the user says they're ready.
+	const [ready, setReady] = useState(false);
+	const showReadyPrimer = cameraActive && !ready;
+	const needsPrimer = cameraActive && ready && primerStatus === "needed" && !primed;
 
 	// Document capture runs at a higher resolution than liveness so the still
 	// image stays sharp enough for OCR (see capture-settings.ts). The video is
 	// kept small via the bitrate + frame-rate caps, not by lowering resolution.
 	const camera = useCamera({
 		facingMode: "environment",
-		enabled: cameraActive && (primerStatus === "granted" || primed),
+		enabled: cameraActive && ready && (primerStatus === "granted" || primed),
 		resolution: {
 			width: DOCUMENT_CAPTURE_WIDTH,
 			height: DOCUMENT_CAPTURE_HEIGHT,
@@ -854,6 +861,10 @@ export function DocumentCaptureStep() {
 			{/* ------------------------------------------------------------------ */}
 			{/* Camera permission primer (before the OS prompt)                     */}
 			{/* ------------------------------------------------------------------ */}
+			{showReadyPrimer && !showFlipBanner && (
+				<ReadyPrimer {...READY_DOCUMENT} onReady={() => setReady(true)} />
+			)}
+
 			{needsPrimer && !showFlipBanner && (
 				<CameraPermissionPrimer
 					bodyText="When prompted, allow camera access to photograph your document."
@@ -864,7 +875,7 @@ export function DocumentCaptureStep() {
 			{/* ------------------------------------------------------------------ */}
 			{/* Camera / capture screen                                             */}
 			{/* ------------------------------------------------------------------ */}
-			{cameraActive && !needsPrimer && !showFlipBanner && (
+			{cameraActive && !showReadyPrimer && !needsPrimer && !showFlipBanner && (
 				<div className='space-y-3'>
 					<div
 						className='relative overflow-hidden rounded-xl bg-black'

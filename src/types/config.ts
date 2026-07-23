@@ -254,15 +254,17 @@ export interface KYCAppearance {
 
 export interface KYCConsentContent {
   /**
-   * Heading on the consent (welcome) screen. Supports `{firstName}` and
-   * `{lastName}` tokens, which are replaced with the values from `userData`
-   * (empty string when absent). Defaults to `Welcome, {firstName}` when a first
-   * name is known, otherwise `Identity Verification`.
+   * Heading on the consent (welcome) screen. Supports `{firstName}` /
+   * `{lastName}` tokens (from `userData`) and, for KYB flows, `{businessName}`
+   * (from `userData.businessName` — the business details aren't collected until
+   * after consent). Absent values resolve to an empty string. Defaults to
+   * `Welcome, {firstName}` when a first name is known, otherwise
+   * `Identity Verification`.
    */
   title?: string;
   /**
-   * Sub-text under the heading. Supports the same `{firstName}` / `{lastName}`
-   * tokens. Defaults to the built-in regulatory copy.
+   * Sub-text under the heading. Supports the same `{firstName}` / `{lastName}` /
+   * `{businessName}` tokens. Defaults to the built-in regulatory copy.
    */
   description?: string;
 }
@@ -274,14 +276,15 @@ export interface KYCConsentContent {
 export interface KYCSuccessContent {
   /**
    * Heading on the success screen shown after a verification is submitted.
-   * Supports `{firstName}` and `{lastName}` tokens, replaced with the values
-   * from `userData` (empty string when absent). Defaults to
-   * `Verification Submitted!`.
+   * Supports `{firstName}` / `{lastName}` tokens (from `userData`) and, for KYB
+   * flows, `{businessName}` (the registration name the applicant entered, or
+   * `userData.businessName`). Absent values resolve to an empty string. Defaults
+   * to `Verification Submitted!`.
    */
   title?: string;
   /**
-   * Sub-text under the heading. Supports the same `{firstName}` / `{lastName}`
-   * tokens. Defaults to the built-in "submitted for review" copy.
+   * Sub-text under the heading. Supports the same `{firstName}` / `{lastName}` /
+   * `{businessName}` tokens. Defaults to the built-in "submitted for review" copy.
    */
   description?: string;
 }
@@ -403,6 +406,12 @@ export interface MyazaKYCConfig<C extends AnyCountry = AnyCountry> {
     firstName?: string;
     lastName?: string;
     dateOfBirth?: string;
+    /**
+     * The name of the business being verified (KYB flows). Only used to fill the
+     * `{businessName}` token in consent/success copy when known upfront — it is
+     * NOT collected from the user (the registry lookup is the source of truth).
+     */
+    businessName?: string;
   };
 
   /** Enable the live-selfie capture step */
@@ -438,6 +447,8 @@ export interface MyazaKYCConfig<C extends AnyCountry = AnyCountry> {
    * flash (strongest). Usually configured in the workflow builder.
    */
   livenessMode?: 'gestures' | 'flash' | 'both';
+  /** Flash-liveness sequence length (colours) for `flash`/`both`. 2–5, default 4. */
+  flashSequenceLength?: number;
 
   /**
    * Device Intelligence — device + IP fraud analysis (multi-accounting,
@@ -466,6 +477,20 @@ export interface MyazaKYCConfig<C extends AnyCountry = AnyCountry> {
    * start the flow directly. Default `true`; set `false` to disable entirely.
    */
   deviceHandoff?: boolean;
+
+  /**
+   * Mobile-only: refuse to run the flow on a desktop/laptop. The SDK starts
+   * only when it can CONFIRM a real handheld device — the check reads hardware
+   * signals (GPU renderer, motion sensor, touch), never viewport width, so a
+   * desktop browser in responsive/device-emulation mode is rejected too.
+   *
+   * Desktop visitors get the "continue on your phone" QR screen with the
+   * "Continue on this device" option removed (or, when
+   * {@link deviceHandoff} is `false`, a plain "use a mobile device" notice).
+   * The server independently re-checks the submission and rejects a provable
+   * desktop with `mobile_device_required`. Default `false`.
+   */
+  requireMobileDevice?: boolean;
 
   /**
    * Hide the close (X) button and block all user-initiated dismissal of the

@@ -26,18 +26,11 @@ import {
   hasKeyPeopleCollection,
 } from '../lib/business-application';
 import { MobileHandoffSheet } from '../components/MobileHandoffSheet';
+import { fillTokens } from '../lib/tokens';
 
 interface ProcessStep {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
-}
-
-/** Replaces {firstName} / {lastName} tokens with the user's data (or ''). */
-function fillTokens(template: string, firstName?: string, lastName?: string): string {
-  return template
-    .replace(/\{firstName\}/g, firstName ?? '')
-    .replace(/\{lastName\}/g, lastName ?? '')
-    .trim();
 }
 
 const DEFAULT_CONSENT_DESCRIPTION =
@@ -54,6 +47,10 @@ export function ConsentStep() {
   const isBusiness = isBusinessFlow(config);
   const firstName = config.userData?.firstName;
   const lastName = config.userData?.lastName;
+  // Business details aren't collected until after consent, so {businessName}
+  // resolves here only when the integrator passes it in via userData.
+  const businessName = config.userData?.businessName;
+  const tokens = { firstName, lastName, businessName };
   const [consented, setConsented] = useState(false);
 
   const defaultTitle = firstName
@@ -62,10 +59,10 @@ export function ConsentStep() {
       ? 'Business Verification'
       : 'Identity Verification';
   const title = config.consent?.title
-    ? fillTokens(config.consent.title, firstName, lastName)
+    ? fillTokens(config.consent.title, tokens)
     : defaultTitle;
   const description = config.consent?.description
-    ? fillTokens(config.consent.description, firstName, lastName)
+    ? fillTokens(config.consent.description, tokens)
     : isBusiness
       ? DEFAULT_BUSINESS_CONSENT_DESCRIPTION
       : DEFAULT_CONSENT_DESCRIPTION;

@@ -7,8 +7,10 @@ import {
   detectNod,
   detectHeadTurn,
   detectBlink,
+  createBlinkState,
   detectSmile,
   checkFacePosition,
+  type BlinkState,
 } from '../liveness/gesture-detector';
 import type {
   LivenessState,
@@ -128,7 +130,7 @@ export function useLiveness({
 
   // Gesture detection history buffers
   const nodHistoryRef = useRef<number[]>([]);
-  const blinkHistoryRef = useRef<number[]>([]);
+  const blinkStateRef = useRef<BlinkState>(createBlinkState());
   const positionStableRef = useRef<number>(0);
   // Last guidance shown during the capturing phase — so we only re-render when
   // it actually changes (the phase runs every frame).
@@ -178,6 +180,18 @@ export function useLiveness({
   // True while a challenge is paused because >1 face is in frame — used to
   // restart the challenge timer when the frame returns to a single face.
   const multiFacePausedRef = useRef(false);
+
+  // Aspect ratio (width / height) of the frames FaceMesh is analyzing. Phones
+  // hand us a PORTRAIT stream (e.g. 480x640) where desktops hand us a landscape
+  // one (640x480), and MediaPipe normalizes x by width and y by height — so any
+  // detector comparing a vertical span against a horizontal one has to divide
+  // the distortion back out. 1 (square) is the safe fallback before metadata
+  // lands, which only makes detection momentarily stricter, never looser.
+  const frameAspect = useCallback((): number => {
+    const video = videoRef.current;
+    if (!video || !video.videoWidth || !video.videoHeight) return 1;
+    return video.videoWidth / video.videoHeight;
+  }, [videoRef]);
 
   // -----------------------------------------------------------------------
   // Helper: update state and phase ref together
@@ -363,7 +377,7 @@ export function useLiveness({
 
       // Reset detection buffers for next challenge
       nodHistoryRef.current = [];
-      blinkHistoryRef.current = [];
+      blinkStateRef.current = createBlinkState();
       prevFaceSigRef.current = null;
 
       const hasMore = tracker.advance();
@@ -637,7 +651,11 @@ export function useLiveness({
           detected = detectHeadTurn(landmarks) !== 'center';
           break;
         case 'blink':
-          detected = detectBlink(landmarks, blinkHistoryRef.current);
+          // The EAR mixes a vertical span (normalized by frame height) with a
+          // horizontal one (normalized by frame width), so it must be corrected
+          // by the frame's aspect ratio — otherwise a portrait phone feed reads
+          // ~1.8x lower than a landscape desktop feed and never clears the bar.
+          detected = detectBlink(landmarks, blinkStateRef.current, frameAspect());
           if (!detected) {
             wrongGesture = detectSmile(landmarks) || detectHeadTurn(landmarks) !== 'center';
           }
@@ -818,7 +836,7 @@ export function useLiveness({
     lastSpokenRef.current = '';
     setVideoBlob(null);
     nodHistoryRef.current = [];
-    blinkHistoryRef.current = [];
+    blinkStateRef.current = createBlinkState();
     positionStableRef.current = 0;
     processingRef.current = false;
     cooldownFramesRef.current = 0;

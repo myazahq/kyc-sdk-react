@@ -51,7 +51,8 @@ export default function VerifyButton() {
 				title: "You're all set, {firstName}!",
 				description: "We'll email you once your verification is reviewed.",
 			}}
-			metadata={{ userId: "test_user_123" }}
+			userId='usr_123'
+			metadata={{ orderId: "ord_456" }}
 			onStart={() => console.log("KYC started")}
 			onStepChange={(step) => console.log("Step:", step)}
 			onSubmit={(submission) => {
@@ -72,15 +73,30 @@ export default function VerifyButton() {
 | Prop                    | Type                                      | Default             | Description                                                                                                          |
 | ----------------------- | ----------------------------------------- | ------------------- | -------------------------------------------------------------------------------------------------------------------- |
 | `apiKey`                | `string`                                  | —                   | **Required.** Sent as `Authorization: Bearer`. The **environment is derived from the key prefix** (`pk_test_…` → sandbox, `pk_live_…` → production); an unrecognized prefix throws. |
-| `country`               | `'NG' \| 'GH' \| 'KE' \| 'ZA' \| 'CI'`    | —                   | **Required.** Country whose ID types are offered.                                                                    |
+| `country`               | `string` (ISO-2)                          | —                   | Country whose ID types are offered. **Required unless `workflowId` is set** (the workflow carries its own country). Any ISO-2 code works — `'NG' \| 'GH' \| 'KE' \| 'ZA' \| 'CI'` keep autocomplete and client-side format validation; every other country renders its ID types from the server. See [Country coverage](#country-coverage). |
+| `workflowId`            | `string` (`wf_…`)                         | —                   | Run a **published Workflow** built in the dashboard. Workflow config wins over overlapping props. See [Workflows](#workflows). |
+| `countries`             | `Array<{ country, idTypes? }>`            | —                   | Multi-region flows — more than one entry opens with a country-select step. Usually supplied by a workflow.            |
 | `idTypes`               | `IdType[]`                                | all allowed for org | Subset of ID types to offer; must be valid for `country`.                                                            |
+| `userId`                | `string`                                  | —                   | **Your** reference for the person being verified. Not matched during verification — it correlates repeat checks of the same user onto one identity so results map back to your record. Prefer this over putting a user id in `metadata`. |
 | `userData`              | `{ firstName?, lastName?, dateOfBirth? }` | —                   | Pre-fills the user's details.                                                                                        |
 | `enableSelfie`          | `boolean`                                 | `true`              | Capture a selfie during liveness.                                                                                    |
 | `enableDocumentCapture` | `boolean`                                 | `true`              | Enable the document-scan step for document IDs.                                                                      |
 | `allowDocumentUpload`   | `boolean`                                 | `true`              | Allow picking a document photo from the device (gallery / drag-and-drop) as an alternative to the camera. `false` hides every "upload instead" affordance (it's still offered on the camera-permission-denied screen as an escape hatch). |
 | `enableLiveness`        | `boolean`                                 | `true`              | Run the liveness challenge step. The server can still disable it per ID type.                                        |
+| `livenessMode`          | `'gestures' \| 'flash' \| 'both'`         | `'gestures'`        | How liveness is proven. See [Liveness modes](#liveness-modes).                                                       |
+| `flashSequenceLength`   | `number` (2–5)                            | `4`                 | Number of colours in the flash sequence, for `'flash'` / `'both'`.                                                   |
 | `voiceGuidance`         | `boolean \| { enabled?, language? }`      | `true`              | Spoken liveness instructions (accessibility, TTS **output** — no microphone). `false` mutes it; pass `{ language: 'fr-FR' }` to set the voice. See [Robustness & error handling](#robustness--error-handling). |
-| `showThemeToggle`       | `boolean`                                 | `false`             | Show a light/dark toggle inside the modal.                                                                           |
+| `emailVerification`     | `EmailVerificationConfig`                 | off                 | Email OTP step after consent. See [Optional steps](#optional-steps).                                                 |
+| `phoneVerification`     | `PhoneVerificationConfig`                 | off                 | Phone OTP step (SMS or WhatsApp). See [Optional steps](#optional-steps).                                             |
+| `proofOfAddress`        | `ProofOfAddressConfig`                    | off                 | Proof-of-address upload after capture. See [Optional steps](#optional-steps).                                        |
+| `questionnaire`         | `QuestionnaireConfig`                     | off                 | Compliance questions before submission. See [Optional steps](#optional-steps).                                       |
+| `nfc`                   | `NfcConfig`                               | off                 | eMRTD chip read. **Mobile SDKs only** — see [Optional steps](#optional-steps).                                       |
+| `deviceIntelligence`    | `boolean`                                 | `true`              | Device + IP fraud analysis (multi-accounting, emulator, datacenter IP, velocity). **Billed per verification**; `false` disables the analysis, its charge, and the SDK's fingerprint collection. |
+| `showThemeToggle`       | `boolean`                                 | `true`              | Show a light/dark toggle inside the modal. When `false` the flow stays on `appearance.theme`.                         |
+| `fullScreen`            | `boolean`                                 | `false`             | Force the fullscreen layout on every device (desktop drops the centered modal). Mobile is always fullscreen.          |
+| `disableClose`          | `boolean`                                 | `false`             | Hide the X and block **all** user dismissal (backdrop, Escape, swipe-down). The flow can then only be closed via `useMyazaKYC().close()`. The terminal "Submitted" step is already non-dismissible regardless. |
+| `requireMobileDevice`   | `boolean`                                 | `false`             | Refuse to run on desktop. Confirmed via hardware signals (GPU renderer, motion sensor, touch) — never viewport width, so responsive-mode desktops are rejected too. Desktop visitors get the handoff QR screen without the "continue on this device" option. The server re-checks and rejects with `mobile_device_required`. |
+| `assetsBasePath`        | `string`                                  | bundled data URIs   | Load the liveness gesture GIFs from a URL instead of the inlined data URIs. Only needed under a strict `img-src` CSP that forbids `data:`. Copy `node_modules/@myazahq/kyc-sdk-react/gifs/` to the path you point at. |
 | `deviceHandoff`         | `boolean`                                 | `true`              | On desktop, show a "continue on your phone" screen (QR + copyable link) before the flow starts — handy when the computer has no webcam. The user can still choose to continue on the current device, and when they finish on their phone the desktop completes automatically. Set `false` to disable. Has no effect on mobile/touch devices. |
 | `appearance`            | `KYCAppearance`                           | brand defaults      | Brand & theme the modal — colors, logo, light/dark. See [Appearance & theming](#appearance--theming).                |
 | `consent`               | `KYCConsentContent`                       | built-in copy       | Override the consent/welcome screen `title` and `description`. See [Consent screen copy](#consent-screen-copy).      |
@@ -106,6 +122,154 @@ base URL) from the API key prefix, which is the single source of truth:
 | `pk_live_…` / `sk_live_…` | production | `https://trust.myaza.app` |
 
 An unrecognized or malformed key throws at setup (it never silently defaults).
+
+## Workflows
+
+Instead of configuring the flow in code, you can build it in the Myaza dashboard
+and reference it by id:
+
+```tsx
+<MyazaKYC apiKey="pk_live_xxx" workflowId="wf_abc123" userId="usr_123" />
+```
+
+The SDK fetches the published workflow and uses it as the source of truth:
+
+- **Workflow config wins** over any overlapping prop — country, ID types, step
+  toggles, appearance, copy. Set them in the builder, not in code.
+- **Runtime data always comes from your code**: `userId`, `userData`,
+  `metadata`, and every callback.
+- `country` becomes optional, because the workflow carries it.
+- An unknown or unpublished id surfaces as a blocking `invalid_workflow` error
+  through `onError` and in the modal — never a silently different flow.
+
+This is the recommended way to drive the optional steps below: compliance teams
+change the flow in the dashboard without a redeploy.
+
+## Country coverage
+
+Verification is **not limited to a fixed country list**.
+
+- **Curated countries** — `NG`, `GH`, `KE`, `ZA`, `CI` — ship local ID-type
+  definitions, so you get TypeScript autocomplete on `idTypes` and client-side
+  ID-number format validation before anything is uploaded.
+- **Every other ISO-2 country** works too. Its ID types (passport, driver's
+  licence, national ID) come from the server along with their labels and how
+  many sides to scan, so the SDK renders pairs it has no local definition for.
+  There's no client-side number-format check for these — the server validates.
+
+Which `(country, ID type)` pairs your organization may actually use is enforced
+server-side; the picker only ever shows the intersection of your `idTypes` prop
+and what your org is granted.
+
+## Optional steps
+
+Steps that are off unless configured. Each is normally switched on in the
+dashboard workflow builder (so it rides `workflowId`), but every one can also be
+passed directly as a prop.
+
+The flow runs them in this order:
+
+```
+consent → email-verification → phone-verification → country-select → id-type
+       → id-input / document-capture → nfc → liveness → proof-of-address
+       → questionnaire → submitted
+```
+
+| Prop | Shape | What it adds |
+|---|---|---|
+| `emailVerification` | `{ enabled?, required?, codeLength?, maxAttempts?, inputStyle? }` | Email OTP right after consent. `required: false` adds a "skip for now". `codeLength` 4–8 (default 6), `maxAttempts` 1–5 (default 3), `inputStyle` `'segmented'` (default) or `'text'`. |
+| `phoneVerification` | same, plus `{ channels?, defaultCountry? }` | Phone OTP. `channels` defaults to `['sms']`; add `'whatsapp'` to offer it. `defaultCountry` sets the dial code (falls back to the flow's country). |
+| `proofOfAddress` | `{ enabled?, documentTypes?, otherLabel?, maxAgeDays? }` | Upload a utility bill, bank statement, tenancy agreement, or other document. `maxAgeDays` is the recency window the server checks the document date against (default 90). |
+| `questionnaire` | `{ enabled?, title?, description?, fields }` | Compliance declarations before submission. Each field has a stable snake_case `key` (also the webhook field name) and a `type`: `text`, `number`, `money`, `select`, `multiselect`, `boolean`, `date`. |
+| `nfc` | `{ enabled?, idTypes?, allowSkip? }` | Reads the passport/ID **chip** (eMRTD) for the strongest assurance level. |
+
+**`nfc` is mobile-only.** Browsers can't do ISO-DEP, so the web SDK never puts
+the chip step in the flow — use the Flutter or React Native SDK for chip reads.
+The web SDK only renders the screen inside the dashboard builder's preview,
+where it stands in for the mobile UI.
+
+Answers and outcomes for these steps arrive in the verification webhook
+(`data.questionnaire`, `data.emailVerification`, `data.phoneVerification`,
+`data.proofOfAddress`) — proof of address never changes the pass/fail outcome on
+its own.
+
+```tsx
+<MyazaKYC
+  apiKey="pk_live_xxx"
+  country="NG"
+  phoneVerification={{ enabled: true, channels: ["sms", "whatsapp"] }}
+  proofOfAddress={{ enabled: true, documentTypes: ["utility_bill", "bank_statement"] }}
+  questionnaire={{
+    title: "A few final questions",
+    fields: [
+      { key: "source_of_funds", label: "Source of funds", type: "select", required: true,
+        options: [{ value: "salary", label: "Salary" }, { value: "business", label: "Business income" }] },
+      { key: "expected_monthly_volume", label: "Expected monthly volume", type: "money",
+        currencies: ["NGN", "USD"] },
+    ],
+  }}
+/>
+```
+
+## Liveness modes
+
+`livenessMode` picks how the selfie step proves a real person is present:
+
+| Mode | How it works | Trade-off |
+|---|---|---|
+| `'gestures'` (default) | Randomized gesture challenges — nod, turn, blink, smile. | Familiar; takes a few seconds of user action. |
+| `'flash'` | The screen emits a random colour sequence and the reflection on the face is verified. | Fast, hold-still, and defeats replay and camera-injection attacks. |
+| `'both'` | Gestures, then flash. | Strongest; longest. |
+
+`flashSequenceLength` (2–5, default 4) sets how many colours the flash sequence
+uses. Longer is harder to spoof and takes slightly longer.
+
+## Biometric re-authentication
+
+For a **returning** user who has already been verified, `<MyazaBiometricAuth />`
+re-confirms it's still them with a live selfie matched 1:1 against their
+enrollment selfie. No document, no government-database lookup, no re-KYC.
+
+```tsx
+import { MyazaBiometricAuth } from "@myazahq/kyc-sdk-react";
+import "@myazahq/kyc-sdk-react/styles.css";
+
+<MyazaBiometricAuth
+  apiKey="pk_live_xxx"
+  externalUserId="usr_123"          // the same reference you passed as `userId` at KYC
+  livenessMode="flash"
+  onAuthenticated={({ attemptId, confidence, token }) => {
+    // `token` is a SINGLE-USE proof. Send it to your backend and verify it
+    // there with a secret key — never trust this callback alone as authorization.
+  }}
+  onFailed={({ status, attemptId, confidence }) => {
+    // Ran fine, but the user did not pass (no match / liveness failed).
+  }}
+  onError={(err) => console.error(err.code, err.message)}
+>
+  Confirm it's you
+</MyazaBiometricAuth>
+```
+
+| Prop | Type | Default | Description |
+|---|---|---|---|
+| `apiKey` | `string` | — | **Required.** Same key rules as `<MyazaKYC />`. |
+| `externalUserId` | `string` | — | **Required.** The user to re-authenticate — the reference you passed as `userId` during their KYC. |
+| `livenessMode` | `'gestures' \| 'flash' \| 'both'` | `'gestures'` | As above. |
+| `defaultOpen` | `boolean` | `false` | Open the modal on mount, skipping the trigger button. |
+| `appearance` | `KYCAppearance` | brand defaults | Same theming tokens as the KYC modal. |
+| `disableClose` | `boolean` | `false` | Block user dismissal. |
+| `assetsBasePath` | `string` | bundled | As above. |
+| `onOpen` / `onClose` | `() => void` | — | Modal lifecycle. |
+| `onAuthenticated` | `({ attemptId, confidence, token }) => void` | — | Passed. Verify `token` server-side. |
+| `onFailed` | `({ status, attemptId, confidence }) => void` | — | Did not pass. |
+| `onError` | `(error: KYCError) => void` | — | Technical failure — network, not enrolled, insufficient credits. |
+
+Like `<MyazaKYC />`, the trigger is a real `<button>`: `children`, `className`,
+and other button attributes are forwarded (`MyazaBiometricAuthProps` is exported).
+
+> A user must have completed a KYC verification with a selfie before they can be
+> re-authenticated. Calling this for someone with no enrollment fires `onError`.
 
 ## Trigger button
 

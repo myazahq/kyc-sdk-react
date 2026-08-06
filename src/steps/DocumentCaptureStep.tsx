@@ -14,6 +14,7 @@ import { StepHeader } from "../components/StepHeader";
 import { ReadyPrimer } from "../components/ReadyPrimer";
 import { READY_DOCUMENT } from "../components/ready-primer-content";
 import { ImageCropper } from "../components/ImageCropper";
+import { DocumentReview } from "./DocumentReview";
 import { Button } from "../components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "../components/ui/alert";
 import { CameraPermissionPrimer } from "../components/CameraPermissionPrimer";
@@ -677,7 +678,16 @@ export function DocumentCaptureStep() {
 	}
 
 	return (
-		<div className='space-y-5 animate-slide-up'>
+		<div
+			className={cn(
+				'space-y-5 animate-slide-up',
+				// Review opts into the modal's flex layout (like CountrySelectStep) so
+				// its action bar can be pinned instead of scrolling out of sight.
+				// space-y-5 is KEPT: the header and the document badge above are
+				// siblings here, and collapsing their spacing to pin a footer would
+				// trade one layout bug for another.
+				phase === 'review' && 'flex min-h-0 flex-1 flex-col',
+			)}>
 			<StepHeader title={title} description={description} onBack={handleBack} />
 
 			{/* Document type badge + progress */}
@@ -756,77 +766,15 @@ export function DocumentCaptureStep() {
 			{/* Review screen                                                        */}
 			{/* ------------------------------------------------------------------ */}
 			{phase === "review" && (
-				<div className='space-y-4'>
-					{isTwoSided ?
-						<div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
-							<div className='space-y-1.5'>
-								<p className='text-xs font-medium text-muted-foreground text-center'>
-									Front
-								</p>
-								<div className='relative overflow-hidden rounded-xl border border-border'>
-									<img
-										src={frontPreview!}
-										alt='Front of document'
-										className='w-full object-contain'
-									/>
-									{isUploading && uploadOverlay}
-								</div>
-								<Button
-									variant='ghost'
-									size='sm'
-									className='w-full gap-1.5 text-xs'
-									onClick={retakeFront}
-									disabled={isBusy}>
-									<RotateCcw className='h-3.5 w-3.5' />
-									Retake Front
-								</Button>
-							</div>
-							<div className='space-y-1.5'>
-								<p className='text-xs font-medium text-muted-foreground text-center'>
-									Back
-								</p>
-								<div className='relative overflow-hidden rounded-xl border border-border'>
-									<img
-										src={backPreview!}
-										alt='Back of document'
-										className='w-full object-contain'
-									/>
-									{isUploading && uploadOverlay}
-								</div>
-								<Button
-									variant='ghost'
-									size='sm'
-									className='w-full gap-1.5 text-xs'
-									onClick={retakeBack}
-									disabled={isBusy}>
-									<RotateCcw className='h-3.5 w-3.5' />
-									Retake Back
-								</Button>
-							</div>
-						</div>
-					:	<div className='space-y-3'>
-							<div className='relative overflow-hidden rounded-xl border border-border'>
-								<img
-									src={frontPreview!}
-									alt='Document'
-									className='w-full object-contain'
-								/>
-								{isUploading && uploadOverlay}
-							</div>
-							<Button
-								variant='ghost'
-								size='sm'
-								className='w-full gap-1.5'
-								onClick={retakeFront}
-								disabled={isBusy}>
-								<RotateCcw className='h-4 w-4' />
-								Retake Photo
-							</Button>
-						</div>
-					}
-
+				<DocumentReview
+					front={frontPreview!}
+					back={isTwoSided ? backPreview : null}
+					uploadOverlay={isUploading ? uploadOverlay : null}
+					isBusy={isBusy}
+					onRetakeFront={retakeFront}
+					onRetakeBack={retakeBack}>
 					{retryInfo && isUploading && (
-						<p className='text-center text-xs text-amber-700 dark:text-amber-400'>
+						<p className='mb-2 text-center text-xs text-amber-700 dark:text-amber-400'>
 							Upload failed — retrying ({retryInfo.attempt}/{retryInfo.total})…
 						</p>
 					)}
@@ -855,7 +803,7 @@ export function DocumentCaptureStep() {
 							Continue
 						</Button>
 					}
-				</div>
+				</DocumentReview>
 			)}
 
 			{/* ------------------------------------------------------------------ */}

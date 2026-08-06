@@ -1,10 +1,27 @@
 {
   "name": "@myazahq/kyc-sdk-react",
-  "version": "2.6.1",
+  "version": "2.7.0",
+  "description": "Myaza KYC SDK for React — drop-in identity verification: ID capture, document scan, and active liveness detection",
   "license": "MIT",
+  "author": "Flitstack Technologies Inc.",
+  "keywords": [
+    "kyc",
+    "kyb",
+    "identity-verification",
+    "id-verification",
+    "document-verification",
+    "liveness",
+    "liveness-detection",
+    "face-detection",
+    "biometrics",
+    "aml",
+    "onboarding",
+    "react",
+    "myaza"
+  ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/myazahq/kyc-sdk-react.git"
+    "url": "git+https://github.com/myazahq/kyc-sdk-react.git"
   },
   "homepage": "https://github.com/myazahq/kyc-sdk-react#readme",
   "bugs": {
@@ -32,7 +49,8 @@
     "build": "tsup && tailwindcss -i ./src/globals.css -o ./dist/styles.css --minify",
     "dev": "tsup --watch & tailwindcss -i ./src/globals.css -o ./dist/styles.css --watch",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "prepublishOnly": "pnpm build"
   },
   "peerDependencies": {
     "react": ">=18",

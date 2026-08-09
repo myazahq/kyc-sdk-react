@@ -3,6 +3,7 @@
 import * as React from 'react';
 import { Drawer as DrawerPrimitive } from 'vaul';
 import { cn } from '../../lib/utils';
+import { useThemeVars } from '../../lib/theme-context';
 
 function Drawer({ shouldScaleBackground = true, ...props }: React.ComponentProps<typeof DrawerPrimitive.Root>) {
   return <DrawerPrimitive.Root shouldScaleBackground={shouldScaleBackground} {...props} />;
@@ -21,18 +22,40 @@ function DrawerOverlay({ className, ...props }: React.ComponentProps<typeof Draw
   );
 }
 
-function DrawerContent({ className, children, ...props }: React.ComponentProps<typeof DrawerPrimitive.Content>) {
+function DrawerContent({
+  className,
+  children,
+  style,
+  direction = 'bottom',
+  ...props
+}: React.ComponentProps<typeof DrawerPrimitive.Content> & {
+  /**
+   * Must match the `direction` on the Drawer root. `bottom` (default) is the
+   * mobile drawer — grab handle, rounded top. `right` is the desktop side
+   * sheet — full-height panel sliding in from the right, no handle.
+   */
+  direction?: 'bottom' | 'right';
+}) {
+  // kyc-root only restores the DEFAULT tokens inside the portal; the brand
+  // overrides are inline vars on the modal root, so re-apply them here.
+  const themeVars = useThemeVars();
   return (
     <DrawerPortal>
       <DrawerOverlay />
       <DrawerPrimitive.Content
         className={cn(
-          'kyc-root fixed inset-x-0 bottom-0 z-50 mt-24 flex h-auto flex-col rounded-t-[10px] border border-border bg-background',
+          'kyc-root fixed z-50 flex flex-col bg-background',
+          direction === 'right'
+            ? // A plain full-height panel — no rounded corners, no border;
+              // the overlay alone separates it from the page.
+              'inset-y-0 right-0 h-full w-full max-w-md'
+            : 'inset-x-0 bottom-0 mt-24 h-auto rounded-t-[10px] border border-border',
           className,
         )}
+        style={{ ...themeVars, ...style }}
         {...props}
       >
-        <div className="mx-auto mt-4 h-2 w-25 rounded-full bg-muted" />
+        {direction === 'bottom' && <div className="mx-auto mt-4 h-2 w-25 rounded-full bg-muted" />}
         {children}
       </DrawerPrimitive.Content>
     </DrawerPortal>

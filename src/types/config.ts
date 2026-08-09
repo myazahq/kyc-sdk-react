@@ -244,8 +244,47 @@ export interface KYCAppearance {
    * - Omitted renders the built-in shield badge.
    */
   logo?: string;
-  /** Initial light/dark mode. Applied on mount; the theme toggle can flip it. */
-  theme?: 'light' | 'dark';
+  /**
+   * Corner radius in px for buttons, inputs and cards — the whole radius ladder
+   * scales proportionally from it, so `0` squares the SDK off and `20` softens
+   * it. Clamped to 0–32. Circular elements (avatars, the camera oval, the
+   * liveness ring) are never affected. Defaults to 12.
+   */
+  borderRadius?: number;
+  /**
+   * Body font-family, e.g. `"Inter"` or `"Inter, Helvetica"`.
+   *
+   * A Google Font name (e.g. `"Inter"`) is LOADED for you — the SDK injects the
+   * stylesheet, so allow `fonts.googleapis.com` / `fonts.gstatic.com` if you run
+   * a strict CSP. Any other family is applied but not fetched, which is what you
+   * want for a font you already self-host. Either way it falls back through
+   * `system-ui` if it can't resolve.
+   */
+  fontFamily?: string;
+  /** Heading font-family. Falls back to {@link fontFamily} when only that is set. */
+  headingFontFamily?: string;
+  /**
+   * Colour overrides applied only in DARK mode.
+   *
+   * The base colours above are the light palette. Without this block a branded
+   * flow keeps its light background after the user toggles to dark — these
+   * tokens are set as inline custom properties, which outrank the SDK's own
+   * `.dark` rules. Only the colour keys are read; `theme`, `logo` and the
+   * typography fields are ignored here.
+   */
+  dark?: Pick<
+    KYCAppearance,
+    | 'primaryColor'
+    | 'primaryTextColor'
+    | 'accentColor'
+    | 'backgroundColor'
+    | 'surfaceColor'
+    | 'borderColor'
+    | 'textColor'
+  >;
+  /** Initial mode. 'system' follows the device's prefers-color-scheme (live);
+   *  applied on mount; the theme toggle can flip it. */
+  theme?: 'light' | 'dark' | 'system';
 }
 
 // ---------------------------------------------------------------------------

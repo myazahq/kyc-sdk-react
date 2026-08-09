@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react';
 import type { KYCAppearance } from '../types/config';
+import { fontVars, radiusVars } from './theme-tokens';
 
 /**
  * Maps the consumer's `appearance` colors to the SDK's design-token CSS
@@ -11,8 +12,15 @@ import type { KYCAppearance } from '../types/config';
  *
  * Tokens left unset fall back to the built-in light/dark values in globals.css.
  */
-export function buildThemeVars(appearance?: KYCAppearance): CSSProperties {
+export function buildThemeVars(appearance?: KYCAppearance, isDark = false): CSSProperties {
   if (!appearance) return {};
+
+  // The dark block overrides the base colours when the flow is in dark mode.
+  // Without it a branded flow was stuck on its light palette after toggling,
+  // because these are INLINE custom properties and an inline style outranks the
+  // `.dark .kyc-root` rules that would otherwise supply dark values.
+  const merged: KYCAppearance = isDark && appearance.dark ? { ...appearance, ...appearance.dark } : appearance;
+  appearance = merged;
 
   const vars: Record<string, string> = {};
   const set = (token: string, value?: string) => {
@@ -36,6 +44,11 @@ export function buildThemeVars(appearance?: KYCAppearance): CSSProperties {
   set('--input', appearance.borderColor);
 
   set('--foreground', appearance.textColor);
+
+  // Shape + type. Both scale a LADDER of tokens rather than setting one value
+  // (see theme-tokens.ts) — `--radius` on its own moves nothing.
+  Object.assign(vars, radiusVars(appearance.borderRadius));
+  Object.assign(vars, fontVars(appearance.fontFamily, appearance.headingFontFamily));
 
   return vars as CSSProperties;
 }

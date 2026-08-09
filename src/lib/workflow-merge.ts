@@ -1,4 +1,4 @@
-import type { WorkflowConfigPayload } from '../services/api';
+import type { ApplicantWorkflowPayload, WorkflowConfigPayload } from '../services/api';
 
 /**
  * The prop keys a published flow may override. Exactly the template surface —
@@ -78,4 +78,45 @@ export function mergeWorkflowConfig<P extends Record<string, unknown>>(
   }
 
   return merged as P;
+}
+
+/**
+ * The template keys a mapped APPLICANT workflow (business.applicant.workflowId)
+ * overlays onto a KYB mount — the individual capture-leg surface only. KYB
+ * publish REJECTS these keys on the business config itself, so the overlay is
+ * collision-free by construction. Contact OTPs, the questionnaire, branding and
+ * device policy stay the KYB workflow's own (its publish validation refuses a
+ * mapped workflow that REQUIRES steps the leg never runs).
+ */
+const APPLICANT_LEG_KEYS = [
+  'country',
+  'countries',
+  'idTypes',
+  'enableSelfie',
+  'enableDocumentCapture',
+  'allowDocumentUpload',
+  'enableLiveness',
+  'livenessMode',
+  'flashSequenceLength',
+  'nfc',
+] as const;
+
+/**
+ * Overlay a resolved applicant workflow's capture template over an (already
+ * workflow-merged) KYB config, and record its id as `applicantWorkflowId` so
+ * the applicant's own submission is stamped with it (server-side gates,
+ * pricing and decisioning then run the mapped workflow). No-op when nothing
+ * was mapped/resolved.
+ */
+export function overlayApplicantWorkflow<P extends Record<string, unknown>>(
+  applicantWorkflow: Pick<ApplicantWorkflowPayload, 'id' | 'config'> | null | undefined,
+  merged: P,
+): P & { applicantWorkflowId?: string } {
+  if (!applicantWorkflow) return merged;
+  const out: Record<string, unknown> = { ...merged, applicantWorkflowId: applicantWorkflow.id };
+  const flow = applicantWorkflow.config as unknown as Record<string, unknown>;
+  for (const key of APPLICANT_LEG_KEYS) {
+    if (flow[key] !== undefined) out[key] = flow[key];
+  }
+  return out as P & { applicantWorkflowId?: string };
 }

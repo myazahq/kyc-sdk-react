@@ -4,7 +4,8 @@ import React, { createContext, useContext, useEffect, useMemo, useRef, useState,
 import type { AnyCountry, AnyIdType, EmailVerificationConfig, IdTypeDefinition, KYCAppearance, KYCConsentContent, KYCSuccessContent, PhoneVerificationConfig, QuestionnaireConfig, ProofOfAddressConfig, NfcConfig } from '../types/config';
 import type { SubjectType, WorkflowBusinessConfig } from '../types/business';
 import type { KYCSubmission } from '../types/verification';
-import { createKYCApi, KYCApiError, type KYCApi, type SdkConfigIdType, type SdkConfigResponse, type SdkConfigBranding } from '../services/api';
+import { createKYCApi, KYCApiError, type KYCApi, type SdkConfigIdType, type SdkConfigResponse, type SdkConfigBranding, type WorkflowConfigPayload } from '../services/api';
+import { overlayApplicantWorkflow } from '../lib/workflow-merge';
 import { withPreviewMocks } from '../services/preview-mock';
 import { useKYCContext } from './KYCContext';
 import { resolveBaseUrl } from '../lib/resolve-url';
@@ -48,6 +49,12 @@ export interface KYCConfigValue {
    * verification (and its webhooks) carry the flow.
    */
   workflowId?: string;
+  /**
+   * KYB only: the mapped applicant workflow's id (business.applicant.workflowId).
+   * Stamped on the applicant's own submission so the server applies that
+   * workflow's gates, pricing and decision graph to it.
+   */
+  applicantWorkflowId?: string;
   /**
    * EFFECTIVE country for the session: the user's country-select choice (multi-
    * region flows) or the configured default. Steps read this — they never need
@@ -235,6 +242,50 @@ export function KYCConfigProvider({ children, apiOverride, serverConfigOverride,
   // most once per API client (StrictMode mounts the effect twice in dev).
   const reportedErrorRef = useRef<KYCApi | null>(null);
 
+  // Mapped applicant workflow FALLBACK (business.applicant.workflowId): the
+  // workflowId-embed and hosted paths overlay it upstream (WorkflowGate /
+  // MyazaKYCHosted, from the server-resolved `applicantWorkflow`), but a
+  // PROP-mounted business config — the builder preview is the everyday case —
+  // has no resolution step, so the leg would silently fall back to org grants.
+  // Resolve the mapped workflow here instead (reads stay real in preview mode)
+  // and overlay it below. Skipped when an upstream overlay already ran.
+  const mappedApplicantWorkflowId =
+    config.subjectType === 'business' && !config.applicantWorkflowId
+      ? config.business?.applicant?.workflowId
+      : undefined;
+  const [applicantOverlay, setApplicantOverlay] = useState<{
+    id: string;
+    config: WorkflowConfigPayload;
+  } | null>(null);
+  useEffect(() => {
+    if (!mappedApplicantWorkflowId) return;
+    let cancelled = false;
+    api
+      .workflow(mappedApplicantWorkflowId)
+      .then((res) => {
+        if (cancelled) return;
+        setApplicantOverlay({ id: mappedApplicantWorkflowId, config: res.config });
+      })
+      // Best-effort: a dangling/unpublished mapping degrades to grants +
+      // defaults, exactly like the server-side resolution fallback.
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [api, mappedApplicantWorkflowId]);
+
+  // The EFFECTIVE input config: the props with the mapped applicant workflow's
+  // capture template overlaid (no-op when nothing was mapped or the overlay
+  // already happened upstream). Everything below reads this, so the leg's
+  // countries/idTypes/toggles and the applicantWorkflowId stamp all follow the
+  // mapped workflow regardless of how the SDK was mounted.
+  const effective = applicantOverlay
+    ? (overlayApplicantWorkflow(
+        applicantOverlay,
+        config as unknown as Record<string, unknown>,
+      ) as unknown as typeof config)
+    : config;
+
   useEffect(() => {
     // Hosted mode already has the server config from the session bootstrap —
     // don't fetch /config (and don't overwrite the provided override).
@@ -279,8 +330,8 @@ export function KYCConfigProvider({ children, apiOverride, serverConfigOverride,
   // the configured default, and the picked country's idTypes win. Steps only
   // ever see the EFFECTIVE country/idTypes — no selection logic leaks out.
   const { state } = useKYCContext();
-  const effectiveCountry: AnyCountry = state.selectedCountry ?? config.country;
-  const countryEntry = config.countries?.find((c) => c.country === effectiveCountry);
+  const effectiveCountry: AnyCountry = state.selectedCountry ?? effective.country;
+  const countryEntry = effective.countries?.find((c) => c.country === effectiveCountry);
 
   // An empty idTypes list means "offer everything granted" (same as absent) —
   // the server enforces that semantic, so a stray [] must not hide every ID.
@@ -289,9 +340,9 @@ export function KYCConfigProvider({ children, apiOverride, serverConfigOverride,
 
   const value = useMemo<KYCConfigValue>(
     () => ({
-      ...config,
+      ...effective,
       country: effectiveCountry,
-      idTypes: nonEmpty(countryEntry?.idTypes) ?? nonEmpty(config.idTypes),
+      idTypes: nonEmpty(countryEntry?.idTypes) ?? nonEmpty(effective.idTypes),
       api,
       serverConfig,
       getIdTypeFeatures: (country, idType) =>
@@ -305,6 +356,8 @@ export function KYCConfigProvider({ children, apiOverride, serverConfigOverride,
       config.apiKey,
       api,
       config.workflowId,
+      config.applicantWorkflowId,
+      applicantOverlay,
       config.country,
       config.countries,
       config.subjectType,

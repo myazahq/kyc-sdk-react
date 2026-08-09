@@ -128,4 +128,10 @@ export interface WorkflowBusinessDocumentsConfig {
  */
 export interface WorkflowBusinessApplicantConfig {
   verification?: boolean;
+  /**
+   * A published INDIVIDUAL workflow the applicant's own KYC runs through —
+   * its capture template overlays the leg and its id is stamped on the
+   * applicant's submission (server-side gates, pricing and decisioning).
+   */
+  workflowId?: string;
 }

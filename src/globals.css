@@ -213,6 +213,15 @@
   100% { transform: scale(0.9); opacity: 0.7; }
 }
 
+/* One ripple of the NFC field. Opacity only — no transform — so four of these
+   animating at once cost nothing to composite, and the arcs stay geometrically
+   concentric instead of drifting as they scale. The stagger on the call site is
+   what turns four blinking arcs into one pulse travelling outward. */
+@keyframes nfc-wave {
+  0%, 100% { opacity: 0.25; }
+  45% { opacity: 1; }
+}
+
 @keyframes caret-blink {
   0%, 70%, 100% { opacity: 1; }
   20%, 50% { opacity: 0; }
@@ -284,6 +293,9 @@
   .animate-caret-blink {
     animation: caret-blink 1.25s ease-out infinite;
   }
+  .animate-nfc-wave {
+    animation: nfc-wave 1.8s ease-in-out infinite;
+  }
   .animate-avatar-nod {
     animation: avatar-nod 1.2s ease-in-out infinite;
   }
@@ -319,14 +331,24 @@
    CSS that maps rounded-* to var(--radius-*) via @theme inline, regardless
    of which stylesheet loads last. The compound selector (.kyc-root .rounded-*)
    also has higher specificity than the host's bare (.rounded-*) rule.
-   Values match Tailwind v4's built-in defaults for each suffix. */
-.kyc-root .rounded-sm, .kyc-root.rounded-sm { border-radius: 0.125rem; }
-.kyc-root .rounded,    .kyc-root.rounded    { border-radius: 0.25rem; }
-.kyc-root .rounded-md, .kyc-root.rounded-md { border-radius: 0.375rem; }
-.kyc-root .rounded-lg, .kyc-root.rounded-lg { border-radius: 0.5rem; }
-.kyc-root .rounded-xl, .kyc-root.rounded-xl { border-radius: 0.75rem; }
-.kyc-root .rounded-2xl, .kyc-root.rounded-2xl { border-radius: 1rem; }
-.kyc-root .rounded-3xl, .kyc-root.rounded-3xl { border-radius: 1.5rem; }
+   Fallbacks match Tailwind v4's built-in defaults for each suffix.
+
+   Each rung reads --kyc-radius-* FIRST so `appearance.borderRadius` can still
+   configure the SDK. The namespace is load-bearing: these rules used to hardcode
+   the literal, which locked the corners — and they cannot simply read
+   --radius-* instead, because that is precisely the variable a host's
+   `@theme inline` defines, so inheriting it would reopen the bleed this block
+   exists to close. --kyc-radius-* is ours alone and only buildThemeVars sets it.
+
+   rounded-full/none stay literal on purpose: `full` renders avatars, badges and
+   the camera oval, and must never scale into a squircle. */
+.kyc-root .rounded-sm, .kyc-root.rounded-sm { border-radius: var(--kyc-radius-sm, 0.125rem); }
+.kyc-root .rounded,    .kyc-root.rounded    { border-radius: var(--kyc-radius-md, 0.25rem); }
+.kyc-root .rounded-md, .kyc-root.rounded-md { border-radius: var(--kyc-radius-md, 0.375rem); }
+.kyc-root .rounded-lg, .kyc-root.rounded-lg { border-radius: var(--kyc-radius-lg, 0.5rem); }
+.kyc-root .rounded-xl, .kyc-root.rounded-xl { border-radius: var(--kyc-radius-xl, 0.75rem); }
+.kyc-root .rounded-2xl, .kyc-root.rounded-2xl { border-radius: var(--kyc-radius-2xl, 1rem); }
+.kyc-root .rounded-3xl, .kyc-root.rounded-3xl { border-radius: var(--kyc-radius-3xl, 1.5rem); }
 .kyc-root .rounded-full, .kyc-root.rounded-full { border-radius: 3.40282e+38px; }
 .kyc-root .rounded-none, .kyc-root.rounded-none { border-radius: 0; }
 
@@ -345,6 +367,7 @@
    communicate that work is happening, and freezing them would read as a hang. */
 @media (prefers-reduced-motion: reduce) {
   .kyc-root .animate-pulse-ring,
+  .kyc-root .animate-nfc-wave,
   .kyc-root .animate-caret-blink,
   .kyc-root .animate-avatar-nod,
   .kyc-root .animate-avatar-turn,

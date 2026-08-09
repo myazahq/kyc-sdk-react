@@ -3,7 +3,7 @@
 import React from 'react';
 import { Smartphone } from 'lucide-react';
 import { StepHeader } from '../components/StepHeader';
-import { PassportIllustration } from '../components/PassportIllustration';
+import { NfcScanIllustration } from '../components/NfcScanIllustration';
 import { Button } from '../components/ui/button';
 import { useKYCContext } from '../context/KYCContext';
 import { useKYCConfig } from '../context/KYCConfigContext';
@@ -50,7 +50,7 @@ export function NfcStep() {
         onBack={() => dispatch({ type: 'SET_STEP', payload: 'document-capture' })}
       />
 
-      <PassportIllustration />
+      <NfcScanIllustration />
 
       <p className="animate-pulse text-center text-sm text-muted-foreground">
         Waiting for your document…

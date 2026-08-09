@@ -60,7 +60,9 @@ export async function submitBusinessApplication({
     hasBusinessDocumentsStep(business) && app.documents.length > 0
       ? app.documents.map((d) => ({ type: d.type, mediaId: d.mediaId }))
       : undefined;
-  const keyPeople = hasKeyPeopleCollection(business) ? keyPeoplePayload(app.keyPeople) : [];
+  const keyPeople = hasKeyPeopleCollection(business)
+    ? keyPeoplePayload(app.keyPeople, app.applicantKeyPersonIndex)
+    : [];
   const applicant =
     hasApplicantVerification(business) && app.applicantRole
       ? {
@@ -133,10 +135,12 @@ function applicantMediaCaptured(state: KYCState): boolean {
 
 /**
  * The applicant's own verification — an ordinary INDIVIDUAL submission: the
- * business country, the ID type they picked, their captured media, and
+ * country they picked, the ID type, their captured media, and
  * `metadata.userId = applicantKeyPersonId` (the server-side link back to the
- * application). Deliberately carries NO workflowId — the KYB workflow is not
- * an individual flow.
+ * application). The KYB workflow itself is never stamped on it (it is not an
+ * individual flow) — but when the org mapped an applicant workflow
+ * (business.applicant.workflowId), THAT id rides along so the server applies
+ * the mapped workflow's gates, pricing and decision graph.
  */
 async function submitApplicantVerification(
   config: KYCConfigValue,
@@ -145,8 +149,13 @@ async function submitApplicantVerification(
   applicantKeyPersonId: string,
 ): Promise<void> {
   const idType = state.selectedIdType!;
+  // The applicant's own leg country: their country-select choice is already
+  // folded into the context's effective `country` — the registry country
+  // (the `country` param) is only the last-resort fallback. A GH-passport
+  // applicant on an NG-registered business must submit country=GH.
+  const legCountry = String(config.country || country);
   const isNumberOnly =
-    config.getIdTypeDefinition(idType, country)?.requiresDocumentCapture === false;
+    config.getIdTypeDefinition(idType, legCountry)?.requiresDocumentCapture === false;
   const idNumber = isNumberOnly ? state.idNumber : undefined;
 
   // Best-effort capture videos (same contract as the individual flow).
@@ -173,8 +182,9 @@ async function submitApplicantVerification(
 
   await withRetry(() =>
     config.api.verify({
-      country,
+      country: legCountry,
       idType,
+      ...(config.applicantWorkflowId ? { workflowId: config.applicantWorkflowId } : {}),
       ...(idNumber ? { idNumber } : {}),
       ...(userData ? { userData } : {}),
       mediaIds: {

@@ -15,12 +15,17 @@ import {
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from './ui/dialog';
 import { Button } from './ui/button';
+import { PoweredBy } from './PoweredBy';
+import { BrandLogoChip } from './BrandLogoChip';
 import { VisuallyHidden } from './VisuallyHidden';
 import { useKYCConfig } from '../context/KYCConfigContext';
 import { useBranding } from '../hooks/useBranding';
 import { useDeviceHandoff } from '../hooks/useDeviceHandoff';
 import { hasNoWebcam } from '../lib/device';
 import { buildThemeVars } from '../lib/theme';
+import { applyConfiguredTheme } from '../lib/apply-theme';
+import { useIsDark } from '../lib/use-is-dark';
+import { useBrandFonts } from '../lib/use-brand-fonts';
 import { cn } from '../lib/utils';
 import type { HandoffSessionSnapshot } from '../services/api';
 
@@ -75,9 +80,11 @@ function HeaderBrand() {
   return (
     <div className="flex min-w-0 items-center gap-2">
       {showLogo && (
-        <div className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white shadow-sm ring-1 ring-black/5">
-          <img src={logo} alt={companyName ? `${companyName} logo` : 'Company logo'} className="h-full w-full object-cover" onError={() => setFailed(true)} />
-        </div>
+        <BrandLogoChip
+          src={logo!}
+          alt={companyName ? `${companyName} logo` : 'Company logo'}
+          onError={() => setFailed(true)}
+        />
       )}
       {showLogo && companyName && <span className="truncate text-sm font-semibold text-foreground">{companyName}</span>}
     </div>
@@ -100,13 +107,13 @@ export default function DeviceHandoffGate({
   const [copied, setCopied] = useState(false);
   const [noCamera, setNoCamera] = useState(false);
   const submittedRef = useRef(false);
-  const themeVars = buildThemeVars(config.appearance);
+  const isDarkTheme = useIsDark();
+  const themeVars = buildThemeVars(config.appearance, isDarkTheme);
+  useBrandFonts(config.appearance);
 
-  // Apply the configured initial theme, matching KYCModal.
-  useEffect(() => {
-    const theme = config.appearance?.theme;
-    if (theme) document.documentElement.classList.toggle('dark', theme === 'dark');
-  }, [config.appearance?.theme]);
+  // Apply the configured initial theme ('system' follows the device),
+  // matching KYCModal.
+  useEffect(() => applyConfiguredTheme(config.appearance?.theme), [config.appearance?.theme]);
 
   // Best-effort: if there's no webcam, lead harder with the QR.
   useEffect(() => {
@@ -196,6 +203,11 @@ export default function DeviceHandoffGate({
               onDone={onClose}
             />
           </div>
+
+          {/* This gate is a SEPARATE Dialog from KYCModal, so it needs its own
+              attribution — it is often the FIRST Myaza surface a desktop user
+              sees, and the one asking them to scan a QR with their phone. */}
+          <PoweredBy />
         </div>
       </DialogContent>
     </Dialog>

@@ -20,6 +20,39 @@ npm install @myazahq/kyc-sdk-react
 
 `<MyazaKYC />` renders a "Verify Identity" button plus the full modal flow. The trigger is a real `<button>` — pass `children` to relabel it, `className` to restyle it, or any other button attribute (`disabled`, `type`, `aria-*`, …). See [Trigger button](#trigger-button). Import the bundled stylesheet once, anywhere in your app.
 
+### Recommended — mount a workflow
+
+Build the flow once in the Myaza dashboard as a **workflow**, then mount it by id. The country, ID types, capture steps, add-ons, branding and copy all come from the workflow, so changing the flow is a re-publish in the dashboard rather than a redeploy. See [Workflows](#workflows).
+
+```tsx
+"use client";
+
+import { MyazaKYC } from "@myazahq/kyc-sdk-react";
+import "@myazahq/kyc-sdk-react/styles.css";
+
+export default function VerifyButton() {
+	return (
+		<MyazaKYC
+			apiKey='pk_live_xxx'
+			workflowId='wf_AbC123dEf456'
+			// Runtime data — a workflow is a shared template and cannot carry any of it.
+			userId='usr_123'
+			userData={{ firstName: "Jane", lastName: "Doe" }}
+			metadata={{ orderId: "ord_456" }}
+			onSubmit={(submission) => console.log("Submitted!", submission.verificationId)}
+			onError={(err) => console.error("SDK error:", err)}
+			onClose={() => console.log("Modal closed")}
+		/>
+	);
+}
+```
+
+**`userData` is worth passing.** It is the name you believe the user has, and it is compared against the name read off their document — that comparison is what produces `dataMatch` on the verification. It cannot live on the workflow: `userId`, `userData` and `metadata` are per-user runtime values, and a workflow is a template shared by every visitor, so these stay in code even when everything else moves to the dashboard.
+
+### Or configure everything in code
+
+Skip the workflow and pass the flow's shape as props. Useful for a quick start or a single fixed flow; anything you'd change later means a redeploy.
+
 ```tsx
 "use client";
 
@@ -125,8 +158,8 @@ An unrecognized or malformed key throws at setup (it never silently defaults).
 
 ## Workflows
 
-Instead of configuring the flow in code, you can build it in the Myaza dashboard
-and reference it by id:
+The recommended integration (see [Usage](#usage)): build the flow in the Myaza
+dashboard and reference it by id —
 
 ```tsx
 <MyazaKYC apiKey="pk_live_xxx" workflowId="wf_abc123" userId="usr_123" />

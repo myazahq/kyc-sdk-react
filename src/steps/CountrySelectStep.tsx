@@ -8,7 +8,8 @@ import { useKYCConfig } from '../context/KYCConfigContext';
 import { StepHeader } from '../components/StepHeader';
 import { CountryFlag } from '../components/CountryFlag';
 import { CountryRegionPicker } from '../components/CountryRegionPicker';
-import { businessCountryName } from '../lib/business';
+import { businessCountryName, isBusinessFlow } from '../lib/business';
+import { applicantCountryOptions } from '../lib/business-application';
 import type { AnyCountry } from '../types/config';
 
 // Above this many offered countries, the flat button list becomes unusable, so
@@ -29,7 +30,11 @@ export function CountrySelectStep() {
   const { state, dispatch } = useKYCContext();
   const config = useKYCConfig();
 
-  const options = (config.countries ?? []).map((entry) => entry.country);
+  // Multi-region flows (and a mapped applicant workflow's overlay) carry
+  // `countries`; a plain KYB applicant leg does not, so it falls back to the
+  // org's GRANTED countries — the applicant may hold an ID issued anywhere
+  // the org can verify. One helper, shared with the continue/back branches.
+  const options = applicantCountryOptions(config);
   const selected = state.selectedCountry ?? null;
 
   const pick = (country: AnyCountry) => {
@@ -44,7 +49,11 @@ export function CountrySelectStep() {
       <StepHeader
         title="Where was your ID issued?"
         description="Choose the country that issued your identity document."
-        onBack={() => dispatch({ type: 'SET_STEP', payload: 'consent' })}
+        // In the KYB applicant leg this step sits after applicant-role, not
+        // after consent.
+        onBack={() =>
+          dispatch({ type: 'SET_STEP', payload: isBusinessFlow(config) ? 'applicant-role' : 'consent' })
+        }
       />
 
       {options.length > SEARCH_THRESHOLD ? (

@@ -4,6 +4,7 @@ import * as React from 'react';
 import * as SelectPrimitive from '@radix-ui/react-select';
 import { Check, ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { useThemeVars } from '../../lib/theme-context';
 
 const Select = SelectPrimitive.Root;
 const SelectGroup = SelectPrimitive.Group;
@@ -32,17 +33,21 @@ SelectTrigger.displayName = SelectPrimitive.Trigger.displayName;
 const SelectContent = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof SelectPrimitive.Content>
->(({ className, children, position = 'popper', ...props }, ref) => (
+>(({ className, children, position = 'popper', style, ...props }, ref) => {
+  // kyc-root only restores the DEFAULT tokens inside the portal; the brand
+  // overrides are inline vars on the modal root, so re-apply them here.
+  const themeVars = useThemeVars();
+  return (
   <SelectPrimitive.Portal>
     <SelectPrimitive.Content
       ref={ref}
       position={position}
-      // kyc-root re-establishes the SDK's theme variables inside the portal.
       className={cn(
         'kyc-root relative z-[70] max-h-72 min-w-[8rem] overflow-hidden rounded-xl border border-border bg-background text-foreground shadow-md data-[state=open]:animate-fade-in',
         position === 'popper' && 'w-full min-w-[var(--radix-select-trigger-width)] translate-y-1',
         className,
       )}
+      style={{ ...themeVars, ...style }}
       {...props}
     >
       <SelectPrimitive.ScrollUpButton className="flex h-6 items-center justify-center">
@@ -54,7 +59,8 @@ const SelectContent = React.forwardRef<
       </SelectPrimitive.ScrollDownButton>
     </SelectPrimitive.Content>
   </SelectPrimitive.Portal>
-));
+  );
+});
 SelectContent.displayName = SelectPrimitive.Content.displayName;
 
 const SelectItem = React.forwardRef<

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React from 'react';
 import {
   ShieldCheck,
   BadgeCheck,
@@ -13,9 +13,6 @@ import {
   Lock,
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
-import { Checkbox } from '../components/ui/checkbox';
-import { Label } from '../components/ui/label';
-import { cn } from '../lib/utils';
 import { useKYCContext } from '../context/KYCContext';
 import { useKYCConfig } from '../context/KYCConfigContext';
 import { isBusinessFlow } from '../lib/business';
@@ -27,6 +24,7 @@ import {
 } from '../lib/business-application';
 import { MobileHandoffSheet } from '../components/MobileHandoffSheet';
 import { fillTokens } from '../lib/tokens';
+import { PRIVACY_URL, TERMS_URL } from '../lib/brand';
 
 interface ProcessStep {
   icon: React.ComponentType<{ className?: string }>;
@@ -51,7 +49,6 @@ export function ConsentStep() {
   // resolves here only when the integrator passes it in via userData.
   const businessName = config.userData?.businessName;
   const tokens = { firstName, lastName, businessName };
-  const [consented, setConsented] = useState(false);
 
   const defaultTitle = firstName
     ? `Welcome, ${firstName}`
@@ -77,6 +74,16 @@ export function ConsentStep() {
       payload: firstStepAfterConsent({ ...config, subjectTypeIsBusiness: isBusiness }),
     });
   };
+
+  // The consent notice must describe THIS flow, not the product. Claiming
+  // facial recognition on a flow with no selfie step would be a false statement
+  // in a legal notice — and the reverse (recording video without saying so) is
+  // the failure that actually matters. Both are derived, never assumed.
+  const capturesFace = isBusiness
+    ? hasApplicantVerification(config.business)
+    : config.enableSelfie !== false;
+  const recordsVideo =
+    capturesFace || (!isBusiness && config.enableDocumentCapture !== false);
 
   // Reflect the actually-enabled features so the list matches the real flow.
   const steps: ProcessStep[] = isBusiness
@@ -143,35 +150,29 @@ export function ConsentStep() {
         </ul>
       </div>
 
-      <label
-        htmlFor="consent"
-        className={cn(
-          'flex items-start gap-3 rounded-xl p-4 cursor-pointer transition-colors',
-          consented ? 'bg-primary/5' : 'bg-secondary/40 hover:bg-secondary/60',
-        )}
-      >
-        <Checkbox
-          id="consent"
-          checked={consented}
-          onCheckedChange={(checked) => setConsented(checked === true)}
-          className="mt-0.5"
-        />
-        <Label
-          htmlFor="consent"
-          className="text-sm leading-snug cursor-pointer font-normal"
-        >
-          {isBusiness
-            ? 'I consent to the collection and processing of the provided business information for verification purposes.'
-            : 'I consent to the collection and processing of my personal data for identity verification purposes.'}
-        </Label>
-      </label>
-
       <div className="space-y-3">
-        <Button
-          onClick={handleContinue}
-          disabled={!consented}
-          className="w-full"
-        >
+        {/* The notice sits IMMEDIATELY above the button it describes: consent is
+            now given by acting, so the disclosure has to be adjacent to the act
+            for that consent to be informed. */}
+        <p className="pb-2 text-xs leading-relaxed text-muted-foreground">
+          By tapping Continue, you agree to the{' '}
+          <a href={TERMS_URL} target="_blank" rel="noopener noreferrer" className="font-medium text-foreground underline underline-offset-2 hover:text-primary">
+            End User Terms
+          </a>{' '}
+          and{' '}
+          <a href={PRIVACY_URL} target="_blank" rel="noopener noreferrer" className="font-medium text-foreground underline underline-offset-2 hover:text-primary">
+            Privacy Policy
+          </a>
+          , and consent to your{' '}
+          {isBusiness ? 'business and personal data' : 'personal data'} being processed to
+          verify your identity.
+          {capturesFace && (
+            <> This includes facial recognition and recording this session.</>
+          )}
+          {!capturesFace && recordsVideo && <> This includes recording this session.</>}
+        </p>
+
+        <Button onClick={handleContinue} className="w-full">
           Continue
         </Button>
         <p className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground">

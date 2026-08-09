@@ -4,11 +4,14 @@ import React, { useState } from 'react';
 import { CheckCircle2, Loader2, Mail, Smartphone } from 'lucide-react';
 import { StepHeader } from '../components/StepHeader';
 import { Button } from '../components/ui/button';
-import { Input } from '../components/ui/input';
-import { Label } from '../components/ui/label';
-import { PhoneNumberInput } from '../components/PhoneNumberInput';
-import { ContactCodeEntry } from './ContactCodeEntry';
-import { ExpiryCountdown } from '../components/ExpiryCountdown';
+import { ContactChannelPicker } from '../components/ContactChannelPicker';
+import {
+  channelLabel,
+  offeredPhoneChannels,
+  type PhoneOtpChannel,
+} from '../lib/contact-channels';
+import { ContactDestinationField } from './ContactDestinationField';
+import { ContactCodePanel } from './ContactCodePanel';
 import { useKYCContext } from '../context/KYCContext';
 import { useKYCConfig } from '../context/KYCConfigContext';
 import { stepAfterContact } from '../lib/contact-steps';
@@ -44,6 +47,16 @@ export function ContactVerificationStep({ channel }: { channel: 'email' | 'phone
   // number of slots — in one click, without typing a real destination.
   const canSend = config.previewMode || (isEmail ? /.+@.+\..+/.test(destination) : phone.isValid);
 
+  // Delivery channel. The org chooses what's ON OFFER; the person receiving the
+  // code chooses between them — only they know whether they have WhatsApp, or
+  // whether SMS is landing for them today. One offered channel = no choice to
+  // make, and the picker renders nothing.
+  const offeredChannels: PhoneOtpChannel[] = isEmail
+    ? []
+    : offeredPhoneChannels(config.phoneVerification?.channels);
+  const [via, setVia] = useState<PhoneOtpChannel>(offeredChannels[0] ?? 'sms');
+  const otherChannel = offeredChannels.find((c) => c !== via) ?? null;
+
   const [challengeId, setChallengeId] = useState<string | null>(null);
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
   const [code, setCode] = useState('');
@@ -59,7 +72,10 @@ export function ContactVerificationStep({ channel }: { channel: 'email' | 'phone
       ),
     });
 
-  const send = async () => {
+  /** `switchTo` re-sends over the other channel when the first one didn't land. */
+  const send = async (switchTo?: PhoneOtpChannel) => {
+    const sendVia = switchTo ?? via;
+    if (switchTo) setVia(switchTo);
     setBusy(true);
     setError(null);
     try {
@@ -68,7 +84,7 @@ export function ContactVerificationStep({ channel }: { channel: 'email' | 'phone
         destination,
         codeLength,
         ...(maxAttempts != null ? { maxAttempts } : {}),
-        ...(isEmail ? {} : { via: config.phoneVerification?.channels?.[0] ?? 'sms' }),
+        ...(isEmail ? {} : { via: sendVia }),
       });
       setChallengeId(res.challengeId);
       setExpiresAt(res.expiresAt ?? null);
@@ -104,10 +120,10 @@ export function ContactVerificationStep({ channel }: { channel: 'email' | 'phone
         title={isEmail ? 'Verify your email' : 'Verify your phone number'}
         description={
           challengeId
-            ? `Enter the ${codeLength}-digit code we sent to ${destination}.`
+            ? `Enter the ${codeLength}-digit code we sent to ${destination}${isEmail ? '' : ` by ${channelLabel(via)}`}.`
             : isEmail
               ? "We'll send a one-time code to confirm this email belongs to you."
-              : "We'll send a one-time code by SMS to confirm this number belongs to you."
+              : `We'll send a one-time code by ${channelLabel(via)} to confirm this number belongs to you.`
         }
       />
 
@@ -119,47 +135,29 @@ export function ContactVerificationStep({ channel }: { channel: 'email' | 'phone
           </p>
         </div>
       ) : !challengeId ? (
-        isEmail ? (
-          <div className="space-y-2">
-            <Label htmlFor="contact-destination">Email address</Label>
-            <Input
-              id="contact-destination"
-              type="email"
-              inputMode="email"
-              autoComplete="email"
-              placeholder="you@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              disabled={busy}
-            />
-          </div>
-        ) : (
-          <div className="space-y-2">
-            <Label>Phone number</Label>
-            <PhoneNumberInput
-              defaultCountry={config.phoneVerification?.defaultCountry ?? config.country}
-              disabled={busy}
-              onChange={setPhone}
-            />
-          </div>
-        )
-      ) : (
-        <div className="space-y-3">
-          <ContactCodeEntry
-            code={code}
-            onChange={setCode}
-            codeLength={codeLength}
-            style={stepConfig?.inputStyle ?? 'segmented'}
+        <div className="space-y-4">
+          <ContactDestinationField
+            isEmail={isEmail}
+            email={email}
+            onEmailChange={setEmail}
+            onPhoneChange={setPhone}
+            defaultCountry={config.phoneVerification?.defaultCountry ?? config.country}
             disabled={busy}
-            onComplete={(c) => check(c)}
           />
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
-            {expiresAt ? <ExpiryCountdown expiresAt={expiresAt} /> : <span>The code expires in 5 minutes.</span>}
-            <button type="button" className="font-medium text-primary hover:underline disabled:opacity-50" onClick={send} disabled={busy}>
-              Resend code
-            </button>
-          </div>
+          <ContactChannelPicker offered={offeredChannels} picked={via} onPick={setVia} disabled={busy} />
         </div>
+      ) : (
+        <ContactCodePanel
+          code={code}
+          onChange={setCode}
+          onComplete={(c) => check(c)}
+          codeLength={codeLength}
+          style={stepConfig?.inputStyle ?? 'segmented'}
+          expiresAt={expiresAt}
+          onResend={send}
+          otherChannel={otherChannel}
+          disabled={busy}
+        />
       )}
 
       {error && <p className="text-sm text-destructive">{error}</p>}
@@ -172,7 +170,7 @@ export function ContactVerificationStep({ channel }: { channel: 'email' | 'phone
         ) : (
           <Button
             className="w-full"
-            onClick={challengeId ? () => check() : send}
+            onClick={() => (challengeId ? check() : send())}
             disabled={busy || (challengeId ? code.trim().length < 4 : !canSend)}
           >
             {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

@@ -53,6 +53,13 @@ export interface BusinessApplicationState {
   documents: BusinessDocumentUpload[];
   applicantRole: ApplicantRole | null;
   applicantName: string;
+  /**
+   * The applicant picked THEMSELVES from the entered key people (index into
+   * `keyPeople`). Null = they're someone else / nothing picked. The flagged
+   * entry is merged server-side with the applicant row — one person, one KYC,
+   * one screening, no duplicate invite.
+   */
+  applicantKeyPersonIndex: number | null;
 }
 
 export interface MediaIds {

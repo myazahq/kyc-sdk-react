@@ -11,14 +11,13 @@ import {
   Car,
 } from 'lucide-react';
 import { StepHeader } from '../components/StepHeader';
-import { RadioGroup, RadioGroupItem } from '../components/ui/radio-group';
 import { Card } from '../components/ui/card';
-import { Label } from '../components/ui/label';
 import { cn } from '../lib/utils';
 import { useKYCContext } from '../context/KYCContext';
 import { useKYCConfig } from '../context/KYCConfigContext';
 import { listIdTypeDefinitions } from '../utils/id-definitions';
 import { isBusinessFlow } from '../lib/business';
+import { applicantCountryOptions, applicantSelfCountry } from '../lib/business-application';
 import type { AnyIdType, AnyCountry, IdTypeDefinition } from '../types/config';
 
 // Keyed by idType key, so the generic Global-Documents types (passport /
@@ -107,12 +106,18 @@ export function IdTypeStep({ country, allowedIdTypes }: IdTypeStepProps = {}) {
   };
 
   const handleBack = () => {
-    // Applicant mode (KYB applicant-verification leg): id-type was reached from
-    // the applicant-role step, not consent/country-select.
+    // Applicant mode (KYB applicant-verification leg): id-type was reached
+    // from applicant-role — via country-select when the org's grants offered
+    // the applicant more than one country to pick from. A self-selected key
+    // person with a country SKIPPED that step, so back returns to the picker.
     dispatch({
       type: 'SET_STEP',
       payload: isBusinessFlow(config)
-        ? 'applicant-role'
+        ? applicantSelfCountry(state.businessApplication)
+          ? 'applicant-role'
+          : applicantCountryOptions(config).length > 1
+            ? 'country-select'
+            : 'applicant-role'
         : (config.countries?.length ?? 0) > 1
           ? 'country-select'
           : 'consent',
@@ -138,9 +143,15 @@ export function IdTypeStep({ country, allowedIdTypes }: IdTypeStepProps = {}) {
         </div>
       ) : null}
 
-      <RadioGroup
-        value={state.selectedIdType ?? ''}
-        onValueChange={handleSelect}
+      {/* Tapping a card selects and advances, so the radio was a second control
+          for a choice already made by the tap — and it read as "confirm this"
+          on a list where nothing needs confirming. The card's own border and
+          tint carry the selected state. `radiogroup` semantics are kept for
+          screen readers and keyboard users, who still need to hear that this is
+          a single choice among several. */}
+      <div
+        role="radiogroup"
+        aria-label="Identification document type"
         className="grid grid-cols-1 sm:grid-cols-2 gap-3"
       >
         {visibleTypes.map((idType) => {
@@ -148,7 +159,14 @@ export function IdTypeStep({ country, allowedIdTypes }: IdTypeStepProps = {}) {
           const isSelected = state.selectedIdType === idType.key;
 
           return (
-            <Label key={idType.key} htmlFor={idType.key} className="cursor-pointer">
+            <button
+              key={idType.key}
+              type="button"
+              role="radio"
+              aria-checked={isSelected}
+              onClick={() => handleSelect(idType.key)}
+              className="cursor-pointer text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-xl"
+            >
               <Card
                 className={cn(
                   'flex items-center gap-3 p-4 transition-colors',
@@ -168,12 +186,11 @@ export function IdTypeStep({ country, allowedIdTypes }: IdTypeStepProps = {}) {
                   <Icon className="h-5 w-5" />
                 </div>
                 <span className="flex-1 text-sm font-medium">{idType.label}</span>
-                <RadioGroupItem value={idType.key} id={idType.key} />
               </Card>
-            </Label>
+            </button>
           );
         })}
-      </RadioGroup>
+      </div>
 
     </div>
   );

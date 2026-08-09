@@ -1,11 +1,12 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { AsYouType, getCountries, getCountryCallingCode, parsePhoneNumberFromString, type CountryCode } from 'libphonenumber-js/min';
+import { getCountries, getCountryCallingCode, parsePhoneNumberFromString, type CountryCode } from 'libphonenumber-js/min';
 import { Check, ChevronsUpDown, Search } from 'lucide-react';
 import { Input } from './ui/input';
 import { CountryFlag } from './CountryFlag';
 import { cn } from '../lib/utils';
+import { formatNationalNumber } from '../lib/phone-format';
 
 // Phone input with a searchable dial-code country picker + as-you-type
 // national formatting (libphonenumber-js). Emits the E.164 value and validity.
@@ -60,7 +61,7 @@ export function PhoneNumberInput({ defaultCountry, disabled, onChange }: PhoneNu
   };
 
   const handleNationalChange = (raw: string) => {
-    const formatted = new AsYouType(country).input(raw);
+    const formatted = formatNationalNumber(raw, country);
     setNational(formatted);
     emit(country, formatted);
   };

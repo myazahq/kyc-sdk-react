@@ -11,6 +11,7 @@ import { confirmMobileDevice } from './lib/device-class';
 import { primeFaceMesh } from './liveness/face-mesh';
 import { configureSpeech } from './liveness/speech';
 import { createKYCApi, type HandoffBootstrapResponse, type HandoffSessionSnapshot, type KYCApi } from './services/api';
+import { overlayApplicantWorkflow } from './lib/workflow-merge';
 
 // Lazy-loaded so the QR/handoff code (+ qrcode.react) stays out of the initial
 // hosted bundle — it only loads when a DESKTOP visitor reaches the gate.
@@ -123,6 +124,13 @@ function HostedFlow({
 }) {
   const snap = bootstrap.configSnapshot;
   const isBusiness = snap.subjectType === 'business' && !!snap.business;
+  // KYB: overlay the mapped applicant workflow's capture template (resolved by
+  // the bootstrap) over the snapshot — same treatment as WorkflowGate's embed
+  // path. No-op when nothing was mapped.
+  const leg = overlayApplicantWorkflow(
+    bootstrap.applicantWorkflow,
+    snap as unknown as Record<string, unknown>,
+  ) as typeof snap & { applicantWorkflowId?: string };
   // Offer "continue on your phone" only when the flow has a capture/upload step
   // a phone camera actually helps with (mirrors <MyazaKYC/>). Individual flows:
   // liveness or document capture. KYB flows: the applicant's in-flow KYC or
@@ -148,19 +156,21 @@ function HostedFlow({
         serverConfigOverride={serverConfigOverride}
         subjectType={snap.subjectType as SubjectType | undefined}
         business={snap.business as WorkflowBusinessConfig | undefined}
+        applicantWorkflowId={leg.applicantWorkflowId}
         // Business snapshots carry no top-level country — the registry country
-        // stands in so the context never sees undefined.
-        country={(snap.country ?? snap.business?.country) as AnyCountry}
-        countries={snap.countries as Array<{ country: AnyCountry; idTypes?: AnyIdType[] }> | undefined}
-        idTypes={snap.idTypes as AnyIdType[] | undefined}
+        // stands in so the context never sees undefined. (`leg` = the snapshot
+        // with the applicant workflow's capture keys overlaid, when mapped.)
+        country={(leg.country ?? snap.business?.country) as AnyCountry}
+        countries={leg.countries as Array<{ country: AnyCountry; idTypes?: AnyIdType[] }> | undefined}
+        idTypes={leg.idTypes as AnyIdType[] | undefined}
         metadata={snap.metadata}
         userId={snap.userId}
-        enableSelfie={snap.enableSelfie}
-        enableDocumentCapture={snap.enableDocumentCapture}
-        allowDocumentUpload={snap.allowDocumentUpload}
-        enableLiveness={snap.enableLiveness}
-        livenessMode={snap.livenessMode as 'gestures' | 'flash' | 'both' | undefined}
-        flashSequenceLength={snap.flashSequenceLength as number | undefined}
+        enableSelfie={leg.enableSelfie}
+        enableDocumentCapture={leg.enableDocumentCapture}
+        allowDocumentUpload={leg.allowDocumentUpload}
+        enableLiveness={leg.enableLiveness}
+        livenessMode={leg.livenessMode as 'gestures' | 'flash' | 'both' | undefined}
+        flashSequenceLength={leg.flashSequenceLength as number | undefined}
         deviceHandoff={snap.deviceHandoff}
         requireMobileDevice={snap.requireMobileDevice}
         appearance={snap.appearance as KYCAppearance | undefined}
@@ -170,7 +180,7 @@ function HostedFlow({
         phoneVerification={snap.phoneVerification as PhoneVerificationConfig | undefined}
         questionnaire={snap.questionnaire as QuestionnaireConfig | undefined}
         proofOfAddress={snap.proofOfAddress as ProofOfAddressConfig | undefined}
-        nfc={snap.nfc as NfcConfig | undefined}
+        nfc={leg.nfc as NfcConfig | undefined}
         userData={snap.userData}
         assetsBasePath={snap.assetsBasePath}
       >
@@ -185,7 +195,7 @@ function HostedFlow({
           enableLiveness={
             isBusiness && snap.business?.applicant?.verification !== true
               ? false
-              : snap.enableLiveness
+              : leg.enableLiveness
           }
           showThemeToggle={snap.showThemeToggle}
           fullScreen={snap.fullScreen}

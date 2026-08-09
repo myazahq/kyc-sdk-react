@@ -19,7 +19,7 @@ export const initialKYCState: KYCState = {
   idNumber: '',
   userData: { firstName: '', lastName: '', dateOfBirth: '' },
   business: { country: null, product: null, registrationNumber: '', registrationName: '', contactEmail: '', address: '', email: '', phone: '', website: '' },
-  businessApplication: { keyPeople: [], documents: [], applicantRole: null, applicantName: '' },
+  businessApplication: { keyPeople: [], documents: [], applicantRole: null, applicantName: '', applicantKeyPersonIndex: null },
   selfieImage: null,
   documentFrontVideoBlob: null,
   documentBackVideoBlob: null,

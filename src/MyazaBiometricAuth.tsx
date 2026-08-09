@@ -5,10 +5,14 @@ import { Loader2 } from 'lucide-react';
 import { createKYCApi, KYCApiError, type BiometricAuthResponse } from './services/api';
 import { resolveBaseUrl } from './lib/resolve-url';
 import { buildThemeVars } from './lib/theme';
+import { applyConfiguredTheme } from './lib/apply-theme';
+import { useIsDark } from './lib/use-is-dark';
+import { useBrandFonts } from './lib/use-brand-fonts';
 import { KYCError } from './types/verification';
 import type { KYCAppearance } from './types/config';
 import { Button } from './components/ui/button';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from './components/ui/dialog';
+import { PoweredBy } from './components/PoweredBy';
 import { VisuallyHidden } from './components/VisuallyHidden';
 import { BiometricLivenessCapture } from './components/BiometricLivenessCapture';
 
@@ -96,15 +100,18 @@ export function MyazaBiometricAuth({
   ...triggerProps
 }: MyazaBiometricAuthProps) {
   const api = useMemo(() => createKYCApi(resolveBaseUrl(apiKey, devUrl), apiKey), [apiKey, devUrl]);
-  const themeVars = buildThemeVars(appearance);
+  const isDarkTheme = useIsDark();
+  const themeVars = buildThemeVars(appearance, isDarkTheme);
+  useBrandFonts(appearance);
 
   const [open, setOpen] = useState(defaultOpen ?? false);
   const [view, setView] = useState<View>('intro');
   const [outcome, setOutcome] = useState<Outcome | null>(null);
 
   useEffect(() => {
-    const theme = appearance?.theme;
-    if (open && theme) document.documentElement.classList.toggle('dark', theme === 'dark');
+    if (!open) return;
+    // 'system' follows (and tracks) the device preference while open.
+    return applyConfiguredTheme(appearance?.theme);
   }, [open, appearance?.theme]);
 
   const handleOpen = () => {
@@ -191,6 +198,10 @@ export function MyazaBiometricAuth({
               <ResultScreen outcome={outcome} onRetry={retry} onClose={handleClose} />
             )}
           </div>
+
+          {/* Its own Dialog too — a face re-auth asks for a live selfie, so it
+              needs the attribution at least as much as the KYC flow does. */}
+          <PoweredBy />
         </DialogContent>
       </Dialog>
     </>

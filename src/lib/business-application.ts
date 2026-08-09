@@ -104,6 +104,33 @@ export type BusinessSectionStep =
   | 'business-documents'
   | 'applicant-role';
 
+/**
+ * Countries the KYB applicant's own capture leg may pick from: the org's
+ * GRANTED countries (from the server config), since a business workflow
+ * carries no individual `countries` list — and the person filling the form
+ * may hold an ID issued anywhere the org can verify.
+ */
+export function applicantCountries(idTypes: Array<{ country: string }>): string[] {
+  const seen = new Set<string>();
+  for (const row of idTypes) seen.add(row.country.toUpperCase());
+  return [...seen];
+}
+
+/**
+ * The applicant leg's effective country options: the mapped applicant
+ * workflow's `countries` when one overlayed them onto the config (see
+ * overlayApplicantWorkflow), else the granted fallback above. Every applicant
+ * country-select consumer (continue branch, back nav, the step itself) reads
+ * THIS so the three can never disagree.
+ */
+export function applicantCountryOptions(config: {
+  countries?: Array<{ country: string }>;
+  serverConfig: { idTypes: Array<{ country: string }> };
+}): string[] {
+  const configured = [...new Set((config.countries ?? []).map((c) => c.country.toUpperCase()))];
+  return configured.length > 0 ? configured : applicantCountries(config.serverConfig.idTypes);
+}
+
 /** The ordered business-application steps this workflow configures. */
 export function businessSectionSteps(
   business: WorkflowBusinessConfig | undefined,
@@ -162,6 +189,36 @@ const KEY_PERSON_ROLES: readonly KeyPersonRole[] = [
   'shareholder',
 ];
 
+/** "Richard Ingwe" → "RI" — the avatar monogram used on person cards. */
+export function initialsOf(name: string): string {
+  return name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((t) => t[0]?.toUpperCase() ?? '')
+    .join('');
+}
+
+/**
+ * A blank row is not an error — it is a row the user started and abandoned,
+ * and it is simply dropped. Only a row with SOMETHING in it can be invalid.
+ */
+export function isKeyPersonRowBlank(row: KeyPersonEntry): boolean {
+  return (
+    row.name.trim() === '' &&
+    row.email.trim() === '' &&
+    row.country.trim() === '' &&
+    row.ownershipPct.trim() === ''
+  );
+}
+
+/** Rows the user has begun but not made valid — what blocks Continue. */
+export function invalidKeyPersonRows(rows: KeyPersonEntry[]): number[] {
+  return rows
+    .map((row, i) => (!isKeyPersonRowBlank(row) && !isKeyPersonRowValid(row) ? i : -1))
+    .filter((i) => i >= 0);
+}
+
 /** Row validity: name ≥2 chars + known role; email/ownership validated when typed. */
 export function isKeyPersonRowValid(row: KeyPersonEntry): boolean {
   if (row.name.trim().length < 2) return false;
@@ -174,20 +231,65 @@ export function isKeyPersonRowValid(row: KeyPersonEntry): boolean {
   return true;
 }
 
-/** Map valid rows into the verify payload shape (capped at the server's 20). */
+/**
+ * Map valid rows into the verify payload shape (capped at the server's 20).
+ * `applicantIndex` (an index into the UNfiltered `rows`) flags the entry the
+ * applicant picked as themselves — the server merges it with the applicant
+ * row so one human never becomes two KeyPerson records.
+ */
 export function keyPeoplePayload(
   rows: KeyPersonEntry[],
-): Array<{ name: string; role: KeyPersonRole; email?: string; country?: string; ownershipPct?: number }> {
+  applicantIndex: number | null = null,
+): Array<{ name: string; role: KeyPersonRole; email?: string; country?: string; ownershipPct?: number; isApplicant?: boolean }> {
   return rows
-    .filter(isKeyPersonRowValid)
+    .map((row, index) => ({ row, index }))
+    .filter(({ row }) => isKeyPersonRowValid(row))
     .slice(0, 20)
-    .map((row) => ({
+    .map(({ row, index }) => ({
       name: row.name.trim(),
       role: row.role,
       ...(row.email.trim() !== '' ? { email: row.email.trim() } : {}),
       ...(row.country.trim() !== '' ? { country: row.country.trim().toUpperCase() } : {}),
       ...(row.ownershipPct.trim() !== '' ? { ownershipPct: Number(row.ownershipPct) } : {}),
+      ...(index === applicantIndex ? { isApplicant: true } : {}),
     }));
+}
+
+/**
+ * The self-selected key person's ID-issuing country (uppercase ISO-2), when
+ * the applicant picked themselves AND that entry carries one. The applicant
+ * leg then SKIPS the country-select step — they already answered "where was
+ * your ID issued?" on the key-people step.
+ */
+export function applicantSelfCountry(app: {
+  keyPeople: KeyPersonEntry[];
+  applicantKeyPersonIndex: number | null;
+}): string | null {
+  if (app.applicantKeyPersonIndex === null) return null;
+  const country = app.keyPeople[app.applicantKeyPersonIndex]?.country.trim();
+  return country ? country.toUpperCase() : null;
+}
+
+/**
+ * Loose "is this the same person?" match used ONLY to PRE-SELECT the
+ * applicant's own entry on the applicant-role step (from the consumer's
+ * userData). Every token of the shorter name must appear in the longer one,
+ * so "Richard Ingwe" matches "Richard A. Ingwe" but never "Jane Ingwe". The
+ * user still confirms explicitly — this never merges anything by itself.
+ */
+export function namesLooselyMatch(a: string, b: string): boolean {
+  const tokens = (s: string) =>
+    s
+      .toLowerCase()
+      .normalize('NFKD')
+      .replace(/[^\p{L}\p{N}\s]/gu, '')
+      .split(/\s+/)
+      .filter((t) => t.length > 1);
+  const ta = tokens(a);
+  const tb = tokens(b);
+  if (ta.length === 0 || tb.length === 0) return false;
+  const [shorter, longer] = ta.length <= tb.length ? [ta, tb] : [tb, ta];
+  return shorter.every((t) => longer.includes(t));
 }
 
 /** Minimum applicant-listed people the workflow demands (0 = skippable). */

@@ -98,6 +98,10 @@ export interface VerifyRequest {
       /** The person's ISO-2 country — drives their verification link's country. */
       country?: string;
       ownershipPct?: number;
+      /** This entry IS the applicant (picked on the applicant-role step) —
+       *  the server merges it with the applicant row: one person, one KYC,
+       *  one screening, no invite. */
+      isApplicant?: boolean;
     }>;
     /** The applicant's declared role (+ optional name — the server backfills
      *  it from their verified KYC when absent). */
@@ -345,6 +349,18 @@ export interface WorkflowConfigPayload {
 }
 
 /** Response from `GET /api/kyc/workflows/:workflowId` — one round trip hydrates the SDK. */
+/**
+ * A KYB workflow's mapped APPLICANT workflow (business.applicant.workflowId),
+ * resolved server-side: the individual workflow whose capture template overlays
+ * the applicant's own KYC leg, and whose id is stamped on that submission.
+ */
+export interface ApplicantWorkflowPayload {
+  id: string;
+  name: string;
+  version: number;
+  config: WorkflowConfigPayload;
+}
+
 export interface WorkflowResolutionResponse {
   flow: { id: string; name: string; version: number };
   config: WorkflowConfigPayload;
@@ -352,6 +368,8 @@ export interface WorkflowResolutionResponse {
   /** Org allowlist + per-ID feature flags (same shape as /config). */
   idTypes: SdkConfigIdType[];
   branding?: SdkConfigBranding;
+  /** KYB only: the mapped applicant workflow, when configured and resolvable. */
+  applicantWorkflow?: ApplicantWorkflowPayload | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -456,6 +474,8 @@ export interface HandoffBootstrapResponse {
   /** Org allowlist + per-ID feature flags (same shape as /config). */
   idTypes: SdkConfigIdType[];
   expiresAt: string;
+  /** KYB only: the mapped applicant workflow, when configured and resolvable. */
+  applicantWorkflow?: ApplicantWorkflowPayload | null;
 }
 
 // The mimeType values the server accepts (image vs. video). Must mirror the

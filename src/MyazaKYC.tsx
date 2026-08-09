@@ -8,7 +8,7 @@ import { Button } from './components/ui/button';
 import { buildThemeVars } from './lib/theme';
 import { primeFaceMesh } from './liveness/face-mesh';
 import { configureSpeech } from './liveness/speech';
-import { mergeWorkflowConfig } from './lib/workflow-merge';
+import { mergeWorkflowConfig, overlayApplicantWorkflow } from './lib/workflow-merge';
 import { safeReportError } from './lib/errors';
 import { isDesktopDevice } from './lib/device';
 import { confirmMobileDevice, type DeviceClassResult } from './lib/device-class';
@@ -78,12 +78,20 @@ type KYCInnerProps = MyazaKYCProps<AnyCountry> & {
    * idTypes + branding (or the blocking error state).
    */
   serverConfigOverride?: ServerSdkConfig;
+  /**
+   * KYB only: the mapped applicant workflow's id (business.applicant.workflowId,
+   * resolved server-side). Set by WorkflowGate/hosted after overlaying its
+   * capture template; stamped on the applicant's own submission. Internal —
+   * never a consumer prop.
+   */
+  applicantWorkflowId?: string;
 };
 
 function KYCInner({
   devUrl,
   apiKey,
   workflowId,
+  applicantWorkflowId,
   subjectType,
   business,
   country,
@@ -303,6 +311,7 @@ function KYCInner({
       devUrl={devUrl}
       apiKey={apiKey}
       workflowId={workflowId}
+      applicantWorkflowId={applicantWorkflowId}
       serverConfigOverride={serverConfigOverride}
       subjectType={subjectType}
       business={business}
@@ -471,9 +480,11 @@ function WorkflowGate(props: KYCInnerProps) {
     );
   }
 
-  const merged = mergeWorkflowConfig(
-    state.flow.config,
-    props as unknown as Record<string, unknown>,
+  // KYB: overlay the mapped applicant workflow's capture template (and record
+  // its id for stamping) over the merged config — see overlayApplicantWorkflow.
+  const merged = overlayApplicantWorkflow(
+    state.flow.applicantWorkflow,
+    mergeWorkflowConfig(state.flow.config, props as unknown as Record<string, unknown>),
   ) as unknown as KYCInnerProps;
   return (
     <KYCInner

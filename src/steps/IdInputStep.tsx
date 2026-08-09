@@ -8,6 +8,8 @@ import { Label } from '../components/ui/label';
 import { useKYCContext } from '../context/KYCContext';
 import { useKYCConfig } from '../context/KYCConfigContext';
 import { stepAfterCapture } from '../lib/post-capture';
+import { isBusinessFlow } from '../lib/business';
+import { splitFullName } from '../lib/business-application';
 import { validateIdNumber } from '../utils/validators';
 import type { AnyCountry } from '../types/config';
 
@@ -35,8 +37,16 @@ export function IdInputStep({ country }: IdInputStepProps = {}) {
   // Derived state
   // ---------------------------------------------------------------------------
 
-  const hasFirstName = !!config.userData?.firstName;
-  const hasLastName = !!config.userData?.lastName;
+  // Pre-provided names: the consumer's userData — or, on the KYB applicant
+  // leg, the full name already typed on the applicant-role step. Asking again
+  // here would be the same question twice; the applicant submission falls
+  // back to that name (see submit-business.ts). A single-word applicant name
+  // still shows the Last Name field, so gov-DB data validation isn't starved.
+  const applicantName = isBusinessFlow(config)
+    ? splitFullName(state.businessApplication.applicantName)
+    : undefined;
+  const hasFirstName = !!config.userData?.firstName || !!applicantName?.firstName;
+  const hasLastName = !!config.userData?.lastName || !!applicantName?.lastName;
   const needsNameFields = !hasFirstName || !hasLastName;
 
   const idValidation = state.selectedIdType

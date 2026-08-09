@@ -2,7 +2,12 @@
 
 import React, { useEffect, useReducer, useState } from 'react';
 import { useBranding } from '../hooks/useBranding';
+import { BrandLogoChip } from './BrandLogoChip';
 import { buildThemeVars } from '../lib/theme';
+import { applyConfiguredTheme } from '../lib/apply-theme';
+import { ThemeVarsContext } from '../lib/theme-context';
+import { useIsDark } from '../lib/use-is-dark';
+import { useBrandFonts } from '../lib/use-brand-fonts';
 import {
   Dialog,
   DialogContent,
@@ -22,6 +27,7 @@ import { isBusinessFlow } from '../lib/business';
 import { getStepProgress } from '../lib/step-order';
 import { ProofOfAddressStep } from '../steps/ProofOfAddressStep';
 import type { KYCStep } from '../types/config';
+import { PoweredBy } from './PoweredBy';
 import { VisuallyHidden } from './VisuallyHidden';
 import { KYCErrorBoundary } from './KYCErrorBoundary';
 
@@ -90,14 +96,11 @@ function HeaderBrand() {
   return (
     <div className="flex min-w-0 items-center gap-2">
       {showLogo && (
-        <div className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white shadow-sm ring-1 ring-black/5">
-          <img
-            src={logo}
-            alt={companyName ? `${companyName} logo` : 'Company logo'}
-            className="h-full w-full object-cover"
-            onError={() => setFailed(true)}
-          />
-        </div>
+        <BrandLogoChip
+          src={logo!}
+          alt={companyName ? `${companyName} logo` : 'Company logo'}
+          onError={() => setFailed(true)}
+        />
       )}
       {showLogo && companyName && (
         <span className="truncate text-sm font-semibold text-foreground">{companyName}</span>
@@ -153,10 +156,16 @@ function CurrentStep() {
   switch (state.currentStep) {
     case 'consent':
       return <ConsentStep />;
+    // Distinct keys are LOAD-BEARING: both mounts are the same component type
+    // at the same position, so without them React reuses the instance when the
+    // flow moves email → phone. The phone step would open holding the email
+    // step's challengeId, show its code panel, and verifying would file the
+    // EMAIL proof as the phone token — which the server then drops, blocking
+    // submission on a phone check the user appears to have passed.
     case 'email-verification':
-      return <ContactVerificationStep channel="email" />;
+      return <ContactVerificationStep key="contact-email" channel="email" />;
     case 'phone-verification':
-      return <ContactVerificationStep channel="phone" />;
+      return <ContactVerificationStep key="contact-phone" channel="phone" />;
     case 'country-select':
       return <CountrySelectStep />;
     case 'id-type':
@@ -222,21 +231,24 @@ export function KYCModal({ open, onClose, showThemeToggle, disableClose, fullScr
   // `fullScreen` (config) forces the fullscreen layout on every device and
   // hides the expand/collapse control; otherwise the user toggles it.
   const fullscreen = fullScreen === true || expanded;
-  const themeVars = buildThemeVars(config.appearance);
+  const isDarkTheme = useIsDark();
+  const themeVars = buildThemeVars(config.appearance, isDarkTheme);
+  useBrandFonts(config.appearance);
   // A fatal config-load failure (e.g. wrong API key) blocks the whole flow.
   const configError =
     config.serverConfig.status === 'error' && config.serverConfig.fatal
       ? config.serverConfig.error ?? 'Unable to start verification. Please try again.'
       : null;
 
-  // Apply the configured initial light/dark mode. Runs on mount (and if the
-  // prop changes); the in-flow ThemeToggle can still flip it during a session.
-  useEffect(() => {
-    const theme = config.appearance?.theme;
-    if (theme) document.documentElement.classList.toggle('dark', theme === 'dark');
-  }, [config.appearance?.theme]);
+  // Apply the configured initial light/dark mode — 'system' follows (and
+  // tracks) the device preference. Runs on mount (and if the prop changes);
+  // the in-flow ThemeToggle can still flip it during a session.
+  useEffect(() => applyConfiguredTheme(config.appearance?.theme), [config.appearance?.theme]);
 
   return (
+    // Portal-rendered surfaces (Select/Popover/Drawer) escape the modal root's
+    // inline style, so they re-read the brand vars from this context.
+    <ThemeVarsContext.Provider value={themeVars}>
     <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen && !dismissBlocked) onClose(); }}>
       <DialogContent
         fullscreen={fullscreen}
@@ -322,8 +334,13 @@ export function KYCModal({ open, onClose, showThemeToggle, disableClose, fullScr
               )}
             </div>
           </KYCErrorBoundary>
+
+          {/* Vendor attribution. Sits OUTSIDE the scrolling body as a shrink-0
+              sibling, so it stays pinned while a long step scrolls under it. */}
+          <PoweredBy />
         </div>
       </DialogContent>
     </Dialog>
+    </ThemeVarsContext.Provider>
   );
 }

@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Loader2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { StepHeader } from './StepHeader';
@@ -42,6 +43,10 @@ export function BiometricLivenessCapture({
   const [primed, setPrimed] = React.useState(false);
   const needsPrimer = primerStatus === 'needed' && !primed;
 
+  // Preview rect in VIEWPORT coordinates, for the flash overlay's hole.
+  const previewRef = useRef<HTMLDivElement>(null);
+  const [flashHole, setFlashHole] = useState<{ cx: number; cy: number; r: number } | null>(null);
+
   const camera = useCamera({ facingMode: 'user', enabled: primerStatus === 'granted' || primed });
   const { capture } = useImageCapture({ videoRef: camera.videoRef, mirror: true });
   const { compress } = useImageCompress();
@@ -57,6 +62,24 @@ export function BiometricLivenessCapture({
     lightLevel,
     config: { mode: livenessMode },
   });
+
+  const measureHole = useCallback(() => {
+    const el = previewRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    setFlashHole({ cx: r.left + r.width / 2, cy: r.top + r.height / 2, r: r.width / 2 });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!liveness.flashColor) return undefined;
+    measureHole();
+    window.addEventListener('resize', measureHole);
+    window.addEventListener('scroll', measureHole, true);
+    return () => {
+      window.removeEventListener('resize', measureHole);
+      window.removeEventListener('scroll', measureHole, true);
+    };
+  }, [liveness.flashColor, measureHole]);
 
   // Hand the selfie up exactly once when liveness completes.
   const firedRef = useRef(false);
@@ -156,13 +179,29 @@ export function BiometricLivenessCapture({
 
   return (
     <div className="space-y-5 animate-slide-up">
-      {liveness.flashColor && (
-        <div
-          aria-hidden
-          className="pointer-events-none fixed inset-0 z-[90]"
-          style={{ backgroundColor: liveness.flashColor, opacity: 0.96, transition: 'background-color 120ms linear' }}
-        />
-      )}
+      {/* Portaled to body, and masked around the preview. `fixed inset-0` on
+          its own is contained by the dialog's `xl:translate-x-[-50%]`, so the
+          flash lit only the modal and the screen emitted far less light than
+          the reflection check assumes. Same fix as the KYC LivenessStep. */}
+      {liveness.flashColor && typeof document !== 'undefined' &&
+        createPortal(
+          <div
+            aria-hidden
+            className="pointer-events-none fixed inset-0 z-[100]"
+            style={{
+              backgroundColor: liveness.flashColor,
+              opacity: 0.96,
+              transition: 'background-color 120ms linear',
+              ...(flashHole
+                ? {
+                    WebkitMaskImage: `radial-gradient(circle ${flashHole.r}px at ${flashHole.cx}px ${flashHole.cy}px, transparent 0 ${flashHole.r}px, #000 ${flashHole.r + 1}px)`,
+                    maskImage: `radial-gradient(circle ${flashHole.r}px at ${flashHole.cx}px ${flashHole.cy}px, transparent 0 ${flashHole.r}px, #000 ${flashHole.r + 1}px)`,
+                  }
+                : null),
+            }}
+          />,
+          document.body,
+        )}
 
       <StepHeader
         title="Verify it's you"
@@ -190,7 +229,7 @@ export function BiometricLivenessCapture({
           {isLoading ? 'Setting up...' : hasWrongGesture ? 'Wrong gesture' : instructionText}
         </p>
 
-        <div className={cn('relative h-64 w-64 sm:h-80 sm:w-80 overflow-hidden rounded-full border-4 transition-colors duration-300', ringColor)}>
+        <div ref={previewRef} className={cn('relative h-64 w-64 sm:h-80 sm:w-80 overflow-hidden rounded-full border-4 transition-colors duration-300', ringColor)}>
           <video ref={camera.videoRef} autoPlay playsInline muted className="h-full w-full object-cover transform-[scaleX(-1)]" />
           <div className="pointer-events-none absolute inset-0">
             <svg className="h-full w-full" viewBox="0 0 224 224">

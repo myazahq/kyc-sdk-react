@@ -1,9 +1,11 @@
 'use client';
 
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useLayoutEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Check, Loader2, RotateCcw } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { StepHeader } from '../components/StepHeader';
+import { useSetCaptureLight } from '../components/capture-light';
 import { Button } from '../components/ui/button';
 import { CameraPermissionPrimer } from '../components/CameraPermissionPrimer';
 import { ReadyPrimer } from '../components/ReadyPrimer';
@@ -53,6 +55,11 @@ export function LivenessStep() {
   const showReadyPrimer = !ready && !preview;
   const needsPrimer = ready && primerStatus === 'needed' && !primed && !preview;
 
+  // Where the preview circle sits in the VIEWPORT, so the flash overlay can
+  // punch a hole for it. Only tracked while a flash is on screen.
+  const previewRef = useRef<HTMLDivElement>(null);
+  const [flashHole, setFlashHole] = useState<{ cx: number; cy: number; r: number } | null>(null);
+
   const camera = useCamera({
     facingMode: 'user',
     enabled: ready && !preview && (primerStatus === 'granted' || primed),
@@ -82,6 +89,40 @@ export function LivenessStep() {
     lightLevel,
     config: { mode: livenessMode, flashSequenceLength: config.flashSequenceLength },
   });
+
+  // Flash mode: ask the modal for a bright backdrop ONLY while the sequence is
+  // emitting. The rest of the step needs no extra light (the sequence supplies
+  // its own, and measures the reflection of it), and a constant white field
+  // arrives as a full-screen flash the moment the step opens. Other modes keep
+  // the default by leaving the override null.
+  const setCaptureLight = useSetCaptureLight();
+  useEffect(() => {
+    if (livenessMode !== 'flash') return undefined;
+    setCaptureLight(liveness.flashing);
+    return () => setCaptureLight(null);
+  }, [livenessMode, liveness.flashing, setCaptureLight]);
+
+  // Measure the preview while a flash is on screen. The overlay lives at body
+  // level, so these are plain viewport coordinates. Re-measured on scroll and
+  // resize; the circle does not move otherwise, and the colour changes every
+  // ~1.1s without shifting anything.
+  const measureHole = useCallback(() => {
+    const el = previewRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    setFlashHole({ cx: r.left + r.width / 2, cy: r.top + r.height / 2, r: r.width / 2 });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!liveness.flashColor) return undefined;
+    measureHole();
+    window.addEventListener('resize', measureHole);
+    window.addEventListener('scroll', measureHole, true);
+    return () => {
+      window.removeEventListener('resize', measureHole);
+      window.removeEventListener('scroll', measureHole, true);
+    };
+  }, [liveness.flashColor, measureHole]);
 
   // Record the mode once for the submit's integrity metadata (flash results
   // are recorded by the hook when the sequence runs).
@@ -449,25 +490,45 @@ export function LivenessStep() {
 
   return (
     <div className="space-y-5 animate-slide-up">
-      {/* Screen-reflection flash overlay: painted over the WHOLE viewport so
-          the display emits enough light for the face to reflect. Fixed + z-[90]
-          so it covers the modal chrome; pointer-events pass through. The preview
-          circle below is lifted to z-[95] so it sits ABOVE this overlay — the
-          live face stays visible while the rest of the screen flashes. (A
-          computed radial "hole" was unreliable: the overlay is contained by the
-          modal's transformed scroll container, so viewport-based coordinates
-          didn't line up. z-index needs no coordinates.) */}
-      {liveness.flashColor && (
-        <div
-          aria-hidden
-          className="pointer-events-none fixed inset-0 z-[90]"
-          style={{
-            backgroundColor: liveness.flashColor,
-            opacity: 0.96,
-            transition: 'background-color 120ms linear',
-          }}
-        />
-      )}
+      {/* Screen-reflection flash: the display has to emit real light for the
+          face to reflect it, so this covers the WHOLE viewport.
+      
+          PORTALED to document.body, which is the whole trick. `fixed inset-0`
+          alone does not span the viewport here: on desktop the dialog carries
+          `xl:translate-x-[-50%]`, and a transformed ancestor becomes the
+          containing block for fixed descendants — so the overlay was confined
+          to the modal, leaving the rest of the screen dark and emitting far
+          less light than the check assumes. Portaling removes the transformed
+          ancestor entirely.
+      
+          That also makes the circular hole work. It was previously abandoned as
+          unreliable, correctly, because viewport coordinates could not line up
+          inside that transformed container — the same containment. Out here
+          `getBoundingClientRect()` is directly usable, so the face stays
+          visible through a masked hole rather than by z-index (which no longer
+          works: at body level the whole modal sits below this overlay). */}
+      {liveness.flashColor && typeof document !== 'undefined' &&
+        createPortal(
+          <div
+            aria-hidden
+            className="pointer-events-none fixed inset-0 z-[100]"
+            style={{
+              backgroundColor: liveness.flashColor,
+              opacity: 0.96,
+              transition: 'background-color 120ms linear',
+              // Punch out the preview so the user still sees their face. The
+              // hole is a hard edge, not a gradient: a soft falloff would tint
+              // the face itself and skew the reflection the detector measures.
+              ...(flashHole
+                ? {
+                    WebkitMaskImage: `radial-gradient(circle ${flashHole.r}px at ${flashHole.cx}px ${flashHole.cy}px, transparent 0 ${flashHole.r}px, #000 ${flashHole.r + 1}px)`,
+                    maskImage: `radial-gradient(circle ${flashHole.r}px at ${flashHole.cx}px ${flashHole.cy}px, transparent 0 ${flashHole.r}px, #000 ${flashHole.r + 1}px)`,
+                  }
+                : null),
+            }}
+          />,
+          document.body,
+        )}
 
       <StepHeader
         title="Liveness Check"
@@ -492,7 +553,7 @@ export function LivenessStep() {
         {/* Circular camera view. z-[95] keeps it ABOVE the flash overlay
             (z-[90]) so the live face stays visible during the flash sequence
             while the rest of the screen emits colour. */}
-        <div className="relative z-[95]">
+        <div ref={previewRef} className="relative">
           <div
             className={cn(
               'relative h-64 w-64 sm:h-80 sm:w-80 overflow-hidden rounded-full border-4 transition-colors duration-300',
@@ -668,7 +729,7 @@ function getInstructionText(state: ReturnType<typeof useLiveness>['state']): str
     case 'capturing':
       return state.guidance ?? 'Kindly hold still...';
     case 'complete':
-      return 'Liveness verified!';
+      return 'Capture complete';
     case 'failed':
       return '';
     default:

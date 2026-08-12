@@ -1,6 +1,7 @@
 'use client';
 
-import React, { createContext, useContext, useReducer, useMemo, type ReactNode } from 'react';
+import React, { createContext, useContext, useReducer, useMemo, useEffect, type ReactNode } from 'react';
+import { recordStep } from '../lib/step-log';
 import type { KYCState, KYCAction } from './types';
 
 // ---------------------------------------------------------------------------
@@ -244,6 +245,14 @@ const KYCContext = createContext<KYCContextValue | null>(null);
 
 export function KYCProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(kycReducer, initialKYCState);
+
+  // Step journey log — records every step the user reaches, at the ONE seam
+  // every mount variant shares (embedded modal, config-driven, hosted page —
+  // all dispatch OPEN_MODAL). recordStep collapses consecutive duplicates.
+  // Reset lives at the modal-open handlers; a hosted page is a fresh module.
+  useEffect(() => {
+    if (state.isOpen) recordStep(state.currentStep);
+  }, [state.isOpen, state.currentStep]);
   const value = useMemo<KYCContextValue>(() => ({ state, dispatch }), [state]);
   return <KYCContext.Provider value={value}>{children}</KYCContext.Provider>;
 }

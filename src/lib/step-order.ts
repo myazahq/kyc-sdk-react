@@ -59,11 +59,34 @@ export function buildStepOrder(o: StepOrderOptions): KYCStep[] {
   ];
 }
 
-export function getStepProgress(step: KYCStep, o: StepOrderOptions): number {
-  const order = buildStepOrder(o);
+/**
+ * Where a step sits in the flow, for the header's progress indicator.
+ *
+ * `index` is -1 (and `total` 0) when there is no progress to draw, which the
+ * header reads as "render nothing".
+ *
+ * `submitted` is deliberately excluded on BOTH counts, matching the RN and
+ * Flutter SDKs:
+ *
+ *   • The success screen shows no indicator at all — the flow is over, so a
+ *     progress row there is noise.
+ *   • It is not counted as a step either. Counting it inflated every flow by
+ *     one and meant the last thing the user actually did could never reach the
+ *     end of the row: a 4-step flow read "1 of 5" and topped out at 4/5.
+ */
+export interface StepPosition {
+  index: number;
+  total: number;
+}
+
+const NO_PROGRESS: StepPosition = { index: -1, total: 0 };
+
+export function getStepPosition(step: KYCStep, o: StepOrderOptions): StepPosition {
+  if (step === 'submitted') return NO_PROGRESS;
+  const steps = buildStepOrder(o).filter((s) => s !== 'submitted');
   // The preview-only nfc step sits right after document capture in the mobile
-  // flow — borrow that slot so the progress bar reads sensibly.
-  const index = order.indexOf(step === 'nfc' ? 'document-capture' : step);
-  if (index === -1) return 0;
-  return Math.round(((index + 1) / order.length) * 100);
+  // flow — borrow that slot so progress reads sensibly.
+  const index = steps.indexOf(step === 'nfc' ? 'document-capture' : step);
+  if (index < 0) return NO_PROGRESS;
+  return { index, total: steps.length };
 }

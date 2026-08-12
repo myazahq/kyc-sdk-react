@@ -10,7 +10,12 @@ import { KYCError } from "../types/verification";
 import { generateRequestId, fillTokens, buildSubmitMetadata, uploadCaptureVideos } from "./submit-helpers";
 import { submitBusinessApplication } from "./submit-business";
 import { KeyPeopleInviteLinks, type KeyPersonInvite } from "./KeyPeopleInviteLinks";
-import { SubmittingScreen, SubmitErrorScreen, SubmitSuccessScreen } from "./SubmittedScreens";
+import {
+	SubmittingScreen,
+	SubmitErrorScreen,
+	SubmitSuccessScreen,
+	type SubmitSuccessAction,
+} from "./SubmittedScreens";
 
 export function SubmittedStep() {
 	const { state, dispatch } = useKYCContext();
@@ -173,12 +178,25 @@ export function SubmittedStep() {
 			? "Your business verification has been submitted for review. You'll be notified of the result."
 			: "Your identity verification has been submitted for review. You'll be notified of the result.";
 
+	// Terminal affordance. Embedded mounts: Done → onClose, as ever. Hosted
+	// pages have no host surface to close back to, so Done would be dead —
+	// navigate to the org's configured completion redirect instead, or end on a
+	// "close this tab" note when none is set. The redirect comes from the
+	// PUBLISHED config (validated http(s) at publish); the scheme re-check here
+	// is defense-in-depth only.
+	const redirectUrl = config.success?.redirectUrl;
+	const action: SubmitSuccessAction = config.hostedMode
+		? redirectUrl && /^https?:\/\//i.test(redirectUrl)
+			? { label: "Continue", onClick: () => window.location.assign(redirectUrl) }
+			: { note: "You're all set — you can close this tab." }
+		: { label: "Done", onClick: () => config.onClose?.() };
+
 	return (
 		<SubmitSuccessScreen
 			title={successTitle}
 			description={successDescription}
 			extra={invites.length > 0 ? <KeyPeopleInviteLinks invites={invites} /> : undefined}
-			onDone={() => config.onClose?.()}
+			action={action}
 		/>
 	);
 }

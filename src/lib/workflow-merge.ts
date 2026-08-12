@@ -25,6 +25,7 @@ const WORKFLOW_KEYS = [
   'requireMobileDevice',
   'voiceGuidance',
   'showThemeToggle',
+  'progressStyle',
   'fullScreen',
   'disableClose',
   'appearance',

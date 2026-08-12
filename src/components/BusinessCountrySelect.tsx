@@ -1,20 +1,25 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Check, ChevronsUpDown, Search } from 'lucide-react';
 import { CountryFlag } from './CountryFlag';
 import { cn } from '../lib/utils';
 import { businessCountryName, groupBusinessCountries } from '../lib/business';
 import { groupCountriesByRegion } from '../lib/regions';
+import { useDropdownAnchor } from '../lib/use-dropdown-anchor';
 
 /**
  * Registry-country picker for the business (KYB) details step: a searchable
  * dropdown grouped by continent, with SVG flags (emoji flags render
- * inconsistently across platforms). Rendered INLINE (no portal) on purpose:
- * the SDK always runs inside its modal dialog, and a portaled popover lands
- * outside the dialog's focus trap / pointer-events lock — which made the
- * search input unclickable. Inline keeps it inside the dialog's DOM tree, so
- * focus, clicks, and scrolling all just work.
+ * inconsistently across platforms).
+ *
+ * The menu is portaled to the dialog root (`.kyc-root`) rather than to
+ * document.body: Radix Dialog sets `pointer-events: none` on the body while
+ * open, so a menu there is unclickable. Staying inside the dialog keeps focus,
+ * clicks and scrolling working while clearing the step body's
+ * `overflow-y-auto`, which otherwise clips the list. See
+ * lib/use-dropdown-anchor.
  */
 export function BusinessCountrySelect({
   id,
@@ -34,7 +39,11 @@ export function BusinessCountrySelect({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  // Full-width field, so the menu matches the control it hangs off.
+  const anchor = useDropdownAnchor(open, triggerRef, { width: 'trigger', menuRef });
 
   const groups = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -55,10 +64,12 @@ export function BusinessCountrySelect({
     if (!open) return;
     searchRef.current?.focus();
     const onPointerDown = (e: PointerEvent) => {
-      if (!rootRef.current?.contains(e.target as Node)) {
-        setOpen(false);
-        setQuery('');
-      }
+      const t = e.target as Node;
+      // The menu is portaled out of rootRef, so it needs its own test — without
+      // it, picking a country would register as an outside click.
+      if (rootRef.current?.contains(t) || menuRef.current?.contains(t)) return;
+      setOpen(false);
+      setQuery('');
     };
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -83,6 +94,7 @@ export function BusinessCountrySelect({
   return (
     <div ref={rootRef} className="relative">
       <button
+        ref={triggerRef}
         id={id}
         type="button"
         role="combobox"
@@ -100,8 +112,12 @@ export function BusinessCountrySelect({
         <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" aria-hidden />
       </button>
 
-      {open && (
-        <div className="absolute left-0 right-0 top-full z-50 mt-1.5 overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-lg animate-slide-up">
+      {open && anchor.host && createPortal(
+        <div
+          ref={menuRef}
+          style={anchor.style}
+          className="z-50 overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-lg animate-slide-up"
+        >
           <div className="flex items-center gap-2 border-b border-border px-3">
             <Search className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
             <input
@@ -113,7 +129,7 @@ export function BusinessCountrySelect({
               className="h-11 w-full bg-transparent text-base outline-none placeholder:text-muted-foreground sm:text-sm"
             />
           </div>
-          <div className="max-h-64 overflow-y-auto p-1.5">
+          <div className="overflow-y-auto p-1.5" style={{ maxHeight: anchor.maxHeight }}>
             {groups.length === 0 ? (
               <p className="px-3 py-8 text-center text-sm text-muted-foreground">
                 No countries match.
@@ -147,7 +163,8 @@ export function BusinessCountrySelect({
               ))
             )}
           </div>
-        </div>
+        </div>,
+        anchor.host,
       )}
     </div>
   );

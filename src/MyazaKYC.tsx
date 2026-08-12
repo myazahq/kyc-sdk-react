@@ -17,6 +17,7 @@ import { createKYCApi, KYCApiError, type WorkflowResolutionResponse, type Handof
 import { KYCError } from './types/verification';
 import { listIdTypeDefinitions } from './utils/id-definitions';
 import { resetIntegritySignals } from './lib/integrity-signals';
+import { resetStepLog } from './lib/step-log';
 import type { MyazaKYCConfig, MyazaKYCProps, UseMyazaKYCReturn, KYCStep, AnyCountry } from './types/config';
 import type { SubjectType, WorkflowBusinessConfig } from './types/business';
 
@@ -113,6 +114,7 @@ function KYCInner({
   fullScreen,
   disableClose,
   deviceHandoff,
+  progressStyle,
   requireMobileDevice,
   defaultOpen,
   previewMode,
@@ -162,6 +164,7 @@ function KYCInner({
     ...(requireMobileDevice !== undefined ? { requireMobileDevice } : {}),
     ...(voiceGuidance !== undefined ? { voiceGuidance } : {}),
     ...(showThemeToggle !== undefined ? { showThemeToggle } : {}),
+    ...(progressStyle !== undefined ? { progressStyle } : {}),
     ...(fullScreen !== undefined ? { fullScreen } : {}),
     ...(disableClose !== undefined ? { disableClose } : {}),
     ...(appearance ? { appearance: appearance as Record<string, unknown> } : {}),
@@ -176,7 +179,7 @@ function KYCInner({
     ...(userId ? { userId } : {}),
     ...(userData ? { userData } : {}),
     ...(assetsBasePath ? { assetsBasePath } : {}),
-  }), [country, workflowId, idTypes, countries, enableSelfie, enableDocumentCapture, allowDocumentUpload, enableLiveness, livenessMode, flashSequenceLength, deviceIntelligence, deviceHandoff, requireMobileDevice, voiceGuidance, showThemeToggle, fullScreen, disableClose, appearance, consent, success, emailVerification, phoneVerification, questionnaire, proofOfAddress, nfc, metadata, userId, userData, assetsBasePath]);
+  }), [country, workflowId, idTypes, countries, enableSelfie, enableDocumentCapture, allowDocumentUpload, enableLiveness, livenessMode, flashSequenceLength, deviceIntelligence, deviceHandoff, requireMobileDevice, voiceGuidance, showThemeToggle, progressStyle, fullScreen, disableClose, appearance, consent, success, emailVerification, phoneVerification, questionnaire, proofOfAddress, nfc, metadata, userId, userData, assetsBasePath]);
 
   // Pre-load MediaPipe Face Mesh model as soon as the SDK mounts and apply the
   // voice-guidance config (enabled + language) for the spoken liveness prompts.
@@ -200,6 +203,9 @@ function KYCInner({
       onStepChange?.(state.currentStep);
     }
   }, [state.currentStep, onStepChange]);
+
+  // (Step journey recording lives in KYCProvider — the seam every mount
+  // variant shares, hosted pages included.)
 
   // Fire onError when a technical error is set. `state.error` is a typed
   // KYCError (still an Error), so consumers can narrow on `error.code`.
@@ -244,6 +250,7 @@ function KYCInner({
 
   const handleOpen = useCallback(async () => {
     resetIntegritySignals(); // fresh capture-integrity slate per session
+    resetStepLog(); // fresh step journey per session
     seedUserData();
     onStart?.();
 
@@ -275,6 +282,7 @@ function KYCInner({
     if (!defaultOpen || autoOpenedRef.current) return;
     autoOpenedRef.current = true;
     resetIntegritySignals();
+    resetStepLog();
     seedUserData();
     onStart?.();
     // A mobile-only workflow gates the auto-open too — otherwise `defaultOpen`
@@ -328,6 +336,7 @@ function KYCInner({
       livenessMode={livenessMode}
       flashSequenceLength={flashSequenceLength}
       deviceHandoff={deviceHandoff}
+      progressStyle={progressStyle}
       requireMobileDevice={requireMobileDevice}
       assetsBasePath={assetsBasePath}
       appearance={appearance}
@@ -544,6 +553,7 @@ export function useMyazaKYC<C extends AnyCountry>(config: MyazaKYCConfig<C>): Us
       config.onStepChange?.(state.currentStep);
     }
   }, [state.currentStep, config.onStepChange]);
+
 
   useEffect(() => {
     if (state.error) {

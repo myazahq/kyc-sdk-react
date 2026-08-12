@@ -76,16 +76,25 @@ export function SubmitErrorScreen({
 	);
 }
 
+/**
+ * Terminal affordance under the success message: a button, or — on hosted
+ * links with no completion redirect, where a button would have nothing to do
+ * (`window.close()` can't close a user-opened tab) — a static note instead.
+ */
+export type SubmitSuccessAction =
+	| { label: string; onClick: () => void }
+	| { note: string };
+
 export function SubmitSuccessScreen({
 	title,
 	description,
-	onDone,
+	action,
 	extra,
 }: {
 	title: string;
 	description: string;
-	onDone: () => void;
-	/** Optional block between the message and the Done button (e.g. the KYB
+	action: SubmitSuccessAction;
+	/** Optional block between the message and the terminal action (e.g. the KYB
 	 *  key-people invite links). */
 	extra?: React.ReactNode;
 }) {
@@ -117,9 +126,13 @@ export function SubmitSuccessScreen({
 
 			{extra}
 
-			<Button className='w-full' onClick={onDone}>
-				Done
-			</Button>
+			{'note' in action ? (
+				<p className='text-sm text-muted-foreground text-center'>{action.note}</p>
+			) : (
+				<Button className='w-full' onClick={action.onClick}>
+					{action.label}
+				</Button>
+			)}
 		</div>
 	);
 }

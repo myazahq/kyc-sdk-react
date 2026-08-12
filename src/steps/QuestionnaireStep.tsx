@@ -65,6 +65,20 @@ export function QuestionnaireStep() {
         nextErrors[field.key] = 'This field is required.';
         continue;
       }
+      // An "Other" choice obliges a description. Required whenever the flagged
+      // option is picked, regardless of whether the question itself is
+      // required: an unexplained "Other" is the answer that most needs
+      // explaining.
+      const detailOption = (field.options ?? []).find(
+        (o) => o.requiresDetail && (Array.isArray(value) ? value.includes(o.value) : value === o.value),
+      );
+      if (detailOption) {
+        const detail = answers[`${field.key}_other`];
+        if (typeof detail !== 'string' || !detail.trim()) {
+          nextErrors[field.key] = `Tell us more about "${detailOption.label}".`;
+          continue;
+        }
+      }
       if ((field.type === 'number' || field.type === 'money') && !empty) {
         const num = Number(value);
         if (!Number.isFinite(num) || (field.type === 'money' && num < 0)) {
@@ -109,9 +123,11 @@ export function QuestionnaireStep() {
             field={field}
             value={answers[field.key]}
             currencyValue={answers[`${field.key}_currency`] as string | undefined}
+            detailValue={answers[`${field.key}_other`] as string | undefined}
             error={errors[field.key]}
             onChange={(value) => setAnswer(field.key, value)}
             onCurrencyChange={(currency) => setAnswer(`${field.key}_currency`, currency)}
+            onDetailChange={(detail) => setAnswer(`${field.key}_other`, detail)}
           />
         ))}
       </div>

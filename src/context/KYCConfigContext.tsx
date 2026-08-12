@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import type { AnyCountry, AnyIdType, EmailVerificationConfig, IdTypeDefinition, KYCAppearance, KYCConsentContent, KYCSuccessContent, PhoneVerificationConfig, QuestionnaireConfig, ProofOfAddressConfig, NfcConfig } from '../types/config';
+import type { AnyCountry, AnyIdType, EmailVerificationConfig, IdTypeDefinition, KYCAppearance, KYCConsentContent, KYCSuccessContent, PhoneVerificationConfig, QuestionnaireConfig, ProofOfAddressConfig, NfcConfig, ProgressStyle } from '../types/config';
 import type { SubjectType, WorkflowBusinessConfig } from '../types/business';
 import type { KYCSubmission } from '../types/verification';
 import { createKYCApi, KYCApiError, type KYCApi, type SdkConfigIdType, type SdkConfigResponse, type SdkConfigBranding, type WorkflowConfigPayload } from '../services/api';
@@ -99,6 +99,11 @@ export interface KYCConfigValue {
    */
   deviceHandoff?: boolean;
   /**
+   * How header progress is drawn: 'steps' (default, numbered circles) or 'bar'
+   * (a thin bar on the header's bottom edge). See KYCConfig.progressStyle.
+   */
+  progressStyle?: ProgressStyle;
+  /**
    * Mobile-only workflow: the flow runs only on a hardware-confirmed handheld.
    * Enforced before the flow opens (see lib/device-class.ts) and re-checked
    * server-side at submit. Default false.
@@ -132,6 +137,13 @@ export interface KYCConfigValue {
   onError?: (error: KYCError) => void;
   /** Preview/mock mode: writes (uploads, verify) are stubbed in the browser. */
   previewMode?: boolean;
+  /**
+   * Hosted-page mode (set only by MyazaKYCHosted): the flow IS the whole page,
+   * so there is no host surface to close back to. The success screen swaps the
+   * Done → onClose button for the `success.redirectUrl` navigation, or a
+   * "you can close this tab" line when no redirect is configured.
+   */
+  hostedMode?: boolean;
   /**
    * Server-driven config (fetched on mount): which IDs the org may use and
    * which SDK features are enabled per ID. Steps should consult this — it

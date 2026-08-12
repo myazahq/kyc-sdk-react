@@ -1,8 +1,6 @@
 'use client';
 
-import React, { useEffect, useReducer, useState } from 'react';
-import { useBranding } from '../hooks/useBranding';
-import { BrandLogoChip } from './BrandLogoChip';
+import React, { useEffect, useState } from 'react';
 import { buildThemeVars } from '../lib/theme';
 import { applyConfiguredTheme } from '../lib/apply-theme';
 import { ThemeVarsContext } from '../lib/theme-context';
@@ -14,9 +12,10 @@ import {
   DialogTitle,
   DialogDescription,
 } from './ui/dialog';
-import { Progress } from './ui/progress';
+import { KYCHeader } from './KYCHeader';
+import { StepHeaderSlotContext } from './step-header-slot';
+import { CaptureLightContext } from './capture-light';
 import { Button } from './ui/button';
-import { Maximize2, Minimize2, Moon, Sun, X } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useKYCContext } from '../context/KYCContext';
 import { useKYCConfig } from '../context/KYCConfigContext';
@@ -24,7 +23,7 @@ import { hasActiveQuestionnaire } from '../lib/questionnaire';
 import { hasProofOfAddressStep } from '../lib/post-capture';
 import { hasEmailVerificationStep, hasPhoneVerificationStep } from '../lib/contact-steps';
 import { isBusinessFlow } from '../lib/business';
-import { getStepProgress } from '../lib/step-order';
+import { getStepPosition } from '../lib/step-order';
 import { ProofOfAddressStep } from '../steps/ProofOfAddressStep';
 import type { KYCStep } from '../types/config';
 import { PoweredBy } from './PoweredBy';
@@ -55,58 +54,6 @@ interface KYCModalProps {
   disableClose?: boolean;
   /** Force fullscreen on all devices (hides the expand toggle). */
   fullScreen?: boolean;
-}
-
-// ---------------------------------------------------------------------------
-// Theme toggle
-// ---------------------------------------------------------------------------
-
-function ThemeToggle() {
-  const [, rerender] = useReducer((x: number) => x + 1, 0);
-  const dark = typeof document !== 'undefined' && document.documentElement.classList.contains('dark');
-
-  const toggle = () => {
-    const next = !document.documentElement.classList.contains('dark');
-    document.documentElement.classList.toggle('dark', next);
-    try { localStorage.setItem('myaza-kyc-theme', next ? 'dark' : 'light'); } catch { /* ignore */ }
-    rerender();
-  };
-
-  return (
-    <button
-      type="button"
-      onClick={toggle}
-      className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-      aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'}
-    >
-      {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-    </button>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Header brand — org logo + name, top-left, persistent on every step
-// ---------------------------------------------------------------------------
-
-function HeaderBrand() {
-  const { logo, companyName } = useBranding();
-  const [failed, setFailed] = useState(false);
-  const showLogo = Boolean(logo) && !failed;
-
-  return (
-    <div className="flex min-w-0 items-center gap-2">
-      {showLogo && (
-        <BrandLogoChip
-          src={logo!}
-          alt={companyName ? `${companyName} logo` : 'Company logo'}
-          onError={() => setFailed(true)}
-        />
-      )}
-      {showLogo && companyName && (
-        <span className="truncate text-sm font-semibold text-foreground">{companyName}</span>
-      )}
-    </div>
-  );
 }
 
 // ---------------------------------------------------------------------------
@@ -209,7 +156,12 @@ export function KYCModal({ open, onClose, showThemeToggle, disableClose, fullScr
   // The flow can't be dismissed on the terminal step, or when the consumer
   // disables close (programmatic close() is then the only way out).
   const dismissBlocked = isTerminal || disableClose === true;
+  // Capture steps light the screen by whitening the backdrop. A step may
+  // override that for part of its run — flash liveness only wants it while the
+  // sequence is emitting. null = no opinion, use the default.
+  const [lightOverride, setLightOverride] = useState<boolean | null>(null);
   const isCaptureStep = CAPTURE_STEPS.includes(state.currentStep);
+  const litForCapture = lightOverride ?? isCaptureStep;
   const isBusiness = isBusinessFlow(config);
   const selectedDef = state.selectedIdType ? config.getIdTypeDefinition(state.selectedIdType) : null;
   const hasDocCapture = selectedDef ? selectedDef.requiresDocumentCapture : true;
@@ -245,14 +197,41 @@ export function KYCModal({ open, onClose, showThemeToggle, disableClose, fullScr
   // the in-flow ThemeToggle can still flip it during a session.
   useEffect(() => applyConfiguredTheme(config.appearance?.theme), [config.appearance?.theme]);
 
+  // Header progress. The two styles are mutually exclusive: two indicators on
+  // one header would be noise, and the point of the bar is that it costs no
+  // height. Neither renders over the config-error screen, which has no flow to
+  // be partway through.
+  const stepOptions = {
+    isBusiness,
+    business: config.business,
+    hasDocCapture,
+    hasLiveness,
+    hasCountrySelect,
+    hasEmailVerification,
+    hasPhoneVerification,
+    hasPoa,
+    hasQuestionnaire,
+  };
+  // index < 0 / total 0 means "nothing to draw" — the success screen, or a step
+  // that isn't part of this flow. Mirrors the RN SDK's stepInfo.
+  const { index: stepIndex, total: stepCount } = getStepPosition(state.currentStep, stepOptions);
+  const stepFraction = stepCount > 0 ? (stepIndex + 1) / stepCount : 0;
+  // The header's title row. Steps portal their StepHeader into it, so the
+  // title sits in the header block exactly as it does on RN and Flutter.
+  const [titleSlot, setTitleSlot] = useState<HTMLDivElement | null>(null);
+  const asBar = config.progressStyle === 'bar';
+  const showProgress = !configError && stepIndex >= 0 && stepCount > 0;
+
   return (
     // Portal-rendered surfaces (Select/Popover/Drawer) escape the modal root's
     // inline style, so they re-read the brand vars from this context.
     <ThemeVarsContext.Provider value={themeVars}>
+    <StepHeaderSlotContext.Provider value={titleSlot}>
+    <CaptureLightContext.Provider value={setLightOverride}>
     <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen && !dismissBlocked) onClose(); }}>
       <DialogContent
         fullscreen={fullscreen}
-        overlayClassName={isCaptureStep ? 'bg-white' : undefined}
+        overlayClassName={litForCapture ? 'bg-white' : undefined}
         className="kyc-root"
         style={themeVars}
         onPointerDownOutside={(e) => { if (dismissBlocked) e.preventDefault(); }}
@@ -264,60 +243,19 @@ export function KYCModal({ open, onClose, showThemeToggle, disableClose, fullScr
         </VisuallyHidden>
 
         <div className="flex h-full flex-col overflow-hidden rounded-[inherit]">
-          <div className="relative shrink-0">
-            {!configError && (
-              <Progress
-                value={getStepProgress(state.currentStep, {
-                  isBusiness,
-                  business: config.business,
-                  hasDocCapture,
-                  hasLiveness,
-                  hasCountrySelect,
-                  hasEmailVerification,
-                  hasPhoneVerification,
-                  hasPoa,
-                  hasQuestionnaire,
-                })}
-                className="absolute inset-x-0 top-0 z-10 rounded-none"
-              />
-            )}
-
-            {/* Header row — org brand top-left, controls top-right.
-                Top padding gives the controls breathing room; safe-area aware
-                so they also clear the status bar / notch on mobile. */}
-            <div className="relative flex min-h-12 items-center justify-between gap-2 px-3 pt-[calc(env(safe-area-inset-top)+1.25rem)]">
-              <HeaderBrand />
-
-              <div className="flex shrink-0 items-center gap-1">
-                {showThemeToggle !== false && <ThemeToggle />}
-
-                {/* Mobile close button — hidden on submitted step or when close is disabled */}
-                {!dismissBlocked && (
-                  <button
-                    type="button"
-                    onClick={onClose}
-                    className="flex xl:hidden h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-                    aria-label="Close"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                )}
-
-                {/* Expand / collapse toggle — desktop only; hidden when the
-                    flow is forced fullscreen */}
-                {fullScreen !== true && (
-                <button
-                  type="button"
-                  onClick={() => setExpanded((f) => !f)}
-                  className="hidden xl:flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-                  aria-label={fullscreen ? 'Exit fullscreen' : 'Fullscreen'}
-                >
-                  {fullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-                </button>
-                )}
-              </div>
-            </div>
-          </div>
+          <KYCHeader
+            showThemeToggle={showThemeToggle}
+            dismissBlocked={dismissBlocked}
+            onClose={onClose}
+            fullScreen={fullScreen}
+            fullscreen={fullscreen}
+            onToggleExpand={() => setExpanded((f) => !f)}
+            showProgress={showProgress}
+            asBar={asBar}
+            stepFraction={stepFraction}
+            stepCount={stepCount}
+            titleSlotRef={setTitleSlot}
+          />
 
           <KYCErrorBoundary>
             {/* flex flex-col so a step that opts in (flex-1 + min-h-0, e.g. the
@@ -341,6 +279,8 @@ export function KYCModal({ open, onClose, showThemeToggle, disableClose, fullScr
         </div>
       </DialogContent>
     </Dialog>
+    </CaptureLightContext.Provider>
+    </StepHeaderSlotContext.Provider>
     </ThemeVarsContext.Provider>
   );
 }

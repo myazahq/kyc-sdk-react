@@ -4,12 +4,13 @@
 // before persisting to Verification.deviceMetadata.
 
 import { getIntegrityMetadata } from '../lib/integrity-signals';
+import { getStepLog } from '../lib/step-log';
 
 export const SDK_TYPE = 'web' as const;
 
 // Single source of truth for the SDK version — also used by services/api.ts
 // for the X-SDK-Version header. Keep in sync with package.json.
-export const SDK_VERSION = '2.8.0';
+export const SDK_VERSION = '2.9.0';
 
 export interface WebDeviceMetadata {
 	sdkType: 'web';
@@ -261,6 +262,13 @@ export function collectWebDeviceMetadata(): WebDeviceMetadata {
 		const integrity = getIntegrityMetadata();
 		if (integrity) {
 			(meta as WebDeviceMetadata & { integrity?: unknown }).integrity = integrity;
+		}
+
+		// Step journey recorded during the session — powers the dashboard's
+		// verification timeline. See lib/step-log.
+		const stepLog = getStepLog();
+		if (stepLog) {
+			(meta as WebDeviceMetadata & { stepLog?: unknown }).stepLog = stepLog;
 		}
 
 		return meta;

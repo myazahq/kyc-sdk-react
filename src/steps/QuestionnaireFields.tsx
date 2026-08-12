@@ -1,15 +1,16 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Calendar as CalendarIcon, Check } from 'lucide-react';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Checkbox } from '../components/ui/checkbox';
 import { Calendar } from '../components/ui/calendar';
-import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { CountryFlag, currencyFlagCode } from '../components/CountryFlag';
+import { MyazaSelect } from '../components/MyazaSelect';
 import { cn } from '../lib/utils';
+import { useDropdownAnchor } from '../lib/use-dropdown-anchor';
 import type { QuestionnaireAnswerValue, QuestionnaireField as FieldDef } from '../types/config';
 
 // ---------------------------------------------------------------------------
@@ -82,21 +83,32 @@ export function QuestionField({
   field,
   value,
   currencyValue,
+  detailValue,
   error,
   onChange,
   onCurrencyChange,
+  onDetailChange,
 }: {
   field: FieldDef;
   value: QuestionnaireAnswerValue | undefined;
   /** money only: the `<key>_currency` companion answer. */
   currencyValue?: string;
+  /** choice fields only: the `<key>_other` companion answer. */
+  detailValue?: string;
   error?: string;
   onChange: (value: QuestionnaireAnswerValue | undefined) => void;
   onCurrencyChange?: (currency: string | undefined) => void;
+  onDetailChange?: (detail: string | undefined) => void;
 }) {
   const inputId = `kyc-q-${field.key}`;
   const currencies = field.currencies ?? [];
   const currency = currencyValue ?? currencies[0];
+
+  // The chosen option that is not an answer on its own ("Other"). Covers both
+  // select (a single value) and multiselect (a list).
+  const detailOption = (field.options ?? []).find(
+    (o) => o.requiresDetail && (Array.isArray(value) ? value.includes(o.value) : value === o.value),
+  );
 
   return (
     <div className="space-y-1.5">
@@ -116,21 +128,18 @@ export function QuestionField({
       {field.type === 'money' && (
         <div className="flex gap-2">
           {currencies.length > 1 ? (
-            <Select value={currency ?? ''} onValueChange={(v) => onCurrencyChange?.(v || undefined)}>
-              <SelectTrigger className="w-32 shrink-0" aria-label="Currency">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {currencies.map((code) => (
-                  <SelectItem key={code} value={code}>
-                    <span className="flex items-center gap-2">
-                      <CountryFlag code={currencyFlagCode(code)} className="h-4 w-4" />
-                      {code}
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="w-32 shrink-0">
+              <MyazaSelect
+                aria-label="Currency"
+                value={currency || undefined}
+                options={currencies.map((code) => ({
+                  value: code,
+                  label: code,
+                  icon: <CountryFlag code={currencyFlagCode(code)} className="h-4 w-4" />,
+                }))}
+                onChange={(v) => onCurrencyChange?.(v || undefined)}
+              />
+            </div>
           ) : (
             <span className="flex h-12 shrink-0 items-center gap-2 rounded-xl border border-input bg-muted/40 px-3 text-sm font-medium text-muted-foreground">
               {currency && <CountryFlag code={currencyFlagCode(currency)} className="h-4 w-4" />}
@@ -147,16 +156,13 @@ export function QuestionField({
         <DateField inputId={inputId} value={value as string | undefined} placeholder={field.placeholder} onChange={onChange} />
       )}
       {field.type === 'select' && (
-        <Select value={(value as string) ?? ''} onValueChange={(v) => onChange(v || undefined)}>
-          <SelectTrigger id={inputId}>
-            <SelectValue placeholder={field.placeholder ?? 'Select an option'} />
-          </SelectTrigger>
-          <SelectContent>
-            {(field.options ?? []).map((opt) => (
-              <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <MyazaSelect
+          id={inputId}
+          value={(value as string) || undefined}
+          placeholder={field.placeholder ?? 'Select an option'}
+          options={(field.options ?? []).map((opt) => ({ value: opt.value, label: opt.label }))}
+          onChange={(v) => onChange(v || undefined)}
+        />
       )}
       {field.type === 'multiselect' && (
         <div className="flex flex-col gap-2">
@@ -184,6 +190,27 @@ export function QuestionField({
           })}
         </div>
       )}
+      {/* Free text behind an "Other" choice. Always required once that option
+          is picked: an unexplained "Other" is the answer a compliance reviewer
+          most needs spelled out. */}
+      {detailOption && (
+        <div className="space-y-1.5 pt-2">
+          <Label htmlFor={`${inputId}-other`}>
+            {detailOption.detailLabel || 'Please specify'}
+            <span className="text-destructive"> *</span>
+          </Label>
+          <Input
+            id={`${inputId}-other`}
+            value={detailValue ?? ''}
+            maxLength={200}
+            placeholder={
+              detailOption.detailPlaceholder || `Tell us more about "${detailOption.label}"`
+            }
+            onChange={(e) => onDetailChange?.(e.target.value || undefined)}
+          />
+        </div>
+      )}
+
       {field.type === 'boolean' && (
         <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label={field.label}>
           {([{ label: 'Yes', v: true }, { label: 'No', v: false }] as const).map((opt) => {
@@ -217,7 +244,9 @@ export function QuestionField({
 }
 
 // ---------------------------------------------------------------------------
-// Date picker (shadcn Popover + Calendar)
+// Date picker — anchored into the dialog root, NOT a Radix popover: that
+// portals to document.body, which Dialog sets to `pointer-events: none`, so
+// taps on the calendar fell through to whatever was behind it.
 // ---------------------------------------------------------------------------
 
 function formatIsoDate(date: Date): string {
@@ -246,35 +275,72 @@ function DateField({
   onChange: (value: QuestionnaireAnswerValue | undefined) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  // The calendar is wider than the field on a narrow phone, so it gets its own
+  // width rather than the trigger's.
+  const anchor = useDropdownAnchor(open, triggerRef, { width: 300, menuRef });
   const selected = parseIsoDate(value);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onPointerDown = (e: PointerEvent) => {
+      const t = e.target as Node;
+      if (rootRef.current?.contains(t) || menuRef.current?.contains(t)) return;
+      setOpen(false);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [open]);
+
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <button
-          id={inputId}
-          type="button"
-          className={cn(
-            'flex h-12 w-full items-center gap-2.5 rounded-xl border border-input bg-background px-3 text-left text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2',
-            !selected && 'text-muted-foreground',
-          )}
+    <div ref={rootRef} className="relative">
+      <button
+        ref={triggerRef}
+        id={inputId}
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        className={cn(
+          'flex h-12 w-full items-center gap-2.5 rounded-xl border border-input bg-background px-3 text-left text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2',
+          !selected && 'text-muted-foreground',
+        )}
+      >
+        <CalendarIcon className="h-4 w-4 shrink-0 opacity-60" />
+        {selected
+          ? selected.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })
+          : placeholder ?? 'Pick a date'}
+      </button>
+
+      {open && anchor.host && createPortal(
+        <div
+          ref={menuRef}
+          // The height budget has to be APPLIED, not just computed: without it
+          // the calendar renders at its natural height and runs past the
+          // dialog's bottom edge whichever side it opens on.
+          style={{ ...anchor.style, maxHeight: anchor.maxHeight }}
+          className="z-50 overflow-auto rounded-xl border border-border bg-background p-3 text-foreground shadow-md animate-slide-up"
         >
-          <CalendarIcon className="h-4 w-4 shrink-0 opacity-60" />
-          {selected
-            ? selected.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })
-            : placeholder ?? 'Pick a date'}
-        </button>
-      </PopoverTrigger>
-      <PopoverContent className="w-auto">
-        <Calendar
-          mode="single"
-          selected={selected}
-          defaultMonth={selected}
-          onSelect={(date: Date | undefined) => {
-            onChange(date ? formatIsoDate(date) : undefined);
-            setOpen(false);
-          }}
-        />
-      </PopoverContent>
-    </Popover>
+          <Calendar
+            mode="single"
+            selected={selected}
+            defaultMonth={selected}
+            onSelect={(date: Date | undefined) => {
+              onChange(date ? formatIsoDate(date) : undefined);
+              setOpen(false);
+            }}
+          />
+        </div>,
+        anchor.host,
+      )}
+    </div>
   );
 }

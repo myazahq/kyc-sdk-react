@@ -323,6 +323,8 @@ export interface WorkflowConfigPayload {
   requireMobileDevice?: boolean;
   voiceGuidance?: unknown;
   showThemeToggle?: boolean;
+  /** Header progress style: 'steps' (default) | 'bar'. Loose, like livenessMode. */
+  progressStyle?: string;
   fullScreen?: boolean;
   disableClose?: boolean;
   appearance?: Record<string, unknown>;
@@ -418,6 +420,8 @@ export interface HandoffSessionSnapshot {
   requireMobileDevice?: boolean;
   voiceGuidance?: unknown;
   showThemeToggle?: boolean;
+  /** Header progress style: 'steps' (default) | 'bar'. Loose, like livenessMode. */
+  progressStyle?: string;
   fullScreen?: boolean;
   disableClose?: boolean;
   appearance?: Record<string, unknown>;

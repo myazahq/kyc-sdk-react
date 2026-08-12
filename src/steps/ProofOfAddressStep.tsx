@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useRef, useState } from 'react';
-import { CheckCircle2, FileText, Loader2, Upload, X } from 'lucide-react';
+import { CheckCircle2, Loader2, Upload, X } from 'lucide-react';
 import { UploadedFileThumb } from '../components/UploadedFilePreview';
+import { MyazaSelect } from '../components/MyazaSelect';
 import { StepHeader } from '../components/StepHeader';
 import { Button } from '../components/ui/button';
 import { useKYCContext } from '../context/KYCContext';
@@ -104,30 +105,24 @@ export function ProofOfAddressStep() {
       />
 
       {offeredTypes.length > 1 && (
-        <div className="flex flex-col gap-2">
-          {offeredTypes.map((type) => (
-            <button
-              key={type}
-              type="button"
-              disabled={uploaded}
-              onClick={() =>
-                dispatch({
-                  type: 'SET_POA_DOCUMENT',
-                  payload: { documentType: type, fileName: state.poaFileName ?? '' },
-                })
-              }
-              className={cn(
-                'flex items-center gap-3 rounded-xl border p-3 text-left text-sm transition-colors',
-                selectedType === type
-                  ? 'border-primary bg-primary/5 font-medium'
-                  : 'border-border hover:bg-muted/40',
-                uploaded && 'opacity-60',
-              )}
-            >
-              <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
-              {labelFor(type)}
-            </button>
-          ))}
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="poa-document-type" className="text-sm font-semibold">
+            Document type
+          </label>
+          <MyazaSelect
+            id="poa-document-type"
+            value={selectedType}
+            options={offeredTypes.map((type) => ({ value: type, label: labelFor(type) }))}
+            // Locked once a file is attached: switching the kind afterwards
+            // would mislabel the document already uploaded. Same rule as RN.
+            enabled={!uploaded}
+            onChange={(type) =>
+              dispatch({
+                type: 'SET_POA_DOCUMENT',
+                payload: { documentType: type, fileName: state.poaFileName ?? '' },
+              })
+            }
+          />
         </div>
       )}
 

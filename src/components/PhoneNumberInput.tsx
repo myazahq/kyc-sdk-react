@@ -1,20 +1,24 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { getCountries, getCountryCallingCode, parsePhoneNumberFromString, type CountryCode } from 'libphonenumber-js/min';
 import { Check, ChevronsUpDown, Search } from 'lucide-react';
 import { Input } from './ui/input';
 import { CountryFlag } from './CountryFlag';
 import { cn } from '../lib/utils';
 import { formatNationalNumber } from '../lib/phone-format';
+import { useDropdownAnchor } from '../lib/use-dropdown-anchor';
 
 // Phone input with a searchable dial-code country picker + as-you-type
 // national formatting (libphonenumber-js). Emits the E.164 value and validity.
 //
-// The dropdown is rendered INLINE (no portal), exactly like BusinessCountrySelect:
-// the SDK always runs inside its modal dialog, and a portaled popover lands
-// outside the dialog's focus trap / pointer-events lock — which makes the list
-// impossible to scroll or click. Inline keeps it in the dialog's DOM tree.
+// The dropdown is portaled to the dialog root (`.kyc-root`) — NOT to
+// document.body, which is where a Radix popover would land: Radix Dialog sets
+// `pointer-events: none` on the body while open, so a menu there cannot be
+// scrolled or clicked. Staying inside the dialog keeps pointer events and the
+// focus trap, while clearing the step body's `overflow-y-auto`, which was
+// clipping the list at the footer. See lib/use-dropdown-anchor.
 
 const REGION_NAMES = typeof Intl !== 'undefined' && 'DisplayNames' in Intl
   ? new Intl.DisplayNames(['en'], { type: 'region' })
@@ -51,7 +55,10 @@ export function PhoneNumberInput({ defaultCountry, disabled, onChange }: PhoneNu
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const anchor = useDropdownAnchor(open, triggerRef, { menuRef });
 
   const selected = options.find((o) => o.code === country);
 
@@ -78,7 +85,12 @@ export function PhoneNumberInput({ defaultCountry, disabled, onChange }: PhoneNu
     if (!open) return;
     searchRef.current?.focus();
     const onPointerDown = (e: PointerEvent) => {
-      if (!rootRef.current?.contains(e.target as Node)) { setOpen(false); setQuery(''); }
+      const t = e.target as Node;
+      // The menu is portaled out of rootRef, so it has to be tested separately —
+      // otherwise picking a country counts as clicking outside.
+      if (rootRef.current?.contains(t) || menuRef.current?.contains(t)) return;
+      setOpen(false);
+      setQuery('');
     };
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') { setOpen(false); setQuery(''); }
@@ -101,6 +113,7 @@ export function PhoneNumberInput({ defaultCountry, disabled, onChange }: PhoneNu
   return (
     <div ref={rootRef} className="relative flex items-stretch gap-2">
       <button
+        ref={triggerRef}
         type="button"
         role="combobox"
         aria-expanded={open}
@@ -127,8 +140,12 @@ export function PhoneNumberInput({ defaultCountry, disabled, onChange }: PhoneNu
         disabled={disabled}
       />
 
-      {open && (
-        <div className="absolute left-0 top-full z-50 mt-1.5 w-72 max-w-full overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-lg animate-slide-up">
+      {open && anchor.host && createPortal(
+        <div
+          ref={menuRef}
+          style={anchor.style}
+          className="z-50 overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-lg animate-slide-up"
+        >
           <div className="flex items-center gap-2 border-b border-border px-3">
             <Search className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
             <input
@@ -140,7 +157,7 @@ export function PhoneNumberInput({ defaultCountry, disabled, onChange }: PhoneNu
               className="h-11 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
             />
           </div>
-          <div className="max-h-60 overflow-y-auto p-1.5">
+          <div className="overflow-y-auto p-1.5" style={{ maxHeight: anchor.maxHeight }}>
             {filtered.length === 0 ? (
               <p className="px-3 py-8 text-center text-sm text-muted-foreground">No matches</p>
             ) : (
@@ -163,7 +180,8 @@ export function PhoneNumberInput({ defaultCountry, disabled, onChange }: PhoneNu
               ))
             )}
           </div>
-        </div>
+        </div>,
+        anchor.host,
       )}
     </div>
   );

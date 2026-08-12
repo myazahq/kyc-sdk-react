@@ -80,6 +80,8 @@ export interface UseLivenessReturn {
    * challenge runs; null when no flash is being shown.
    */
   flashColor: string | null;
+  /** A flash SEQUENCE is running (true across the gaps between colours). */
+  flashing: boolean;
   retry: () => void;
 }
 
@@ -146,6 +148,11 @@ export function useLiveness({
 
   // Flash (screen-reflection) challenge
   const [flashColor, setFlashColor] = useState<string | null>(null);
+  // Whether a flash SEQUENCE is running, as state rather than the ref below.
+  // `flashColor` alone cannot answer this — it is null in the gaps between
+  // colours — and callers need to know the sequence is under way, not which
+  // colour is on screen right now.
+  const [flashing, setFlashing] = useState(false);
   const flashSessionRef = useRef(0); // bumped on retry/unmount to abort a running sequence
   const flashRunningRef = useRef(false);
   // Consecutive no-face frames during the flash → abort (the user pulled away).
@@ -226,7 +233,7 @@ export function useLiveness({
         textToSpeak = 'Great!';
         break;
       case 'complete':
-        textToSpeak = 'Liveness verified!';
+        textToSpeak = 'Capture complete';
         break;
       case 'failed':
         if (next.reason === 'timeout') textToSpeak = "Time's up. Let's try again.";
@@ -415,6 +422,7 @@ export function useLiveness({
     if (!entry || entry.config.type !== 'flash' || flashRunningRef.current || !video) return;
 
     flashRunningRef.current = true;
+    setFlashing(true);
     const session = flashSessionRef.current;
     const isActive = () =>
       mountedRef.current && flashSessionRef.current === session && phaseRef.current === 'challenge';
@@ -427,6 +435,7 @@ export function useLiveness({
     )
       .then((result) => {
         flashRunningRef.current = false;
+        setFlashing(false);
         recordLivenessSignals({
           mode: config?.mode ?? 'gestures',
           flash: {
@@ -451,6 +460,7 @@ export function useLiveness({
       })
       .catch(() => {
         flashRunningRef.current = false;
+        setFlashing(false);
         setFlashColor(null);
       });
   };
@@ -844,6 +854,7 @@ export function useLiveness({
     // Abort any in-flight flash sequence and clear the overlay + guards.
     flashSessionRef.current++;
     flashRunningRef.current = false;
+    setFlashing(false);
     setFlashColor(null);
     prevFaceSigRef.current = null;
     faceGlitchesRef.current = 0;
@@ -865,6 +876,7 @@ export function useLiveness({
     isFaceDetected,
     videoBlob,
     flashColor,
+    flashing,
     retry,
   };
 }

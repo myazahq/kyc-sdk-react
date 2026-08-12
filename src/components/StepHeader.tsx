@@ -1,10 +1,12 @@
 'use client';
 
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { MoveLeft } from 'lucide-react';
 import { Button } from './ui/button';
 import { CountryFlag } from './CountryFlag';
 import { cn } from '../lib/utils';
+import { useStepHeaderSlot } from './step-header-slot';
 import type { AnyCountry } from '../types/config';
 
 interface StepHeaderProps {
@@ -18,7 +20,13 @@ interface StepHeaderProps {
 }
 
 export function StepHeader({ title, description, onBack, country, className }: StepHeaderProps) {
-  return (
+  // Inside the modal this renders in the header block (matching RN + Flutter);
+  // outside it (standalone biometric re-auth) it renders inline as before. See
+  // step-header-slot for why `null` renders nothing rather than falling back.
+  const slot = useStepHeaderSlot();
+  if (slot === null) return null;
+
+  const content = (
     <div className={cn('flex items-start gap-3', className)}>
       {onBack && (
         <Button
@@ -42,4 +50,6 @@ export function StepHeader({ title, description, onBack, country, className }: S
       </div>
     </div>
   );
+
+  return slot ? createPortal(content, slot) : content;
 }

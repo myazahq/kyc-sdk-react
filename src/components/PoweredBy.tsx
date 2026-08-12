@@ -56,24 +56,31 @@ export function PoweredBy() {
 
   return (
     <div className="shrink-0 px-6 pt-4 pb-7">
-      <a
-        href={PRODUCT_URL}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="group flex items-center justify-center gap-2.5 opacity-90 transition-opacity hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none"
-        aria-label="Powered by Myaza Trust"
-      >
+      {/* The ROW is not the link — only the mark is. As a block-level flex child
+          the anchor used to span the footer's full width, so the empty space
+          either side of the lockup opened myaza.co too. A link's hit area should
+          be the thing it points at, and "Powered by" is a label, not a
+          destination. */}
+      <div className="flex items-center justify-center gap-2.5">
         {/* Small and muted on purpose. "Powered by" is the connective tissue,
             not the message — the BRAND is what should carry the weight, so the
             label stays quiet and the lockup beside it is what the eye lands on.
             Matching their sizes made the sentence loud and the mark ordinary. */}
-        <span className="text-xs leading-none" style={{ color: markColor }}>
+        <span className="text-xs leading-none opacity-90" style={{ color: markColor }}>
           Powered by
         </span>
 
         {/* The lockup, spaced TIGHTER than the gap that precedes it so it reads
-            as one mark rather than three evenly-spaced items. */}
-        <span className="flex items-center gap-2">
+            as one mark rather than three evenly-spaced items. This is the link:
+            wordmark, rule and TRUST are one brand, so the whole lockup is the
+            target — but nothing beyond it is. */}
+        <a
+          href={PRODUCT_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-2 rounded-sm opacity-90 transition-opacity hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current focus-visible:ring-offset-2"
+          aria-label="Myaza Trust"
+        >
           {/* The icon keeps its brand colours; only the wordmark flips, and it
               does so by inheriting this text colour — one render, both themes. */}
           <span className="flex items-center" style={{ color: markColor }}>
@@ -100,8 +107,8 @@ export function PoweredBy() {
           >
             Trust
           </span>
-        </span>
-      </a>
+        </a>
+      </div>
     </div>
   );
 }

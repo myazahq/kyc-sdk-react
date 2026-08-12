@@ -27,6 +27,7 @@ import type {
   QuestionnaireConfig,
   ProofOfAddressConfig,
   NfcConfig,
+  ProgressStyle,
   VoiceGuidanceOption,
 } from './types/config';
 import type { SubjectType, WorkflowBusinessConfig } from './types/business';
@@ -154,6 +155,7 @@ function HostedFlow({
         apiKey={`${HANDOFF_TOKEN_PREFIX}${token}`}
         apiOverride={api}
         serverConfigOverride={serverConfigOverride}
+        hostedMode
         subjectType={snap.subjectType as SubjectType | undefined}
         business={snap.business as WorkflowBusinessConfig | undefined}
         applicantWorkflowId={leg.applicantWorkflowId}
@@ -172,6 +174,7 @@ function HostedFlow({
         livenessMode={leg.livenessMode as 'gestures' | 'flash' | 'both' | undefined}
         flashSequenceLength={leg.flashSequenceLength as number | undefined}
         deviceHandoff={snap.deviceHandoff}
+        progressStyle={snap.progressStyle as ProgressStyle | undefined}
         requireMobileDevice={snap.requireMobileDevice}
         appearance={snap.appearance as KYCAppearance | undefined}
         consent={snap.consent as KYCConsentContent | undefined}

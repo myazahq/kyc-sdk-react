@@ -102,6 +102,9 @@ export type KYCStep =
   | 'questionnaire'
   | 'submitted';
 
+/** How flow progress is drawn — see {@link KYCConfig.progressStyle}. */
+export type ProgressStyle = 'steps' | 'bar';
+
 // ---------------------------------------------------------------------------
 // Proof of Address (utility bill / bank statement / tenancy document)
 // ---------------------------------------------------------------------------
@@ -184,6 +187,16 @@ export interface PhoneVerificationConfig {
 export interface QuestionnaireFieldOption {
   value: string;
   label: string;
+  /**
+   * Marks a choice that is not an answer on its own — an "Other". Selecting it
+   * reveals a required free-text input, stored as the `<key>_other` companion
+   * answer (the same shape as a money field's `<key>_currency`).
+   */
+  requiresDetail?: boolean;
+  /** Label for the detail input (default "Please specify"). */
+  detailLabel?: string;
+  /** Placeholder for the detail input (default `Tell us more about "<label>"`). */
+  detailPlaceholder?: string;
 }
 
 export interface QuestionnaireField {
@@ -326,6 +339,14 @@ export interface KYCSuccessContent {
    * `{businessName}` tokens. Defaults to the built-in "submitted for review" copy.
    */
   description?: string;
+  /**
+   * Where the HOSTED flow sends the user after submission. On a hosted link
+   * there is no host page to close back to, so the terminal button becomes
+   * "Continue" and navigates here; without it the hosted flow ends on a
+   * "you can close this tab" line. Must be an http(s) URL (validated at
+   * publish). Ignored on embedded SDK mounts — they keep Done → `onClose`.
+   */
+  redirectUrl?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -499,6 +520,21 @@ export interface MyazaKYCConfig<C extends AnyCountry = AnyCountry> {
 
   /** Show a light/dark mode toggle button inside the modal header. Default `true`. */
   showThemeToggle?: boolean;
+
+  /**
+   * How progress through the flow is drawn in the header.
+   *
+   *   • `'steps'` (default) — numbered circles, one per step, connected. Shows
+   *     WHICH step you are on and how many there are, and collapses to a window
+   *     when they no longer fit.
+   *   • `'bar'` — a single thin bar pinned to the bottom edge of the header.
+   *     Quieter, and unaffected by step count, so it suits long flows and hosts
+   *     who would rather the chrome said less.
+   *
+   * Both convey the same fraction; the choice is how much room it takes.
+   * Usually configured in the workflow builder.
+   */
+  progressStyle?: ProgressStyle;
 
   /**
    * Force the flow to render full screen on EVERY device. Desktop drops the

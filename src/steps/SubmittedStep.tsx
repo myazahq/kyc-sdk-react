@@ -185,9 +185,15 @@ export function SubmittedStep() {
 	// PUBLISHED config (validated http(s) at publish); the scheme re-check here
 	// is defense-in-depth only.
 	const redirectUrl = config.success?.redirectUrl;
+	// The label is the org's, falling back to "Continue". Tokens are filled the
+	// same way the title and description are, so "Back to {businessName}" works.
+	// A blank/whitespace label falls back rather than rendering an empty button.
+	const redirectLabel =
+		fillTokens(config.success?.redirectLabel?.trim() || "Continue", tokens).trim() ||
+		"Continue";
 	const action: SubmitSuccessAction = config.hostedMode
 		? redirectUrl && /^https?:\/\//i.test(redirectUrl)
-			? { label: "Continue", onClick: () => window.location.assign(redirectUrl) }
+			? { label: redirectLabel, onClick: () => window.location.assign(redirectUrl) }
 			: { note: "You're all set — you can close this tab." }
 		: { label: "Done", onClick: () => config.onClose?.() };
 

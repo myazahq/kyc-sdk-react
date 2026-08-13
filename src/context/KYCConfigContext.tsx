@@ -99,8 +99,9 @@ export interface KYCConfigValue {
    */
   deviceHandoff?: boolean;
   /**
-   * How header progress is drawn: 'steps' (default, numbered circles) or 'bar'
-   * (a thin bar on the header's bottom edge). See KYCConfig.progressStyle.
+   * How header progress is drawn: 'steps' (default, numbered circles), 'bar'
+   * (a thin bar on the header's bottom edge), or 'none' (no progress element).
+   * See KYCConfig.progressStyle.
    */
   progressStyle?: ProgressStyle;
   /**

@@ -103,7 +103,7 @@ export type KYCStep =
   | 'submitted';
 
 /** How flow progress is drawn — see {@link KYCConfig.progressStyle}. */
-export type ProgressStyle = 'steps' | 'bar';
+export type ProgressStyle = 'steps' | 'bar' | 'none';
 
 // ---------------------------------------------------------------------------
 // Proof of Address (utility bill / bank statement / tenancy document)
@@ -347,6 +347,12 @@ export interface KYCSuccessContent {
    * publish). Ignored on embedded SDK mounts — they keep Done → `onClose`.
    */
   redirectUrl?: string;
+  /**
+   * Label for the redirect button (default `Continue`). Only applies when
+   * {@link redirectUrl} is set — with no redirect there is no button to label.
+   * Keep it short: it renders as a button, so a long label wraps on a phone.
+   */
+  redirectLabel?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -530,8 +536,13 @@ export interface MyazaKYCConfig<C extends AnyCountry = AnyCountry> {
    *   • `'bar'` — a single thin bar pinned to the bottom edge of the header.
    *     Quieter, and unaffected by step count, so it suits long flows and hosts
    *     who would rather the chrome said less.
+   *   • `'none'` — no progress in the header at all. For hosts whose own
+   *     surface already communicates progress, or short flows where a step
+   *     count is more noise than reassurance. The brand row and controls stay;
+   *     only the progress element is dropped.
    *
-   * Both convey the same fraction; the choice is how much room it takes.
+   * `'steps'` and `'bar'` convey the same fraction; the choice is how much room
+   * it takes. `'none'` opts out of conveying it here.
    * Usually configured in the workflow builder.
    */
   progressStyle?: ProgressStyle;

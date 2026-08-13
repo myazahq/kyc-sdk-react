@@ -13,6 +13,7 @@ import {
   DialogDescription,
 } from './ui/dialog';
 import { KYCHeader } from './KYCHeader';
+import { SandboxBanner } from './SandboxBanner';
 import { StepHeaderSlotContext } from './step-header-slot';
 import { CaptureLightContext } from './capture-light';
 import { Button } from './ui/button';
@@ -219,8 +220,13 @@ export function KYCModal({ open, onClose, showThemeToggle, disableClose, fullScr
   // The header's title row. Steps portal their StepHeader into it, so the
   // title sits in the header block exactly as it does on RN and Flutter.
   const [titleSlot, setTitleSlot] = useState<HTMLDivElement | null>(null);
-  const asBar = config.progressStyle === 'bar';
-  const showProgress = !configError && stepIndex >= 0 && stepCount > 0;
+  // 'none' omits progress from the header entirely: it turns showProgress off,
+  // so both the step row and the bar drop out and the header keeps its bottom
+  // border (the bar is what normally replaces it). KYCHeader needs no change.
+  const progressStyle = config.progressStyle ?? 'steps';
+  const asBar = progressStyle === 'bar';
+  const showProgress =
+    !configError && stepIndex >= 0 && stepCount > 0 && progressStyle !== 'none';
 
   return (
     // Portal-rendered surfaces (Select/Popover/Drawer) escape the modal root's
@@ -243,6 +249,7 @@ export function KYCModal({ open, onClose, showThemeToggle, disableClose, fullScr
         </VisuallyHidden>
 
         <div className="flex h-full flex-col overflow-hidden rounded-[inherit]">
+          <SandboxBanner />
           <KYCHeader
             showThemeToggle={showThemeToggle}
             dismissBlocked={dismissBlocked}

@@ -16,6 +16,7 @@ import { KYCHeader } from './KYCHeader';
 import { SandboxBanner } from './SandboxBanner';
 import { StepHeaderSlotContext } from './step-header-slot';
 import { CaptureLightContext } from './capture-light';
+import { ImmersiveCaptureContext } from './immersive-capture';
 import { Button } from './ui/button';
 import { cn } from '../lib/utils';
 import { useKYCContext } from '../context/KYCContext';
@@ -223,6 +224,14 @@ export function KYCModal({ open, onClose, showThemeToggle, disableClose, fullScr
   // 'none' omits progress from the header entirely: it turns showProgress off,
   // so both the step row and the bar drop out and the header keeps its bottom
   // border (the bar is what normally replaces it). KYCHeader needs no change.
+  // A live document camera takes the whole surface (see immersive-capture.ts).
+  // Reset on step change so a step that unmounts mid-capture — a back gesture,
+  // an error boundary — can never strand the chrome hidden.
+  const [immersive, setImmersive] = useState(false);
+  useEffect(() => {
+    setImmersive(false);
+  }, [state.currentStep]);
+
   const progressStyle = config.progressStyle ?? 'steps';
   const asBar = progressStyle === 'bar';
   const showProgress =
@@ -234,6 +243,7 @@ export function KYCModal({ open, onClose, showThemeToggle, disableClose, fullScr
     <ThemeVarsContext.Provider value={themeVars}>
     <StepHeaderSlotContext.Provider value={titleSlot}>
     <CaptureLightContext.Provider value={setLightOverride}>
+    <ImmersiveCaptureContext.Provider value={setImmersive}>
     <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen && !dismissBlocked) onClose(); }}>
       <DialogContent
         fullscreen={fullscreen}
@@ -249,8 +259,8 @@ export function KYCModal({ open, onClose, showThemeToggle, disableClose, fullScr
         </VisuallyHidden>
 
         <div className="flex h-full flex-col overflow-hidden rounded-[inherit]">
-          <SandboxBanner />
-          <KYCHeader
+          {!immersive && <SandboxBanner />}
+          {!immersive && <KYCHeader
             showThemeToggle={showThemeToggle}
             dismissBlocked={dismissBlocked}
             onClose={onClose}
@@ -262,15 +272,20 @@ export function KYCModal({ open, onClose, showThemeToggle, disableClose, fullScr
             stepFraction={stepFraction}
             stepCount={stepCount}
             titleSlotRef={setTitleSlot}
-          />
+          />}
 
           <KYCErrorBoundary>
             {/* flex flex-col so a step that opts in (flex-1 + min-h-0, e.g. the
                 country picker) can fill this area and own its scroll; content
                 steps stay content-height and this container scrolls them. */}
             <div className={cn(
-              'flex min-h-0 flex-1 flex-col overflow-y-auto p-6 animate-slide-up',
-              fullscreen && 'xl:mx-auto xl:w-full xl:max-w-2xl',
+              'flex min-h-0 flex-1 flex-col animate-slide-up',
+              // Immersive: no padding, no scroll, no centred column — the step
+              // is a full-bleed camera and owns every pixel.
+              immersive
+                ? 'overflow-hidden'
+                : 'overflow-y-auto p-6',
+              !immersive && fullscreen && 'xl:mx-auto xl:w-full xl:max-w-2xl',
             )} key={configError ? 'config-error' : state.currentStep}>
               {configError ? (
                 <ConfigErrorScreen message={configError} onClose={onClose} />
@@ -281,11 +296,13 @@ export function KYCModal({ open, onClose, showThemeToggle, disableClose, fullScr
           </KYCErrorBoundary>
 
           {/* Vendor attribution. Sits OUTSIDE the scrolling body as a shrink-0
-              sibling, so it stays pinned while a long step scrolls under it. */}
-          <PoweredBy />
+              sibling, so it stays pinned while a long step scrolls under it.
+              Dropped in immersive capture, where the camera owns the surface. */}
+          {!immersive && <PoweredBy />}
         </div>
       </DialogContent>
     </Dialog>
+    </ImmersiveCaptureContext.Provider>
     </CaptureLightContext.Provider>
     </StepHeaderSlotContext.Provider>
     </ThemeVarsContext.Provider>

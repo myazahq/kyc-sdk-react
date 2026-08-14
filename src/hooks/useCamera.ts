@@ -1,15 +1,11 @@
 'use client';
 
 import { useRef, useState, useEffect, useCallback } from 'react';
-import {
-  buildVideoConstraints,
-  CAPTURE_WIDTH,
-  CAPTURE_HEIGHT,
-  type VideoCaptureConstraints,
-} from '../lib/capture-settings';
+import { CAPTURE_WIDTH, CAPTURE_HEIGHT, type VideoCaptureConstraints } from '../lib/capture-settings';
 import { inspectCameraStream } from '../lib/integrity-signals';
+import { acquireCamera, type FacingMode } from './camera-acquire';
 
-export type FacingMode = 'user' | 'environment';
+export type { FacingMode };
 
 export interface UseCameraOptions {
   facingMode?: FacingMode;
@@ -64,10 +60,7 @@ export function useCamera({
     stopAllTracks(streamRef.current);
 
     try {
-      const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: buildVideoConstraints(mode, resolutionRef.current),
-        audio: false,
-      });
+      const mediaStream = await acquireCamera(mode, resolutionRef.current);
 
       // If the effect was cleaned up while we awaited, stop the new stream immediately
       if (signal?.aborted) {

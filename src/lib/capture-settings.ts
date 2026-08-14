@@ -79,6 +79,34 @@ export function buildVideoConstraints(
   };
 }
 
+/**
+ * Whether a live stream is coming from a user-facing (selfie) camera, so the
+ * preview can be mirrored. Without mirroring a front camera the preview moves
+ * the opposite way to the user, which makes anything they are trying to line up
+ * awkward to aim.
+ *
+ * Mirrors unless there is POSITIVE evidence the camera faces away. The earlier
+ * rule was the inverse — `facingMode !== 'environment'` — which mirrored on
+ * `undefined` too, and `facingMode` is simply absent on several browsers, so a
+ * rear camera that failed to report it got mirrored.
+ *
+ * The two evidence sources are deliberately different in kind: `facingMode` is
+ * well supported on mobile, where a rear camera actually exists; a desktop
+ * webcam usually reports nothing at all and is user-facing, so "no answer"
+ * means front. The label check covers the remaining case — a mobile browser
+ * that omits `facingMode` on a camera whose name says which way it points.
+ */
+export function isFrontFacingStream(stream: MediaStream | null): boolean {
+  const track = stream?.getVideoTracks()[0];
+  if (!track) return false;
+
+  const facingMode = track.getSettings?.().facingMode;
+  if (facingMode === 'user') return true;
+  if (facingMode === 'environment') return false;
+
+  return !/\b(back|rear|environment)\b/i.test(track.label ?? '');
+}
+
 // ---------------------------------------------------------------------------
 // MediaRecorder helpers
 // ---------------------------------------------------------------------------

@@ -82,16 +82,26 @@ export function DocumentReview({
 					)}>
 					{sides.map((side) => (
 						<figure key={side.label} className='space-y-1'>
-							<div className='relative overflow-hidden rounded-xl border border-border bg-muted'>
+							{/* The frame hugs the photo (`w-fit`) instead of the column.
+							    A capped image inside a full-width frame letterboxes, which
+							    on a wide desktop modal means large grey bars and badges
+							    stranded away from the picture's corners. */}
+							<div className='relative mx-auto w-fit max-w-full overflow-hidden rounded-xl border border-border bg-muted'>
 								<button
 									type='button'
 									onClick={() => setZoomed(side)}
-									className='block w-full cursor-zoom-in'
+									className='block cursor-zoom-in'
 									aria-label={`View ${side.label.toLowerCase()} larger`}>
+									{/* Height cap, not width. `w-full` alone renders at the
+									    photo's natural aspect — a passport across a desktop
+									    modal is ~900px tall, which pushes Retake and Continue
+									    below the fold and makes reviewing a photo a scroll.
+									    The point of this screen is to see the photo AND the
+									    action at once. */}
 									<img
 										src={side.src}
 										alt={`${side.label} of document`}
-										className='w-full object-contain'
+										className='max-h-[46vh] w-auto max-w-full object-contain'
 									/>
 									{/* Always visible, not hover-revealed: a phone has no
 									    hover, so a hover-only affordance is simply absent on

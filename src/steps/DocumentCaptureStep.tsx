@@ -9,6 +9,7 @@ import {
 	Camera,
 	AlertTriangle,
 	CreditCard,
+	ArrowLeft,
 } from "lucide-react";
 import { StepHeader } from "../components/StepHeader";
 import { ReadyPrimer } from "../components/ReadyPrimer";
@@ -28,6 +29,19 @@ import {
 	type CardBounds,
 } from "../hooks/useDocumentDetection";
 import { useImageCompress } from "../hooks/useImageCompress";
+import { useTorch } from "../hooks/useTorch";
+import { ImmersiveOverlay } from "../components/viewfinder/ImmersiveOverlay";
+import { InlineOverlay } from "../components/viewfinder/InlineOverlay";
+import { useSetImmersiveCapture } from "../components/immersive-capture";
+import { isDesktopDevice } from "../lib/device";
+import { documentCropRect } from "../lib/document-guide";
+import { shortDocumentLabel } from "../lib/document-label";
+import {
+	DocumentFramingGate,
+	documentBoxFrom,
+	documentHintText,
+	type DocumentGuidance,
+} from "../lib/document-framing-gate";
 import { useLightLevel } from "../hooks/useLightLevel";
 import { primeSpeech } from "../liveness/speech";
 import { withRetry } from "../lib/retry";
@@ -40,6 +54,7 @@ import {
 	DOCUMENT_IMAGE_QUALITY,
 	DOCUMENT_VIDEO_BITRATE,
 	createVideoRecorder,
+	isFrontFacingStream,
 	logCaptureSize,
 } from "../lib/capture-settings";
 
@@ -169,6 +184,12 @@ export function DocumentCaptureStep() {
 	const [ready, setReady] = useState(false);
 	const showReadyPrimer = cameraActive && !ready;
 	const needsPrimer = cameraActive && ready && primerStatus === "needed" && !primed;
+	// The viewfinder is genuinely on screen — not merely "the camera phase".
+	// The primers and the flip banner occupy the same space without a guide, so
+	// anything that steps aside for the viewfinder must test this, not
+	// `cameraActive`, or it disappears behind a panel that never replaced it.
+	const viewfinderVisible =
+		cameraActive && !showReadyPrimer && !needsPrimer && !showFlipBanner;
 
 	// Document capture runs at a higher resolution than liveness so the still
 	// image stays sharp enough for OCR (see capture-settings.ts). The video is
@@ -181,6 +202,10 @@ export function DocumentCaptureStep() {
 			height: DOCUMENT_CAPTURE_HEIGHT,
 		},
 	});
+	// The element the video renders into with `object-fit: cover`. Measured at
+	// capture time so the shutter can crop to the guide the user framed against
+	// (see documentCropRect) instead of storing the whole sensor frame.
+	const viewportRef = useRef<HTMLDivElement | null>(null);
 	const detectionCanvasRef = useRef<HTMLCanvasElement | null>(null);
 	const detection = useDocumentDetection({
 		videoRef: camera.videoRef,
@@ -194,6 +219,96 @@ export function DocumentCaptureStep() {
 	);
 	const isDim = lightLevel === "dark";
 	const isBright = lightLevel === "bright";
+
+	// ── Immersive capture (mobile) ──────────────────────────────────────────
+	//
+	// On a phone the live camera takes the whole surface, matching the React
+	// Native and Flutter screens: the framing guide has to be big enough to
+	// align a card against, and the modal's banner, header, padding and footer
+	// eat roughly a third of the viewport. Desktop keeps the inline framing —
+	// there the modal is a window on a large screen, and a full-bleed camera
+	// would be a webcam filling a monitor.
+	//
+	// Gated on the preview actually being live, so the chrome stays put through
+	// the primer, the permission prompt and the flip banner — going immersive
+	// before there is anything to see reads as the UI vanishing.
+	const torch = useTorch(camera.stream);
+	const setImmersiveCapture = useSetImmersiveCapture();
+	// Deliberately NOT gated on `camera.isReady`: the stream takes a moment to
+	// come up after the primer closes, and waiting for it rendered the inline
+	// layout — header, badge, letterboxed box, hint — for that beat before
+	// swapping to full screen. The flash read as two different screens. Going
+	// immersive the instant the primers are done means the spinner appears in
+	// the surface the camera is about to fill.
+	//
+	// An error DOES drop back: the error panel carries Try Again / Upload and
+	// needs the step's header for context and a way out.
+	const immersive =
+		!isDesktopDevice() &&
+		cameraActive &&
+		!camera.error &&
+		!showReadyPrimer &&
+		!needsPrimer &&
+		!showFlipBanner;
+
+	useEffect(() => {
+		setImmersiveCapture(immersive);
+		// Release on unmount too: leaving mid-capture (back, an error boundary,
+		// a completed capture) must not strand the modal without its chrome.
+		return () => setImmersiveCapture(false);
+	}, [immersive, setImmersiveCapture]);
+
+	// ID-1 cards use 1.586; passports use a taller 1.42 so the data page's MRZ
+	// band is not cropped off. Mirrors the native documentGuideAspect.
+	const guideAspect = state.selectedIdType === "passport" ? 1.42 : 85.6 / 53.98;
+
+	// Auto-capture framing gate — the Flutter logic, fed from this SDK's edge
+	// detector. It decides the five visual states and the instruction; the
+	// overlay only draws them. Rebuilt per side so the dwell and the fired
+	// latch reset when the user flips the card.
+	const gateRef = useRef<DocumentFramingGate | null>(null);
+	if (!gateRef.current) {
+		gateRef.current = new DocumentFramingGate({ expectedAspect: guideAspect });
+	}
+	useEffect(() => {
+		gateRef.current = new DocumentFramingGate({ expectedAspect: guideAspect });
+		setGuidance({ framing: "none", hint: "searching" });
+		setDwell(0);
+	}, [guideAspect, phase]);
+
+	const [guidance, setGuidance] = useState<DocumentGuidance>({
+		framing: "none",
+		hint: "searching",
+	});
+	const [dwell, setDwell] = useState(0);
+
+	// Feed the gate from the detector. `cardBounds` is in detection-canvas
+	// coordinates, so it is normalised against that canvas — the same frame the
+	// bounds were measured in.
+	useEffect(() => {
+		const gate = gateRef.current;
+		if (!gate || !cameraActive || !camera.isReady) return;
+		const canvas = detectionCanvasRef.current;
+		const box =
+			detection.cardBounds && canvas
+				? documentBoxFrom(detection.cardBounds, {
+						width: canvas.width,
+						height: canvas.height,
+					})
+				: null;
+		// useLightLevel reports a band, not a luma; map it onto the gate's scale
+		// so a dark frame still produces the "move somewhere brighter" hint.
+		const brightness = lightLevel === "dark" ? 0.1 : 0.5;
+		setGuidance(gate.update(box, { brightness }));
+		setDwell(gate.progress(Date.now()));
+	}, [
+		detection.cardBounds,
+		detection.isCardDetected,
+		detection.isStable,
+		cameraActive,
+		camera.isReady,
+		lightLevel,
+	]);
 
 	// Report a denied camera permission to onError once. Document capture still
 	// offers a gallery-upload fallback, so this is informational — the flow isn't
@@ -213,17 +328,24 @@ export function DocumentCaptureStep() {
 		if (!camera.permissionDenied) permissionReportedRef.current = false;
 	}, [camera.permissionDenied, config]);
 
-	// Mirror the preview when the active camera is front-facing (desktop webcams,
-	// which can't honor `environment`). Display-only — captured frames via
-	// canvas drawImage are unaffected, so OCR still reads correct text.
+	// Mirror the PREVIEW on a front-facing camera, exactly as the selfie steps
+	// do: an unmirrored front camera moves the opposite way to the user, which
+	// makes lining a card up against the guide needlessly fiddly.
+	//
+	// The stored photo stays UNMIRRORED, which is where this differs from the
+	// selfie steps (they mirror both). A document is read, not looked at: the
+	// server's OCR, MRZ scanner and barcode decoders all need the true image,
+	// and a flipped one would fail them silently. Both guides are horizontally
+	// centred, so the crop takes the same region either way — only the content
+	// inside it is flipped back.
+	//
+	// Front-facing is decided by `isFrontFacingStream`, which mirrors only on
+	// positive evidence. The rule this replaced (`facingMode !== 'environment'`)
+	// treated an absent `facingMode` as front and so mirrored rear cameras on
+	// every browser that omits it.
 	const [mirrorPreview, setMirrorPreview] = useState(false);
 	useEffect(() => {
-		if (!camera.stream) {
-			setMirrorPreview(false);
-			return;
-		}
-		const settings = camera.stream.getVideoTracks()[0]?.getSettings();
-		setMirrorPreview(settings?.facingMode !== "environment");
+		setMirrorPreview(isFrontFacingStream(camera.stream));
 	}, [camera.stream]);
 
 	// ---------------------------------------------------------------------------
@@ -468,10 +590,49 @@ export function DocumentCaptureStep() {
 		const video = camera.videoRef.current;
 		if (!video || video.readyState < video.HAVE_CURRENT_DATA) return;
 
+		// Store the region under the guide, not the whole frame. The preview is
+		// `object-cover`, so the user only ever saw a slice of the sensor frame —
+		// keeping all of it hands back a wider, zoomed-out photo with the document
+		// small and off-centre, which is not what they framed. Matches Flutter,
+		// which crops to the same rectangle after every shutter.
+		//
+		// Crop to the guide that was painted. Both layouts now draw the SAME
+		// rectangle (documentGuideRect), so there is one geometry to honour —
+		// the desktop view used to paint its own, which meant the crop had to
+		// carry a second rectangle just to match it.
+		const viewport = viewportRef.current;
+		const view =
+			viewport ?
+				{ width: viewport.clientWidth, height: viewport.clientHeight }
+			:	null;
+		const crop =
+			view ?
+				documentCropRect({
+					frame: { width: video.videoWidth, height: video.videoHeight },
+					view,
+					aspect: guideAspect,
+				})
+			:	null;
+
 		const canvas = document.createElement("canvas");
-		canvas.width = video.videoWidth;
-		canvas.height = video.videoHeight;
-		canvas.getContext("2d")?.drawImage(video, 0, 0);
+		canvas.width = crop ? crop.width : video.videoWidth;
+		canvas.height = crop ? crop.height : video.videoHeight;
+		const ctx = canvas.getContext("2d");
+		if (crop) {
+			ctx?.drawImage(
+				video,
+				crop.x,
+				crop.y,
+				crop.width,
+				crop.height,
+				0,
+				0,
+				crop.width,
+				crop.height,
+			);
+		} else {
+			ctx?.drawImage(video, 0, 0);
+		}
 		const raw = canvas.toDataURL("image/jpeg", DOCUMENT_IMAGE_QUALITY);
 
 		const compressed = await compressDocument(raw);
@@ -482,7 +643,16 @@ export function DocumentCaptureStep() {
 		setUploadError(null);
 		storeCapture(compressed);
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [camera, compressDocument, detection, phase, isTwoSided, stopDocRecorder]);
+	}, [
+		camera,
+		compressDocument,
+		detection,
+		phase,
+		isTwoSided,
+		stopDocRecorder,
+		immersive,
+		guideAspect,
+	]);
 
 	// ---------------------------------------------------------------------------
 	// Upload images and advance to liveness
@@ -680,17 +850,33 @@ export function DocumentCaptureStep() {
 	return (
 		<div
 			className={cn(
-				'space-y-5 animate-slide-up',
+				'animate-slide-up',
+				// Immersive drops the stack spacing along with the header and badge:
+				// the camera is the only child, and `space-y-5` would push it down by
+				// a gap with nothing above it.
+				immersive ? 'flex min-h-0 flex-1 flex-col' : 'space-y-5',
 				// Review opts into the modal's flex layout (like CountrySelectStep) so
 				// its action bar can be pinned instead of scrolling out of sight.
-				// space-y-5 is KEPT: the header and the document badge above are
-				// siblings here, and collapsing their spacing to pin a footer would
-				// trade one layout bug for another.
+				// space-y-5 is KEPT there: the header and the document badge above are
+				// siblings, and collapsing their spacing to pin a footer would trade
+				// one layout bug for another.
 				phase === 'review' && 'flex min-h-0 flex-1 flex-col',
 			)}>
-			<StepHeader title={title} description={description} onBack={handleBack} />
+			{/* Header and badge are the step's own chrome. In immersive capture the
+			    overlay carries both — the document pill names the document and the
+			    round control is the way back — so rendering them here would leave a
+			    band above a camera that is meant to own the screen. */}
+			{!immersive && (
+				<StepHeader title={title} description={description} onBack={handleBack} />
+			)}
 
-			{/* Document type badge + progress */}
+			{/* Document type badge + progress.
+			    Hidden while the viewfinder is up: the in-frame document pill now
+			    names the document and its country, and the side badge names the
+			    side, so this band would say the same thing twice, immediately
+			    above itself. It still carries the review and flip phases, which
+			    have no viewfinder to carry it for them. */}
+			{!immersive && !viewfinderVisible && (
 			<div className='flex flex-wrap items-center gap-2'>
 				<div className='flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-primary'>
 					<CreditCard
@@ -713,6 +899,7 @@ export function DocumentCaptureStep() {
 					</span>
 				)}
 			</div>
+			)}
 
 			{/* Flip banner */}
 			{showFlipBanner && (
@@ -736,11 +923,14 @@ export function DocumentCaptureStep() {
 			{/* ------------------------------------------------------------------ */}
 			{phase === "front-preview" && (
 				<div className='space-y-4'>
-					<div className='overflow-hidden rounded-xl border border-border'>
+					{/* Capped for the same reason as the review preview: at natural
+					    aspect a document fills a desktop modal and pushes Retake and
+					    Continue past the fold. */}
+					<div className='mx-auto w-fit max-w-full overflow-hidden rounded-xl border border-border'>
 						<img
 							src={frontPreview!}
 							alt='Front of document'
-							className='w-full object-contain'
+							className='max-h-[46vh] w-auto max-w-full object-contain'
 						/>
 					</div>
 					<div className='flex gap-3'>
@@ -823,11 +1013,22 @@ export function DocumentCaptureStep() {
 			{/* ------------------------------------------------------------------ */}
 			{/* Camera / capture screen                                             */}
 			{/* ------------------------------------------------------------------ */}
-			{cameraActive && !showReadyPrimer && !needsPrimer && !showFlipBanner && (
-				<div className='space-y-3'>
+			{viewfinderVisible && (
+				<div className={immersive ? "flex min-h-0 flex-1 flex-col" : "space-y-3"}>
 					<div
-						className='relative overflow-hidden rounded-xl bg-black'
-						style={{ aspectRatio: "16/10" }}
+						ref={viewportRef}
+						className={cn(
+							"relative bg-black",
+							// Immersive: fill the surface the modal handed over. The
+							// negative margins are deliberate — the step body's padding is
+							// already gone in immersive mode, but the flex parent still
+							// bounds us, and `flex-1` here is what makes the camera the
+							// full remaining height rather than a 16:10 letterbox.
+							immersive
+								? "min-h-0 flex-1 overflow-hidden"
+								: "overflow-hidden rounded-xl",
+						)}
+						style={immersive ? undefined : { aspectRatio: "16/10" }}
 						onDragOver={allowUpload ? (e) => e.preventDefault() : undefined}
 						onDrop={allowUpload ? handleDrop : undefined}>
 						<video
@@ -846,17 +1047,66 @@ export function DocumentCaptureStep() {
 							aria-hidden='true'
 						/>
 
-						{camera.isReady && !camera.error && (
-							<DocumentDetectionOverlay
-								isDetected={detection.isCardDetected}
-								isStable={detection.isStable}
+						{camera.isReady && !camera.error && !immersive && (
+							<InlineOverlay
 								side={phase === "back" ? "back" : "front"}
+								documentLabel={shortDocumentLabel(state.selectedIdType, idTypeLabel)}
+								showMrzBand={state.selectedIdType === "passport"}
+								country={state.selectedCountry ?? config.country ?? null}
+								guideAspect={guideAspect}
+								framing={guidance.framing}
+								progress={dwell}
+								hint={documentHintText(guidance.hint, idTypeLabel)}
+								busy={isCompressing}
+								mirrored={mirrorPreview}
+								onCapture={handleManualCapture}
+								primaryColor={config.appearance?.primaryColor ?? "#5645F5"}
+							/>
+						)}
+
+						{camera.isReady && !camera.error && immersive && (
+							<ImmersiveOverlay
+								side={phase === "back" ? "back" : "front"}
+								documentLabel={shortDocumentLabel(state.selectedIdType, idTypeLabel)}
+								showMrzBand={state.selectedIdType === "passport"}
+								country={state.selectedCountry ?? config.country ?? null}
+								guideAspect={guideAspect}
+								framing={guidance.framing}
+								progress={dwell}
+								hint={documentHintText(guidance.hint, idTypeLabel)}
+								busy={isCompressing}
+								mirrored={mirrorPreview}
+								torch={torch.torch}
+								hasTorch={torch.hasTorch}
+								onToggleTorch={torch.toggleTorch}
+								onCapture={handleManualCapture}
+								onBack={handleBack}
+								onUpload={allowUpload ? openUpload : null}
+								// The canvas cannot read a CSS variable, so the resolved brand
+								// colour is passed in. Falls back to the SDK default.
+								primaryColor={config.appearance?.primaryColor ?? "#5645F5"}
 							/>
 						)}
 
 						{!camera.isReady && !camera.error && (
 							<div className='absolute inset-0 flex items-center justify-center bg-black/70'>
 								<div className='h-8 w-8 animate-spin rounded-full border-2 border-white border-t-transparent' />
+								{/* Immersive has hidden the step header, so this is the only
+								    way back while the stream comes up — without it a slow
+								    camera traps the user on a black screen. */}
+								{immersive && (
+									<button
+										type='button'
+										onClick={handleBack}
+										aria-label='Go back'
+										className='absolute left-4 flex h-11 w-11 items-center justify-center rounded-full text-white backdrop-blur-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70'
+										style={{
+											top: "calc(env(safe-area-inset-top) + 0.75rem)",
+											backgroundColor: "rgba(0,0,0,0.45)",
+										}}>
+										<ArrowLeft className='h-5 w-5' />
+									</button>
+								)}
 							</div>
 						)}
 
@@ -897,17 +1147,6 @@ export function DocumentCaptureStep() {
 							</div>
 						)}
 
-						{camera.isReady && !camera.error && !captureZoom && (
-							<div className='absolute bottom-4 left-0 right-0 flex items-center justify-center'>
-								<button
-									onClick={handleManualCapture}
-									className='flex h-14 w-14 items-center justify-center rounded-full border-4 border-primary bg-white transition-transform active:scale-95'
-									aria-label='Capture photo'>
-									<Camera className='h-5 w-5 text-primary' />
-								</button>
-							</div>
-						)}
-
 						{captureZoom && (
 							<CaptureZoomTransition
 								{...captureZoom}
@@ -916,11 +1155,16 @@ export function DocumentCaptureStep() {
 						)}
 					</div>
 
-					<p className='text-center text-xs text-muted-foreground'>
-						Card detected automatically · or tap the button to capture manually
-					</p>
+					{/* Below-camera chrome. All of it is carried by the immersive
+					    overlay instead — the hint and lighting warning become the bar's
+					    hint line, and the upload link becomes its gallery control. */}
+					{!immersive && (
+						<p className='text-center text-xs text-muted-foreground'>
+							Card detected automatically · or tap the button to capture manually
+						</p>
+					)}
 
-					{(isDim || isBright) && (
+					{!immersive && (isDim || isBright) && (
 						<div className='flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800 animate-lighting-in dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-400'>
 							<svg
 								xmlns='http://www.w3.org/2000/svg'
@@ -945,7 +1189,7 @@ export function DocumentCaptureStep() {
 						</div>
 					)}
 
-					{allowUpload && (
+					{allowUpload && !immersive && (
 						<div className='flex items-center justify-center gap-1.5 text-xs text-muted-foreground'>
 							<span>Having trouble?</span>
 							<button
@@ -989,105 +1233,6 @@ export function DocumentCaptureStep() {
 					Compressing image…
 				</p>
 			)}
-		</div>
-	);
-}
-
-// ---------------------------------------------------------------------------
-// DocumentDetectionOverlay
-// ---------------------------------------------------------------------------
-
-function DocumentDetectionOverlay({
-	isDetected,
-	isStable,
-	side,
-}: {
-	isDetected: boolean;
-	isStable: boolean;
-	side: "front" | "back";
-}) {
-	const GX = 15,
-		GY = 12,
-		GW = 130,
-		GH = 76,
-		cornerLen = 10;
-	const borderColor = isDetected ? "#22c55e" : "rgba(255,255,255,0.85)";
-	const borderWidth = isDetected ? 1.5 : 0.6;
-	const label =
-		isStable ? "Capturing…"
-		: isDetected ? "Hold still…"
-		: side === "back" ? "Align the BACK of your card"
-		: "Align your ID within the frame";
-
-	return (
-		<div className='pointer-events-none absolute inset-0'>
-			<svg
-				className='h-full w-full'
-				viewBox='0 0 160 100'
-				preserveAspectRatio='none'>
-				<defs>
-					<mask id='doc-detect-mask'>
-						<rect width='160' height='100' fill='white' />
-						<rect x={GX} y={GY} width={GW} height={GH} rx='3' fill='black' />
-					</mask>
-				</defs>
-				<rect
-					width='160'
-					height='100'
-					fill='rgba(0,0,0,0.55)'
-					mask='url(#doc-detect-mask)'
-				/>
-				<rect
-					x={GX}
-					y={GY}
-					width={GW}
-					height={GH}
-					rx='3'
-					fill='none'
-					stroke={borderColor}
-					strokeWidth={borderWidth}
-					strokeDasharray={isDetected ? undefined : "7 3"}
-				/>
-				<path
-					d={`M${GX},${GY + cornerLen} L${GX},${GY} L${GX + cornerLen},${GY}`}
-					fill='none'
-					stroke={borderColor}
-					strokeWidth='2'
-					strokeLinecap='round'
-				/>
-				<path
-					d={`M${GX + GW - cornerLen},${GY} L${GX + GW},${GY} L${GX + GW},${GY + cornerLen}`}
-					fill='none'
-					stroke={borderColor}
-					strokeWidth='2'
-					strokeLinecap='round'
-				/>
-				<path
-					d={`M${GX + GW},${GY + GH - cornerLen} L${GX + GW},${GY + GH} L${GX + GW - cornerLen},${GY + GH}`}
-					fill='none'
-					stroke={borderColor}
-					strokeWidth='2'
-					strokeLinecap='round'
-				/>
-				<path
-					d={`M${GX + cornerLen},${GY + GH} L${GX},${GY + GH} L${GX},${GY + GH - cornerLen}`}
-					fill='none'
-					stroke={borderColor}
-					strokeWidth='2'
-					strokeLinecap='round'
-				/>
-			</svg>
-			<div className='absolute bottom-20 left-0 right-0 text-center'>
-				<span
-					className={cn(
-						"rounded-full px-3 py-1 text-xs font-medium backdrop-blur-sm",
-						isDetected ?
-							"bg-green-500/20 text-green-300"
-						:	"bg-black/30 text-white/80",
-					)}>
-					{label}
-				</span>
-			</div>
 		</div>
 	);
 }

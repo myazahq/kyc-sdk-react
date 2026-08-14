@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useReducer, useMemo, useEffect, type ReactNode } from 'react';
 import { recordStep } from '../lib/step-log';
+import { primeDeviceHints } from '../utils/device-metadata';
 import type { KYCState, KYCAction } from './types';
 
 // ---------------------------------------------------------------------------
@@ -253,6 +254,14 @@ export function KYCProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (state.isOpen) recordStep(state.currentStep);
   }, [state.isOpen, state.currentStep]);
+
+  // Ask for the real device model as early as possible. The client-hints call
+  // is async but the submit metadata is built synchronously, so it is primed
+  // here — the same shared seam — and read from cache minutes later.
+  useEffect(() => {
+    primeDeviceHints();
+  }, []);
+
   const value = useMemo<KYCContextValue>(() => ({ state, dispatch }), [state]);
   return <KYCContext.Provider value={value}>{children}</KYCContext.Provider>;
 }

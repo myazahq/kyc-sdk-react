@@ -11,12 +11,14 @@ import {
   ScanLine,
   ScanFace,
   Lock,
+  RotateCcw,
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { useKYCContext } from '../context/KYCContext';
 import { useKYCConfig } from '../context/KYCConfigContext';
 import { isBusinessFlow } from '../lib/business';
 import { firstStepAfterConsent, hasEmailVerificationStep, hasPhoneVerificationStep } from '../lib/contact-steps';
+import { resubmitNote } from '../lib/resubmit';
 import {
   hasApplicantVerification,
   hasBusinessDocumentsStep,
@@ -114,8 +116,24 @@ export function ConsentStep() {
     steps.push({ icon: ScanFace, label: 'Verify your own identity' });
   }
 
+  // A reviewer sent this applicant back. Say so, and say why — the note is the
+  // only thing on screen that explains a flow which has silently lost most of
+  // its steps. Rendered ABOVE the title so it is read before the instructions.
+  const redoNote = resubmitNote(config.resubmit);
+
   return (
     <div className="space-y-7 animate-slide-up">
+      {redoNote && (
+        <div className="flex gap-3 rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4 text-left">
+          <RotateCcw className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+          <div className="min-w-0 space-y-1">
+            <p className="text-sm font-medium text-amber-700 dark:text-amber-300">
+              A few things to redo
+            </p>
+            <p className="text-sm leading-relaxed text-foreground/80">{redoNote}</p>
+          </div>
+        </div>
+      )}
       <div className="flex flex-col items-center text-center space-y-4">
         <div className="relative flex h-20 w-20 items-center justify-center">
           <span className="absolute inset-0 rounded-full bg-primary/10 animate-pulse-ring" />

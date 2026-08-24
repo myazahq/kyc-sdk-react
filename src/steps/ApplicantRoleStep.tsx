@@ -70,11 +70,13 @@ export function ApplicantRoleStep() {
     applicantKeyPersonIndex?: number | null;
   }) => dispatch({ type: 'SET_BUSINESS_APPLICATION', payload });
 
-  // The valid entered people, keeping their ORIGINAL index — the payload flag
-  // is index-based, so the list and the submission can never disagree.
+  // The valid entered PEOPLE, keeping their ORIGINAL index — the payload flag
+  // is index-based, so the list and the submission can never disagree. A
+  // corporate shareholder is excluded: "which of these is you?" is a question
+  // about humans, and a company can never be the person filling in the form.
   const people = keyPeople
     .map((row, index) => ({ row, index }))
-    .filter(({ row }) => isKeyPersonRowValid(row));
+    .filter(({ row }) => !row.isCorporate && isKeyPersonRowValid(row));
   const hasPeople = people.length > 0;
 
   // Local tri-state: a person's index, 'other', or nothing chosen yet.
@@ -97,8 +99,12 @@ export function ApplicantRoleStep() {
   };
 
   // First arrival: pre-fill from the consumer's userData — pre-SELECT their
-  // own key-person entry when the name matches (they still confirm), else
-  // pre-fill the free-text name. A stored choice is never overridden.
+  // own key-person entry when the name matches (they still confirm). When the
+  // name matches NOBODY listed, "I'm not one of these people" is what that
+  // fact means, so it is pre-selected too (with the name pre-filled in the
+  // form it reveals) — leaving nothing selected made the applicant re-answer
+  // a question their integrator already answered. A stored choice is never
+  // overridden, and the selection stays theirs to change.
   useEffect(() => {
     if (applicantRole || applicantKeyPersonIndex !== null) return;
     const prop = [config.userData?.firstName, config.userData?.lastName]
@@ -106,8 +112,12 @@ export function ApplicantRoleStep() {
       .join(' ');
     if (!prop) return;
     const match = people.find(({ row }) => namesLooselyMatch(prop, row.name));
-    if (match) pickPerson(match.index);
-    else if (!applicantName) setApplication({ applicantName: prop });
+    if (match) {
+      pickPerson(match.index);
+    } else {
+      if (hasPeople) setSelection('other');
+      if (!applicantName) setApplication({ applicantName: prop });
+    }
     // Once, on arrival — a later userData change must not clobber a choice.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -122,7 +132,7 @@ export function ApplicantRoleStep() {
         title="Now verify your own identity"
         description="Tell us your role at the business, then verify your identity with a government-issued ID."
         onBack={() =>
-          dispatch({ type: 'SET_STEP', payload: prevBusinessStep('applicant-role', config.business) })
+          dispatch({ type: 'SET_STEP', payload: prevBusinessStep('applicant-role', config) })
         }
       />
 

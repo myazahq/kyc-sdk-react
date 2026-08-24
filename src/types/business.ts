@@ -19,7 +19,16 @@ export type ApplicantRole = KeyPersonRole | 'authorized_representative';
 
 /** Supporting-document kinds a KYB workflow can request from the applicant. */
 export const COMPANY_INFO_FIELDS = ['address', 'email', 'phone', 'website'] as const;
-export type CompanyInfoField = (typeof COMPANY_INFO_FIELDS)[number];
+export type CompanyInfoField =
+  | 'address'
+  | 'email'
+  | 'phone'
+  | 'website'
+  | 'dateOfIncorporation'
+  | 'taxId'
+  | 'vatNumber'
+  | 'companyType'
+  | 'natureOfBusiness';
 export type CompanyInfoMode = 'off' | 'optional' | 'required';
 
 export type BusinessDocumentKey =
@@ -40,6 +49,14 @@ export type KeyPeopleLevel = 'screening_only' | 'data' | 'full_kyc';
  * `KeyPeopleConfigSchema`; the SDK only reads the email-invite gate.
  */
 export interface WorkflowKeyPeopleConfig {
+  /** People the applicant lists must carry an email address. */
+  requireEmail?: boolean;
+  /**
+   * WHICH roles must supply one. Absent = the roles that are actually invited,
+   * because an address exists to deliver a verification link and nothing else
+   * asks for one. A company is always exempt.
+   */
+  requireEmailRoles?: KeyPersonRole[];
   enabled?: boolean;
   /** SDK collects the directors/owners from the applicant (adds the
    *  business-key-people step to the flow). */
@@ -61,6 +78,10 @@ export interface WorkflowKeyPeopleConfig {
     /** The KYC workflow the per-person invite links run through. */
     workflowId?: string;
   };
+  /** Nested KYB: a corporate shareholder is invited into its OWN business
+   *  application (the server mints the link; the SDK only tells the applicant
+   *  the truth about what happens to a company they list). */
+  corporateKyb?: { enabled?: boolean; workflowId?: string };
 }
 
 /**
@@ -88,6 +109,21 @@ export interface WorkflowBusinessConfig {
   products?: string[];
   /** Require the visitor to also type the registered business name. */
   requireRegistrationName?: boolean;
+  /**
+   * Freeze the register once a lookup has answered. Off by default: an
+   * applicant picking from ~48 registers mis-clicks, and locking turns that
+   * into a dead end. Client-side only - the server re-checks and re-charges a
+   * changed company whatever the form allowed.
+   */
+  lockCountryAfterCheck?: boolean;
+  /** The company the ORG asserted at session creation, skipping the search. */
+  assertedCompany?: {
+    country: string;
+    registrationNumber: string;
+    registrationName?: string;
+    /** Let the applicant correct an assertion that is wrong. Default true. */
+    editable?: boolean;
+  };
   /** Collect the company profile (address / email / phone / website) on the
    *  business-details step. Default ON; false hides the whole section. */
   collectCompanyInfo?: boolean;

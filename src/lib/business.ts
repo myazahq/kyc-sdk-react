@@ -178,10 +178,22 @@ export function companyInfoFieldModes(
 ): Record<import('../types/business').CompanyInfoField, import('../types/business').CompanyInfoMode> {
   const off = business?.collectCompanyInfo === false;
   const modes = business?.companyInfo ?? {};
-  return {
-    address: off ? 'off' : (modes.address ?? 'optional'),
-    email: off ? 'off' : (modes.email ?? 'optional'),
-    phone: off ? 'off' : (modes.phone ?? 'optional'),
-    website: off ? 'off' : (modes.website ?? 'optional'),
-  };
+  type F = import('../types/business').CompanyInfoField;
+  type M = import('../types/business').CompanyInfoMode;
+  // Built from the field list so adding one on the server means adding it in a
+  // single place here, rather than a line that is easy to forget.
+  const FIELDS: F[] = [
+    'address',
+    'email',
+    'phone',
+    'website',
+    'dateOfIncorporation',
+    'taxId',
+    'vatNumber',
+    'companyType',
+    'natureOfBusiness',
+  ];
+  return Object.fromEntries(
+    FIELDS.map((f) => [f, off ? 'off' : (modes[f] ?? 'optional')]),
+  ) as Record<F, M>;
 }

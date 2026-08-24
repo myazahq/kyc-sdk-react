@@ -18,6 +18,7 @@ export function ContactDestinationField({
   onEmailChange,
   onPhoneChange,
   defaultCountry,
+  geoCountry,
   disabled,
 }: {
   isEmail: boolean;
@@ -25,6 +26,8 @@ export function ContactDestinationField({
   onEmailChange: (value: string) => void;
   onPhoneChange: (value: { e164: string; isValid: boolean }) => void;
   defaultCountry?: string;
+  /** The visitor's IP country, pinned and tagged at the top of the picker. */
+  geoCountry?: string | null;
   disabled?: boolean;
 }) {
   if (isEmail) {
@@ -48,7 +51,12 @@ export function ContactDestinationField({
   return (
     <div className="space-y-2">
       <Label>Phone number</Label>
-      <PhoneNumberInput defaultCountry={defaultCountry} disabled={disabled} onChange={onPhoneChange} />
+      <PhoneNumberInput
+        defaultCountry={defaultCountry}
+        geoCountry={geoCountry}
+        disabled={disabled}
+        onChange={onPhoneChange}
+      />
     </div>
   );
 }

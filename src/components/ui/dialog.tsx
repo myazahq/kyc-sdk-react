@@ -3,6 +3,7 @@
 import * as React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { cn } from "../../lib/utils";
+import { usePortalHost } from "../../lib/sdk-frame-context";
 
 const Dialog = DialogPrimitive.Root;
 const DialogTrigger = DialogPrimitive.Trigger;
@@ -27,8 +28,14 @@ const DialogContent = React.forwardRef<
 		fullscreen?: boolean;
 		overlayClassName?: string;
 	}
->(({ className, children, fullscreen, overlayClassName, ...props }, ref) => (
-	<DialogPortal>
+>(({ className, children, fullscreen, overlayClassName, ...props }, ref) => {
+	// Inside an isolated (SdkFrame) mount the dialog portals into the SDK's
+	// body-level shadow frame — styled by the SDK's own sheet and free of
+	// transformed host-app ancestors. Null = no boundary (hosted page):
+	// Radix's document.body default, as before.
+	const portalHost = usePortalHost();
+	return (
+	<DialogPortal container={portalHost ?? undefined}>
 		<DialogOverlay className={cn("bg-black/60", overlayClassName)} />
 		<DialogPrimitive.Content
 			ref={ref}
@@ -43,7 +50,8 @@ const DialogContent = React.forwardRef<
 			{children}
 		</DialogPrimitive.Content>
 	</DialogPortal>
-));
+	);
+});
 DialogContent.displayName = DialogPrimitive.Content.displayName;
 
 const DialogHeader = ({

@@ -85,11 +85,38 @@ export type SubmitSuccessAction =
 	| { label: string; onClick: () => void }
 	| { note: string };
 
+/**
+ * The mark at the top of the terminal screen.
+ *
+ * A submission gets the tick. An application that came back DECLINED must not:
+ * a returning applicant was being shown a green tick over a decision that had
+ * gone against them, which is the screen contradicting itself. An `error` is
+ * ours rather than theirs, so it is neutral instead of negative.
+ */
+export type TerminalTone = 'success' | 'declined' | 'neutral';
+
+const TONE: Record<TerminalTone, { ring: string; color: string; path: string }> = {
+	success: {
+		ring: 'bg-[var(--kyc-success)]/10',
+		color: 'text-[var(--kyc-success)]',
+		path: 'M4 12l5 5L20 6',
+	},
+	// A cross, drawn with the same stroke and the same animation, so the screen
+	// reads as one design rather than a different screen for bad news.
+	declined: {
+		ring: 'bg-[var(--kyc-error)]/10',
+		color: 'text-[var(--kyc-error)]',
+		path: 'M6 6l12 12M18 6L6 18',
+	},
+	neutral: { ring: 'bg-muted', color: 'text-muted-foreground', path: 'M12 8v5M12 16.5v.5' },
+};
+
 export function SubmitSuccessScreen({
 	title,
 	description,
 	action,
 	extra,
+	tone = 'success',
 }: {
 	title: string;
 	description: string;
@@ -97,13 +124,15 @@ export function SubmitSuccessScreen({
 	/** Optional block between the message and the terminal action (e.g. the KYB
 	 *  key-people invite links). */
 	extra?: React.ReactNode;
+	/** What happened. Defaults to success — a fresh submission always has. */
+	tone?: TerminalTone;
 }) {
+	const marks = TONE[tone];
 	return (
 		<div className='flex flex-col items-center gap-6 py-6 animate-fade-in'>
-			{/* Animated checkmark */}
-			<div className='flex h-20 w-20 items-center justify-center rounded-full bg-[var(--kyc-success)]/10'>
+			<div className={`flex h-20 w-20 items-center justify-center rounded-full ${marks.ring}`}>
 				<svg
-					className='h-10 w-10 text-[var(--kyc-success)]'
+					className={`h-10 w-10 ${marks.color}`}
 					viewBox='0 0 24 24'
 					fill='none'
 					stroke='currentColor'
@@ -111,7 +140,7 @@ export function SubmitSuccessScreen({
 					strokeLinecap='round'
 					strokeLinejoin='round'>
 					<path
-						d='M4 12l5 5L20 6'
+						d={marks.path}
 						strokeDasharray='100'
 						strokeDashoffset='100'
 						className='animate-checkmark'

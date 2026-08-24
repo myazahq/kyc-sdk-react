@@ -1,6 +1,16 @@
 'use client';
 
-import { useCallback, useEffect, useLayoutEffect, useState, type CSSProperties, type RefObject } from 'react';
+import {
+  useCallback,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useState,
+  type CSSProperties,
+  type RefObject,
+} from 'react';
+import { ThemeVarsContext } from './theme-context';
+import { usePortalHost } from './sdk-frame-context';
 
 /**
  * Position a dropdown so it escapes the step body's scroll container.
@@ -10,21 +20,24 @@ import { useCallback, useEffect, useLayoutEffect, useState, type CSSProperties, 
  * appeared to vanish behind the footer. `z-index` cannot fix that: it is
  * overflow clipping, not stacking.
  *
- * The menu therefore renders into `.kyc-root` (the dialog content element),
- * which sits ABOVE both the scrolling body and the footer, so the list can
- * overlay the footer as it should.
+ * The menu therefore renders into `document.body`, fixed to viewport
+ * coordinates, so it can float over the dialog rather than being bounded by it.
  *
- * Two constraints shape how it is positioned:
+ * Rendering there costs three things the dialog would otherwise have given it,
+ * and each is paid back explicitly:
  *
- *   • NOT a Radix portal to `document.body`. Radix Dialog sets
- *     `pointer-events: none` on the body while open, so a menu portaled there
- *     is impossible to scroll or click. `.kyc-root` is inside the dialog, so it
- *     keeps pointer events and the focus trap.
- *   • NOT `position: fixed`. On desktop the dialog carries
- *     `xl:translate-x-[-50%]`, and a transformed ancestor becomes the
- *     containing block for fixed descendants — so viewport coordinates would be
- *     correct on mobile and wrong on desktop. Absolute coordinates measured
- *     RELATIVE to the host are right in both.
+ *   • Pointer events. Radix Dialog sets `pointer-events: none` on the body
+ *     while open, so the menu re-enables them on itself (see `style` below).
+ *   • Theme variables. Those live on `.kyc-root`, which is no longer an
+ *     ancestor, so they are merged into the menu's own style.
+ *   • Scrolling. The dialog's scroll lock preventDefaults wheel and touchmove
+ *     everywhere outside its content, which left the list movable only by
+ *     dragging its scrollbar thumb. Callers wrap the menu in
+ *     `<DropdownSurface>`, a nested lock that takes over while it is open.
+ *
+ * `position: fixed` is correct here only BECAUSE the host is the body: the
+ * dialog carries `xl:translate-x-[-50%]` on desktop, and a transformed ancestor
+ * would become the containing block for fixed descendants.
  *
  * It prefers to open downwards and shrinks its height budget to the room
  * available, so a long list scrolls rather than overflowing. When the trigger
@@ -70,6 +83,8 @@ export function useDropdownAnchor(
   triggerRef: RefObject<HTMLElement | null>,
   { width = 288, gap = 6, margin = 12, minHeight = 120, menuRef }: Options = {},
 ): DropdownAnchor {
+  const themeVars = useContext(ThemeVarsContext);
+  const portalFrame = usePortalHost();
   const [host, setHost] = useState<HTMLElement | null>(null);
   const [pos, setPos] = useState({ top: 0, left: 0, width: 288, maxHeight: 240 });
 
@@ -79,10 +94,11 @@ export function useDropdownAnchor(
     const hostRect = host.getBoundingClientRect();
     const rect = trigger.getBoundingClientRect();
 
-    // Bound by the MODAL's edges as well as the viewport's, so the menu never
-    // spills outside the dialog.
-    const floor = Math.min(window.innerHeight, hostRect.bottom);
-    const ceiling = Math.max(0, hostRect.top);
+    // Bound by the VIEWPORT. It used to be bounded by the dialog too, which is
+    // what made a long list feel trapped inside the flow: the menu could not
+    // use the space beside the modal even when the modal had none.
+    const floor = window.innerHeight;
+    const ceiling = 0;
     const below = floor - rect.bottom - gap - margin;
     const above = rect.top - ceiling - gap - margin;
 
@@ -97,23 +113,28 @@ export function useDropdownAnchor(
     const natural = menuRef?.current?.scrollHeight ?? 0;
     const needs = natural > 0 ? natural : minHeight;
     const placeAbove = below < needs && above > below;
-    const maxHeight = Math.max(minHeight, placeAbove ? above : below);
+    // Capped, not just fitted.
+    //
+    // Room available is an upper bound, not a target: on a tall window the menu
+    // would grow to most of the screen, which is a wall to read rather than a
+    // list to scan, and it stops looking like a menu at all. Past this the list
+    // scrolls, which is what a long list should do.
+    const MAX_MENU_HEIGHT = 340;
+    const maxHeight = Math.min(
+      MAX_MENU_HEIGHT,
+      Math.max(minHeight, placeAbove ? above : below),
+    );
 
     const menuWidth = width === 'trigger' ? rect.width : width;
 
-    // Host-relative, so a transformed dialog is accounted for automatically.
-    const left = clamp(
-      rect.left - hostRect.left + host.scrollLeft,
-      margin,
-      Math.max(margin, host.clientWidth - menuWidth - margin),
-    );
+    // Viewport coordinates: the menu lives on the body now, so there is no
+    // host offset to subtract and no transformed ancestor to correct for.
+    const left = clamp(rect.left, margin, Math.max(margin, window.innerWidth - menuWidth - margin));
 
     // Opening upwards needs the menu's real height to know where its TOP goes,
     // capped at what will fit.
     const menuHeight = Math.min(natural || maxHeight, maxHeight);
-    const top = placeAbove
-      ? rect.top - hostRect.top + host.scrollTop - gap - menuHeight
-      : rect.bottom - hostRect.top + host.scrollTop + gap;
+    const top = placeAbove ? rect.top - gap - menuHeight : rect.bottom + gap;
 
     setPos((prev) =>
       prev.top === top && prev.left === left && prev.width === menuWidth && prev.maxHeight === maxHeight
@@ -122,14 +143,19 @@ export function useDropdownAnchor(
     );
   }, [host, triggerRef, gap, margin, minHeight, width, menuRef]);
 
-  // Resolve the host from the trigger rather than a context: the dialog root
-  // carries `.kyc-root`, and this way the hook works for any anchored menu
-  // without every caller having to thread a ref down.
   useLayoutEffect(() => {
     if (!open) return;
-    const el = triggerRef.current?.closest('.kyc-root');
-    setHost(el instanceof HTMLElement ? el : null);
-  }, [open, triggerRef]);
+    // The SDK's shadow portal frame when isolated, else the BODY — never the
+    // nearest .kyc-root.
+    //
+    // Portaling inside the dialog meant the dialog's own overflow bounded the
+    // menu: it could never float over the flow, only scroll or clip within it.
+    // Both targets sit directly under the body with no transformed ancestor,
+    // so fixed viewport coordinates are correct in a way they were not inside
+    // a translated dialog — and the shadow frame additionally keeps the menu
+    // styled by (and only by) the SDK's own sheet.
+    setHost(portalFrame ?? (typeof document === 'undefined' ? null : document.body));
+  }, [open, triggerRef, portalFrame]);
 
   useLayoutEffect(() => {
     if (open) measure();
@@ -156,7 +182,22 @@ export function useDropdownAnchor(
 
   return {
     host,
-    style: { position: 'absolute', top: pos.top, left: pos.left, width: pos.width },
+    style: {
+      // The menu now renders on the BODY, outside .kyc-root, so it no longer
+      // inherits the theme variables that element carries. Merging them in
+      // here keeps every menu themed without each caller remembering to, and
+      // without a menu ever rendering in the host page's colours.
+      ...themeVars,
+      position: 'fixed',
+      top: pos.top,
+      left: pos.left,
+      width: pos.width,
+      // Radix sets pointer-events:none on the body while a dialog is open, so a
+      // menu portaled here inherits it and becomes unclickable. Re-enabling it
+      // on the menu itself is what makes the body a usable portal target - and
+      // portaling here is what lets the menu escape the dialog's overflow.
+      pointerEvents: 'auto',
+    },
     maxHeight: pos.maxHeight,
   };
 }

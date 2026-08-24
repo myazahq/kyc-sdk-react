@@ -22,6 +22,7 @@ import { CameraPermissionPrimer } from "../components/CameraPermissionPrimer";
 import { useKYCContext } from "../context/KYCContext";
 import { useKYCConfig } from "../context/KYCConfigContext";
 import { stepAfterCapture } from "../lib/post-capture";
+import { multiIdPlan } from "../lib/multi-id";
 import { useCamera } from "../hooks/useCamera";
 import { useCameraPrimer } from "../hooks/useCameraPrimer";
 import {
@@ -715,11 +716,19 @@ export function DocumentCaptureStep() {
 			const skipLiveness =
 				config.enableSelfie === false ||
 				(features ? !features.livenessCheck : config.enableLiveness === false);
-			if (!skipLiveness) primeSpeech();
-			dispatch({
-				type: "SET_STEP",
-				payload: skipLiveness ? stepAfterCapture(config) : "liveness",
-			});
+			const afterRun = skipLiveness ? stepAfterCapture(config) : "liveness";
+			// Multi-ID: this slot is done — commit its evidence and move to the
+			// next slot's picker, or on to liveness after the last slot.
+			const plan = multiIdPlan(config, state, config.serverConfig.idTypes);
+			if (!skipLiveness && (!plan || plan.last)) primeSpeech();
+			if (plan) {
+				dispatch({
+					type: "COMMIT_MULTI_ID_SLOT",
+					payload: { nextStep: plan.last ? afterRun : "id-type" },
+				});
+				return;
+			}
+			dispatch({ type: "SET_STEP", payload: afterRun });
 		} catch (err) {
 			// Retries exhausted — show the inline error AND report a typed error once.
 			setRetryInfo(null);
@@ -735,6 +744,7 @@ export function DocumentCaptureStep() {
 		config,
 		dispatch,
 		state.selectedIdType,
+		state.multiIdSlotIndex,
 	]);
 
 	// ---------------------------------------------------------------------------

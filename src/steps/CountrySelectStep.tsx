@@ -57,7 +57,12 @@ export function CountrySelectStep() {
       />
 
       {options.length > SEARCH_THRESHOLD ? (
-        <CountryRegionPicker countries={options} selected={selected} onPick={pick} />
+        <CountryRegionPicker
+          countries={options}
+          selected={selected}
+          geoCountry={config.serverConfig?.geoCountry}
+          onPick={pick}
+        />
       ) : (
         <div className="flex flex-col gap-2">
           {options.map((country) => (

@@ -6,7 +6,7 @@ import {
   hasKeyPeopleCollection,
   isKeyPersonRowValid,
   keyPeoplePayload,
-  lastBusinessSectionStep,
+  keyPeopleRequireEmail,
   nextBusinessStep,
   prevBusinessStep,
   resolveBusinessDocumentTypes,
@@ -74,46 +74,57 @@ describe('resolveBusinessDocumentTypes', () => {
 describe('section sequencing', () => {
   it('orders the configured steps', () => {
     expect(businessSectionSteps(base)).toEqual(['business-details']);
+    // Documents follow the company they belong to; people come after.
     expect(businessSectionSteps(full)).toEqual([
       'business-details',
-      'business-key-people',
       'business-documents',
+      'business-key-people',
       'applicant-role',
     ]);
   });
 
-  it('nextBusinessStep walks the section, then questionnaire/submitted', () => {
-    expect(nextBusinessStep('business-details', { business: full })).toBe('business-key-people');
-    expect(nextBusinessStep('business-key-people', { business: full })).toBe('business-documents');
-    expect(nextBusinessStep('business-documents', { business: full })).toBe('applicant-role');
+  it('nextBusinessStep walks the section, then submitted', () => {
+    expect(nextBusinessStep('business-details', { business: full })).toBe('business-documents');
+    expect(nextBusinessStep('business-documents', { business: full })).toBe('business-key-people');
+    expect(nextBusinessStep('business-key-people', { business: full })).toBe('applicant-role');
     expect(nextBusinessStep('applicant-role', { business: full })).toBe('id-type');
     expect(nextBusinessStep('business-details', { business: base })).toBe('submitted');
-    expect(
-      nextBusinessStep('business-details', {
-        business: base,
-        questionnaire: { fields: [{ key: 'a', label: 'A', type: 'text' }] },
-      }),
-    ).toBe('questionnaire');
+  });
+
+  it('the questionnaire sits INSIDE the section, before key people', () => {
+    // Its questions are about the COMPANY, so it stays with the company form —
+    // naming the directors hands the application over to other people, and the
+    // applicant's own questions must not trail that.
+    const questionnaire = { fields: [{ key: 'a', label: 'A', type: 'text' as const }] };
+    expect(nextBusinessStep('business-documents', { business: full, questionnaire })).toBe(
+      'questionnaire',
+    );
+    expect(nextBusinessStep('questionnaire', { business: full, questionnaire })).toBe(
+      'business-key-people',
+    );
+    // No key people / applicant configured: the questionnaire is the end.
+    expect(nextBusinessStep('questionnaire', { business: base, questionnaire })).toBe('submitted');
+    expect(prevBusinessStep('questionnaire', { business: full, questionnaire })).toBe(
+      'business-documents',
+    );
+    expect(prevBusinessStep('business-key-people', { business: full, questionnaire })).toBe(
+      'questionnaire',
+    );
   });
 
   it('prevBusinessStep mirrors, landing on consent at the front', () => {
-    expect(prevBusinessStep('business-details', full)).toBe('consent');
-    expect(prevBusinessStep('business-key-people', full)).toBe('business-details');
-    expect(prevBusinessStep('business-documents', full)).toBe('business-key-people');
-    expect(prevBusinessStep('applicant-role', full)).toBe('business-documents');
+    expect(prevBusinessStep('business-details', { business: full })).toBe('consent');
+    expect(prevBusinessStep('business-documents', { business: full })).toBe('business-details');
+    expect(prevBusinessStep('business-key-people', { business: full })).toBe('business-documents');
+    expect(prevBusinessStep('applicant-role', { business: full })).toBe('business-key-people');
     // Unconfigured middle steps are skipped in both directions.
     const docsOnly: WorkflowBusinessConfig = { ...base, documents: { enabled: true } };
-    expect(prevBusinessStep('business-documents', docsOnly)).toBe('business-details');
-  });
-
-  it('lastBusinessSectionStep is the questionnaire back target', () => {
-    expect(lastBusinessSectionStep(base)).toBe('business-details');
-    expect(lastBusinessSectionStep({ ...base, documents: { enabled: true } })).toBe('business-documents');
+    expect(prevBusinessStep('business-documents', { business: docsOnly })).toBe('business-details');
   });
 });
 
 describe('key-people rows', () => {
-  const valid = { name: 'Bola Owner', role: 'beneficial_owner' as const, email: '', country: '', ownershipPct: '' };
+  const valid = { name: 'Bola Owner', role: 'beneficial_owner' as const, roles: ['beneficial_owner' as const], title: '', email: '', country: '', ownershipPct: '', isCorporate: false, registrationNumber: '', owners: [] };
 
   it('validates name, role, optional email and ownership', () => {
     expect(isKeyPersonRowValid(valid)).toBe(true);
@@ -127,13 +138,23 @@ describe('key-people rows', () => {
   it('maps valid rows to the payload shape, dropping empty optionals', () => {
     expect(
       keyPeoplePayload([
-        { name: ' Bola Owner ', role: 'beneficial_owner', email: 'bola@x.com', country: 'ng', ownershipPct: '60' },
-        { name: 'Jide Director', role: 'director', email: '', country: '', ownershipPct: '' },
-        { name: '', role: 'director', email: '', country: '', ownershipPct: '' }, // invalid → dropped
+        {
+          name: ' Bola Owner ',
+          role: 'beneficial_owner',
+          roles: ['beneficial_owner'],
+          title: '',
+          email: 'bola@x.com',
+          country: 'ng',
+          ownershipPct: '60',
+          isCorporate: false,
+          registrationNumber: '', owners: [],
+        },
+        { name: 'Jide Director', role: 'director', roles: ['director'], title: '', email: '', country: '', ownershipPct: '', isCorporate: false, registrationNumber: '', owners: [] },
+        { name: '', role: 'director', roles: ['director'], title: '', email: '', country: '', ownershipPct: '', isCorporate: false, registrationNumber: '', owners: [] }, // invalid → dropped
       ]),
     ).toEqual([
-      { name: 'Bola Owner', role: 'beneficial_owner', email: 'bola@x.com', country: 'NG', ownershipPct: 60 },
-      { name: 'Jide Director', role: 'director' },
+      { name: 'Bola Owner', role: 'beneficial_owner', roles: ['beneficial_owner'], email: 'bola@x.com', country: 'NG', ownershipPct: 60 },
+      { name: 'Jide Director', role: 'director', roles: ['director'] },
     ]);
   });
 });
@@ -144,5 +165,103 @@ describe('splitFullName', () => {
     expect(splitFullName('  Ada  Ngozi   Obi ')).toEqual({ firstName: 'Ada', lastName: 'Ngozi Obi' });
     expect(splitFullName('Cher')).toEqual({ firstName: 'Cher' });
     expect(splitFullName('   ')).toBeUndefined();
+  });
+});
+
+describe('a corporate shareholder', () => {
+  const corp = {
+    name: 'Acme Holdings Ltd',
+    role: 'shareholder' as const,
+    roles: ['shareholder' as const],
+    title: '',
+    email: '',
+    country: 'NG',
+    ownershipPct: '60',
+    isCorporate: true,
+    registrationNumber: 'RC123456',
+    owners: [],
+  };
+
+  it('is sent as a company, with its registration number', () => {
+    expect(keyPeoplePayload([corp])[0]).toMatchObject({
+      name: 'Acme Holdings Ltd',
+      isCorporate: true,
+      registrationNumber: 'RC123456',
+    });
+  });
+
+  it('is valid without an email even when the workflow requires one', () => {
+    // A company has no inbox to verify and is never sent an invite, so
+    // demanding one would block a disclosure the applicant is right to make.
+    expect(isKeyPersonRowValid(corp, new Set(['shareholder']))).toBe(true);
+    expect(isKeyPersonRowValid({ ...corp, isCorporate: false }, new Set(['shareholder']))).toBe(false);
+  });
+
+  it('is never sent as a company when it is the applicant themselves', () => {
+    // They ticked "this is me" on a row they had also marked corporate; a
+    // company cannot be the person filling in the form.
+    expect(keyPeoplePayload([{ ...corp, name: 'Ada Obi' }], 0)[0]).toMatchObject({
+      isApplicant: true,
+    });
+    expect(keyPeoplePayload([{ ...corp, name: 'Ada Obi' }], 0)[0]).not.toHaveProperty('isCorporate');
+  });
+});
+
+describe('who the form demands an email from', () => {
+  const business = (kp: Record<string, unknown>) =>
+    ({ country: 'NG', keyPeople: { enabled: true, collect: true, ...kp } }) as never;
+
+  it('asks only the people who will actually be sent a link', () => {
+    // The old rule asked everybody, so an applicant was blocked on a
+    // signatory's address that nothing would ever use.
+    const roles = keyPeopleRequireEmail(
+      business({ requireEmail: true, perRole: { beneficial_owner: 'full_kyc' } }),
+    );
+    expect(roles.has('beneficial_owner')).toBe(true);
+    expect(roles.has('director')).toBe(false);
+  });
+
+  it('honours an explicit list over the invited default', () => {
+    const roles = keyPeopleRequireEmail(
+      business({ requireEmail: true, level: 'full_kyc', requireEmailRoles: ['director'] }),
+    );
+    expect([...roles]).toEqual(['director']);
+  });
+
+  it('asks nobody when the switch is off', () => {
+    expect(keyPeopleRequireEmail(business({ level: 'full_kyc' })).size).toBe(0);
+  });
+});
+
+describe('owners declared for a corporate shareholder', () => {
+  const corp = {
+    name: 'Acme Holdings Ltd',
+    role: 'shareholder' as const,
+    roles: ['shareholder' as const],
+    title: '',
+    email: '',
+    country: 'NG',
+    ownershipPct: '60',
+    isCorporate: true,
+    registrationNumber: 'RC123456',
+    owners: [
+      { name: 'Jane Doe', ownershipPct: '75', email: 'jane@x.com', country: 'gb' },
+      { name: '', ownershipPct: '', email: '', country: '' },
+    ],
+  };
+
+  it('sends the named owners and drops the half-typed rows', () => {
+    expect(keyPeoplePayload([corp])[0]!.owners).toEqual([
+      { name: 'Jane Doe', ownershipPct: 75, email: 'jane@x.com', country: 'GB' },
+    ]);
+  });
+
+  it('sends nothing when the party is a person', () => {
+    // Whoever owns a person is not a question, and the server ignores it.
+    expect(keyPeoplePayload([{ ...corp, isCorporate: false }])[0]).not.toHaveProperty('owners');
+  });
+
+  it('sends nothing when no owner was named', () => {
+    expect(keyPeoplePayload([{ ...corp, owners: [] }])[0]).not.toHaveProperty('owners');
   });
 });

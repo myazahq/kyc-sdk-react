@@ -64,6 +64,18 @@ export interface VerifyRequest {
   country: string;
   idType: string;
   idNumber?: string;
+  /** Multi-ID: the committed slots, in pick order (2-3). idType/idNumber above
+   *  mirror the first slot; the run's single selfie stays on mediaIds. */
+  idChecks?: Array<{
+    idType: string;
+    idNumber?: string;
+    documentFront?: string;
+    documentBack?: string;
+    /** Each check's OWN document recording — the row's flat
+     *  documentFrontVideo column can hold only one of them. */
+    documentFrontVideo?: string;
+    documentBackVideo?: string;
+  }>;
   /**
    * Business (KYB) submission block. Present ⇒ this is a business verification.
    * Requires a published KYB workflow (`workflowId` or hosted link); there is
@@ -115,6 +127,13 @@ export interface VerifyRequest {
   workflowId?: string;
   /** The org's user reference → Entity.externalUserId at the seam (not matched). */
   userId?: string;
+  /**
+   * The resumable session this submission belongs to (from `session.start`).
+   * NOT a credential — auth is still the API key — just the progress container
+   * the finished verification links back to. Dropped server-side when it isn't
+   * the caller's, on the same principle as `workflowId`.
+   */
+  sessionId?: string;
   /**
    * The Presence Intelligence method that ran, so prop-configured mounts bill
    * the right per-method component. A published workflow's livenessMode always
@@ -179,9 +198,32 @@ export interface VerifyResponse {
  * full result + extracted biodata, call `GET /api/kyc/verifications/:id` from
  * your backend with a SECRET (`sk_`) key — never ship a secret key in the SDK.
  */
+/**
+ * The one status vocabulary, shared by `GET /api/kyc/status/:id`, the
+ * secret-key result route and every verification webhook.
+ *
+ * `status` is what happened; `checkStatus` beside it is what the CHECKS found.
+ * They differ when a person overrode the automated result: `approved` with
+ * `checkStatus: 'failed'` means somebody accepted the applicant despite a
+ * failed check, and the reason says what they accepted them despite.
+ */
+export type SessionStatus =
+  | 'not_started'
+  | 'in_progress'
+  | 'processing'
+  | 'in_review'
+  | 'awaiting_resubmission'
+  | 'approved'
+  | 'declined'
+  | 'abandoned'
+  | 'expired'
+  | 'error';
+
 export interface VerificationStatusResponse {
   verificationId: string;
-  status: 'pending' | 'verified' | 'failed' | 'not_found' | 'error';
+  status: SessionStatus;
+  /** What the CHECKS found, unchanged by any later decision. */
+  checkStatus?: 'pending' | 'verified' | 'failed' | 'not_found' | 'error';
   reason?: string | null;
   reasonCode?: string | null;
   /**
@@ -232,6 +274,15 @@ export interface SdkConfigResponse {
    * own logo when the consumer sets `appearance.logo = 'default'`.
    */
   branding?: SdkConfigBranding;
+  /**
+   * The visitor's country, guessed from their IP address.
+   *
+   * A DEFAULT for country fields nothing else answers — never evidence, and
+   * null whenever the address cannot be placed (local development, a private
+   * address, no geo database deployed). Anything that matters reads the
+   * country the applicant confirmed.
+   */
+  geoCountry?: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -307,9 +358,12 @@ export interface WorkflowConfigPayload {
   };
   /** Absent for business workflows — the business block carries its own country. */
   country?: string;
-  /** Multi-region: per-country ID types (validation toggles are server-enforced). */
-  countries?: Array<{ country: string; idTypes?: string[] }>;
+  /** Multi-region: per-country ID types (validation toggles are server-enforced),
+   *  plus each country's multi-ID per-verification allowlists. */
+  countries?: Array<{ country: string; idTypes?: string[]; multiIdSlots?: Array<{ idTypes?: string[] }> }>;
   idTypes?: string[];
+  /** Multi-ID POLICY (per-country ID offerings live on `countries[]`). */
+  multiId?: { count: number; minPassed: number };
   enableSelfie?: boolean;
   enableDocumentCapture?: boolean;
   allowDocumentUpload?: boolean;
@@ -319,6 +373,8 @@ export interface WorkflowConfigPayload {
   flashSequenceLength?: number;
   /** "Continue on your phone" desktop QR gate. On by default; false disables it. */
   deviceHandoff?: boolean;
+  /** Device + IP analysis. On by default; false skips it and its charge. */
+  deviceIntelligence?: boolean;
   /** Mobile-only: the flow may not run on a desktop (hardware-confirmed). Off by default. */
   requireMobileDevice?: boolean;
   voiceGuidance?: unknown;
@@ -387,6 +443,8 @@ export interface WorkflowResolutionResponse {
 export interface HandoffSessionSnapshot {
   /** Absent for business (KYB) sessions — `business.country` carries theirs. */
   country?: string;
+  /** Company details the org already held when the session was minted. */
+  businessPrefill?: { registrationNumber?: string; registrationName?: string };
   /** What the session verifies. Absent = 'individual'. */
   subjectType?: 'individual' | 'business';
   /** Business (KYB) configuration — present when `subjectType === 'business'`. */
@@ -404,9 +462,13 @@ export interface HandoffSessionSnapshot {
    * part of the rendered config).
    */
   workflowId?: string;
-  /** Multi-region configuration (per-country ID types). */
-  countries?: Array<{ country: string; idTypes?: string[] }>;
+  /** Multi-region configuration (per-country ID types + multi-ID allowlists). */
+  countries?: Array<{ country: string; idTypes?: string[]; multiIdSlots?: Array<{ idTypes?: string[] }> }>;
   idTypes?: string[];
+  /** Multi-ID POLICY (per-country ID offerings live on `countries[]`). */
+  multiId?: { count: number; minPassed: number };
+  /** Reviewer sent this session back — walk only these steps. */
+  resubmit?: { steps: string[]; message?: string | null };
   enableSelfie?: boolean;
   enableDocumentCapture?: boolean;
   allowDocumentUpload?: boolean;
@@ -416,6 +478,8 @@ export interface HandoffSessionSnapshot {
   flashSequenceLength?: number;
   /** "Continue on your phone" desktop QR gate. On by default; false disables it. */
   deviceHandoff?: boolean;
+  /** Device + IP analysis. On by default; false skips it and its charge. */
+  deviceIntelligence?: boolean;
   /** Mobile-only: the flow may not run on a desktop (hardware-confirmed). Off by default. */
   requireMobileDevice?: boolean;
   voiceGuidance?: unknown;
@@ -472,14 +536,96 @@ export interface HandoffSessionStatusResponse {
 
 /** Response from `GET /api/kyc/session/by-token/:token/bootstrap` (phone side). */
 export interface HandoffBootstrapResponse {
+  /**
+   * The session's own id.
+   *
+   * A hosted mount holds only the opaque token, so this is the only way it can
+   * learn the id — and without it progress saving is silently a no-op, which is
+   * exactly what happened: every hosted link lost the applicant's work.
+   */
+  sessionId: string;
+  /** Where the applicant got to last time, when they are coming back. */
+  progress?: {
+    step?: string;
+    mediaIds?: Record<string, string>;
+    data?: Record<string, unknown>;
+  };
   environment: 'DEVELOPMENT' | 'SANDBOX' | 'PRODUCTION';
   configSnapshot: HandoffSessionSnapshot;
   branding?: SdkConfigBranding;
+  /**
+   * The visitor's country, guessed from their IP address.
+   *
+   * A DEFAULT for country fields nothing else answers — never evidence, and
+   * null whenever the address cannot be placed (local development, a private
+   * address, no geo database deployed). Anything that matters reads the
+   * country the applicant confirmed.
+   */
+  geoCountry?: string | null;
   /** Org allowlist + per-ID feature flags (same shape as /config). */
   idTypes: SdkConfigIdType[];
   expiresAt: string;
   /** KYB only: the mapped applicant workflow, when configured and resolvable. */
   applicantWorkflow?: ApplicantWorkflowPayload | null;
+}
+
+/** One person a submitted KYB application is still waiting on. */
+export interface AwaitingPersonPayload {
+  id: string;
+  name: string;
+  role: string;
+  ownershipPct: number | null;
+  /** ISO-2, or null when the register gave free text no flag matches. */
+  country: string | null;
+  status: 'verified' | 'failed' | 'submitted' | 'pending' | 'not_needed';
+  /** Null once their check is done, or when they never needed one. */
+  inviteUrl: string | null;
+  isApplicant: boolean;
+  /** A company completes a KYB application, not a KYC - the list labels it so. */
+  isCorporate?: boolean;
+}
+
+/**
+ * A finished session, rebuilt for the applicant who comes back to their link.
+ *
+ * None of the in-memory state behind the live success screen survives the tab
+ * closing, so the server rebuilds it — including each key person's CURRENT
+ * status, which is the point: the people this screen names go and verify after
+ * it was first shown.
+ */
+/**
+ * What happened to the application, as the applicant is told it.
+ *
+ * Coarser than the server's own status vocabulary: `in_review` and `processing`
+ * are one thing to the person waiting. `error` is kept apart from `declined`
+ * because a fault on our side is not a judgement about their business.
+ */
+export type ApplicantOutcome = 'submitted' | 'approved' | 'declined' | 'action_needed' | 'error';
+
+export interface CompletedSessionSummary {
+  status: 'completed';
+  /** Absent on an older server, which only ever reported the submission. */
+  outcome?: ApplicantOutcome;
+  /**
+   * Whether `keyPeople` is FINAL.
+   *
+   * The register is reconciled against what the applicant typed after they
+   * submit, so an early read is a first draft: it can be missing people they
+   * never listed and have the wrong roles for those they did. A surface that
+   * renders the list once waits for this rather than showing the draft and
+   * correcting it underneath the reader. Absent on an older server, where the
+   * value was inferred from polling instead.
+   */
+  keyPeopleSettled?: boolean;
+  /** User-safe prose, present on outcomes the applicant can act on. */
+  reason?: string | null;
+  reasonCode?: string | null;
+  environment: 'DEVELOPMENT' | 'SANDBOX' | 'PRODUCTION';
+  configSnapshot: HandoffSessionSnapshot;
+  branding?: SdkConfigBranding;
+  subjectType: 'individual' | 'business';
+  businessName: string | null;
+  keyPeople: AwaitingPersonPayload[];
 }
 
 // The mimeType values the server accepts (image vs. video). Must mirror the
@@ -541,6 +687,119 @@ export function createKYCApi(baseUrl: string, apiKey: string) {
   }
 
   return {
+    /**
+     * Start or resume this user's verification session.
+     *
+     * Safe to call on every open: the server returns the SAME session until it
+     * is submitted or expires, keyed on the org's own user reference. Without a
+     * `externalUserId` there is nothing to resume by, so each call starts fresh.
+     *
+     * The returned id is a progress container, not a credential — requests keep
+     * authenticating with the API key.
+     */
+    async startSession(input: {
+      externalUserId?: string;
+      config?: Record<string, unknown>;
+      workflowId?: string;
+      /** Persistent device id — the anonymous-mount resume fallback. */
+      deviceRef?: string;
+    }): Promise<{
+      sessionId: string;
+      expiresAt: string;
+      resumed: boolean;
+      /** Where the user got to, when resuming. Media references are already
+       *  pruned server-side of anything that has since expired. */
+      progress?: {
+        step?: string;
+        mediaIds?: Record<string, string>;
+        data?: Record<string, unknown>;
+      };
+    }> {
+      return request('/session/start', { method: 'POST', body: JSON.stringify(input) });
+    },
+
+    /**
+     * Find a business by name. FREE — no provider charge here or upstream, so
+     * the applicant may look as many times as they need.
+     */
+    /** Registry regions for a country. Empty when it has a single register. */
+    async businessRegions(country: string): Promise<{ regions: { code: string; name: string }[] }> {
+      return request(`/business/regions?country=${encodeURIComponent(country)}`);
+    },
+
+    async businessSearch(params: {
+      country: string;
+      subdivisionCode?: string;
+      query: string;
+      limit?: number;
+    }): Promise<{ results: { name: string; registrationNumber: string; status?: string }[]; source: string }> {
+      const qs = new URLSearchParams({ country: params.country, query: params.query });
+      if (params.subdivisionCode) qs.set('subdivisionCode', params.subdivisionCode);
+      if (params.limit) qs.set('limit', String(params.limit));
+      return request(`/business/search?${qs.toString()}`);
+    },
+
+    /**
+     * The registry check for the company they picked. This is the PAID step —
+     * it confirms the business exists and brings its officers back, so the key
+     * people question becomes "confirm these" rather than "recall these".
+     *
+     * `checked: false` is a normal outcome, not an error: the organisation
+     * could not be charged, so the flow carries on without prefill and the
+     * check happens at submission instead.
+     */
+    async businessSelect(body: {
+      sessionId: string;
+      country: string;
+      subdivisionCode?: string;
+      product?: string;
+      registrationNumber: string;
+      registrationName?: string;
+      sandboxOutcome?: string;
+    }): Promise<{
+      checked: boolean;
+      reason?: string;
+      found?: boolean;
+      charged?: boolean;
+      business?: {
+        name: string | null;
+        registrationNumber: string;
+        registrationDate: string | null;
+        typeOfEntity: string | null;
+        companyStatus: string | null;
+        address: string | null;
+        email: string | null;
+        phone: string | null;
+        taxId: string | null;
+        vatNumber: string | null;
+        natureOfBusiness: string | null;
+        city: string | null;
+        state: string | null;
+        keyPeople: Array<{
+          name: string | null;
+          designation: string | null;
+          roles?: string[] | null;
+          ownershipPct?: number | null;
+          email?: string | null;
+          isCorporate?: boolean | null;
+          registrationNumber?: string | null;
+        }>;
+      } | null;
+    }> {
+      return request('/business/select', { method: 'POST', body: JSON.stringify(body) });
+    },
+
+    /**
+     * Save where the user has got to. Best-effort by contract — losing a save
+     * costs the user some re-typing on resume, and must never interrupt them now.
+     */
+    async saveProgress(sessionId: string, progress: unknown): Promise<void> {
+      await request(`/session/${encodeURIComponent(sessionId)}/progress`, {
+        method: 'PUT',
+        body: JSON.stringify(progress),
+      });
+    },
+
     // Single multipart upload: the file bytes are POSTed to our server, which
     // stores them in R2 and returns the mediaId referenced later by /verify.
     async upload(file: Blob, type: MediaUploadType): Promise<string> {
@@ -609,6 +868,14 @@ export function createKYCApi(baseUrl: string, apiKey: string) {
     async contactCheck(body: {
       challengeId: string;
       code: string;
+      /**
+       * The attempt this belongs to. A component bills when its check COMPLETES,
+       * which is here — the server confirms the id is the caller's own before any
+       * money moves, and falls back to charging at submit without it.
+       */
+      sessionId?: string;
+      /** What the flow is verifying, for the price lookup. */
+      country?: string;
     }): Promise<{ verified: boolean; token: string }> {
       return request('/contact/check', { method: 'POST', body: JSON.stringify(body) });
     },
@@ -650,6 +917,19 @@ export function createKYCApi(baseUrl: string, apiKey: string) {
     /** Phone: bootstrap the hosted flow from the session token (public route). */
     async bootstrapHandoff(token: string): Promise<HandoffBootstrapResponse> {
       return request<HandoffBootstrapResponse>(`/session/by-token/${token}/bootstrap`);
+    },
+
+    /** A finished session, for the applicant returning to their own link. */
+    async completedSession(token: string): Promise<CompletedSessionSummary> {
+      return request<CompletedSessionSummary>(`/session/by-token/${token}/summary`);
+    },
+
+    /** The same summary for EMBEDDED mounts, which hold a sessionId and an API
+     *  key but never the `hs_` token. Same body as `completedSession`, so a
+     *  hosted and an embedded success screen cannot tell different stories
+     *  about one application. */
+    async sessionSummary(sessionId: string): Promise<CompletedSessionSummary> {
+      return request<CompletedSessionSummary>(`/session/${sessionId}/summary`);
     },
   };
 }

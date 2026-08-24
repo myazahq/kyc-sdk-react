@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildStepOrder, getStepPosition, type StepOrderOptions } from './step-order';
+import { stepAfterCapture } from './post-capture';
 
 const individual = (over: Partial<StepOrderOptions> = {}): StepOrderOptions => ({
   isBusiness: false,
@@ -64,5 +65,58 @@ describe('getStepPosition', () => {
       expect(index).toBeGreaterThanOrEqual(0);
       expect(index).toBeLessThan(total);
     }
+  });
+});
+
+describe('multi-ID step order', () => {
+  it('keeps the normal single-pass order — the picker included', () => {
+    const o = individual({ multiId: { index: 0, count: 2 } });
+    expect(buildStepOrder(o)).toEqual([
+      'consent',
+      'id-type',
+      'document-capture',
+      'liveness',
+      'submitted',
+    ]);
+  });
+
+  it('KEEPS the country picker — multi-ID works multi-region', () => {
+    // The applicant picks their country first, then walks THAT country's
+    // slots (each country carries its own per-verification ID allowlists).
+    const o = individual({ hasCountrySelect: true, multiId: { index: 0, count: 2 } });
+    expect(buildStepOrder(o)).toContain('country-select');
+    expect(buildStepOrder(o).indexOf('country-select')).toBeLessThan(
+      buildStepOrder(o).indexOf('id-type'),
+    );
+  });
+
+  it('stretches progress across the slots instead of snapping back', () => {
+    const base = individual({ multiId: { index: 0, count: 3 } });
+    // 4 real steps + 2 extra pairs = 8 positions.
+    expect(getStepPosition('consent', base).total).toBe(8);
+    expect(getStepPosition('id-type', base).index).toBe(1);
+
+    // Slot 2's picker sits PAST slot 1's pair.
+    const slot2 = individual({ multiId: { index: 1, count: 3 } });
+    expect(getStepPosition('id-type', slot2).index).toBe(3);
+
+    // Liveness (after the whole loop) sits past every pair, whatever the index.
+    expect(getStepPosition('liveness', slot2).index).toBe(7);
+    expect(getStepPosition('liveness', slot2).index + 1).toBe(getStepPosition('liveness', slot2).total);
+  });
+});
+
+describe('stepAfterCapture in a business flow', () => {
+  it("ends the applicant's capture leg at submission, never the questionnaire", () => {
+    // The questionnaire was already asked back in the company section (before
+    // key people). Returning it here again made the reordered flow a loop:
+    // questionnaire → key people → applicant capture → questionnaire.
+    expect(
+      stepAfterCapture({
+        subjectType: 'business',
+        business: { country: 'NG' },
+        questionnaire: { fields: [{ key: 'a', label: 'A', type: 'text' }] },
+      }),
+    ).toBe('submitted');
   });
 });

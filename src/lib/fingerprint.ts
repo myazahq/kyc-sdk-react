@@ -37,7 +37,9 @@ function fnv1a(input: string): string {
   return (hash >>> 0).toString(16).padStart(8, '0');
 }
 
-function persistentDeviceId(): string | undefined {
+// Exported for session resume: the anonymous-mount fallback key (the server
+// hashes it before storage). Same id the fingerprint already carries.
+export function persistentDeviceId(): string | undefined {
   try {
     const existing = localStorage.getItem(DEVICE_ID_KEY);
     if (existing) return existing;

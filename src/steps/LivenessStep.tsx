@@ -13,6 +13,7 @@ import { READY_LIVENESS } from '../components/ready-primer-content';
 import { LivenessAvatar } from './LivenessAvatar';
 import { useKYCContext } from '../context/KYCContext';
 import { useKYCConfig } from '../context/KYCConfigContext';
+import { multiIdEvidenceStep } from '../lib/multi-id';
 import { stepAfterCapture } from '../lib/post-capture';
 import { useCamera } from '../hooks/useCamera';
 import { useCameraPrimer } from '../hooks/useCameraPrimer';
@@ -31,6 +32,7 @@ import {
   logCaptureSize,
 } from '../lib/capture-settings';
 import type { ChallengeEntry } from '../liveness/challenge-manager';
+import { usePortalHost } from '../lib/sdk-frame-context';
 
 // ---------------------------------------------------------------------------
 // LivenessStep — active liveness check with gesture challenges
@@ -39,6 +41,7 @@ import type { ChallengeEntry } from '../liveness/challenge-manager';
 export function LivenessStep() {
   const { state: kycState, dispatch } = useKYCContext();
   const config = useKYCConfig();
+  const portalHost = usePortalHost();
   const [preview, setPreview] = useState<string | null>(kycState.selfieImage);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -319,6 +322,17 @@ export function LivenessStep() {
     const hasDocCapture = kycState.selectedIdType
       ? config.getIdTypeDefinition(kycState.selectedIdType)?.requiresDocumentCapture ?? false
       : false;
+    // Multi-ID: every slot is committed by now, so the evidence steps hold
+    // nothing — step back INTO the last verification instead (popping it and
+    // restoring its capture), or the applicant lands on an empty screen.
+    const lastSlot = kycState.multiIdSlots[kycState.multiIdSlots.length - 1];
+    if (lastSlot) {
+      dispatch({
+        type: 'UNCOMMIT_MULTI_ID_SLOT',
+        payload: { step: multiIdEvidenceStep(config.getIdTypeDefinition(lastSlot.idType)) },
+      });
+      return;
+    }
     dispatch({ type: 'SET_STEP', payload: hasDocCapture ? 'document-capture' : 'id-input' });
   };
 
@@ -506,7 +520,11 @@ export function LivenessStep() {
           inside that transformed container — the same containment. Out here
           `getBoundingClientRect()` is directly usable, so the face stays
           visible through a masked hole rather than by z-index (which no longer
-          works: at body level the whole modal sits below this overlay). */}
+          works: at body level the whole modal sits below this overlay).
+
+          Under SdkFrame the same reasoning routes it to the shadow portal
+          frame instead: also untransformed, directly under the body, and —
+          unlike the raw body — styled by the SDK's own sheet. */}
       {liveness.flashColor && typeof document !== 'undefined' &&
         createPortal(
           <div
@@ -527,7 +545,7 @@ export function LivenessStep() {
                 : null),
             }}
           />,
-          document.body,
+          portalHost ?? document.body,
         )}
 
       <StepHeader

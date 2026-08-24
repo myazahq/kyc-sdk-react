@@ -48,6 +48,16 @@ export async function submitBusinessApplication({
   const email = state.business.email.trim();
   const phone = state.business.phone.trim();
   const website = state.business.website.trim();
+  // The five registry facts, sent only when filled. The server drops any the
+  // workflow has switched off, so an over-send is validate-and-drop rather than
+  // an error, and an under-send is what the required-field 422 is for.
+  const stated = Object.fromEntries(
+    (
+      ['dateOfIncorporation', 'taxId', 'vatNumber', 'companyType', 'natureOfBusiness'] as const
+    )
+      .map((k) => [k, state.business[k].trim()])
+      .filter(([, v]) => v !== ''),
+  );
   // Multi-registry workflows: the picked country (step state) wins over the
   // workflow's primary; products were already narrowed to that country.
   const country = state.business.country ?? business.country;
@@ -75,6 +85,8 @@ export async function submitBusinessApplication({
     () =>
       config.api.verify({
         country,
+        // Resumable session this application belongs to (dropped if not ours).
+        ...(state.sessionId ? { sessionId: state.sessionId } : {}),
         // The product key rides on idType for transport symmetry.
         idType: product,
         business: {
@@ -85,9 +97,12 @@ export async function submitBusinessApplication({
           ...(email ? { email } : {}),
           ...(phone ? { phone } : {}),
           ...(website ? { website } : {}),
+          ...stated,
           product,
           ...(documents ? { documents } : {}),
           ...(keyPeople.length > 0 ? { keyPeople } : {}),
+          // The FATF fallback, attested: no natural person qualifies as a UBO.
+          ...(app.uboUnidentifiable ? { uboUnidentifiable: true } : {}),
           ...(applicant ? { applicant } : {}),
         },
         ...(config.workflowId ? { workflowId: config.workflowId } : {}),
@@ -104,7 +119,13 @@ export async function submitBusinessApplication({
               },
             }
           : {}),
-        metadata: buildSubmitMetadata(config.metadata, requestId, config.deviceIntelligence !== false),
+        metadata: {
+          ...buildSubmitMetadata(config.metadata, requestId, config.deviceIntelligence !== false),
+          // Ignored by production, so it is safe to send whenever it is set.
+          ...(state.business.sandboxOutcome
+            ? { sandboxOutcome: state.business.sandboxOutcome }
+            : {}),
+        },
       }),
     { onRetry },
   );
@@ -182,6 +203,8 @@ async function submitApplicantVerification(
 
   await withRetry(() =>
     config.api.verify({
+      // The applicant's own KYC leg belongs to the same application session.
+      ...(state.sessionId ? { sessionId: state.sessionId } : {}),
       country: legCountry,
       idType,
       ...(config.applicantWorkflowId ? { workflowId: config.applicantWorkflowId } : {}),

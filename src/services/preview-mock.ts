@@ -14,6 +14,16 @@ export function withPreviewMocks(api: KYCApi): KYCApi {
   return {
     ...api,
 
+    // Preview never touches the server, so it never has a real session — but the
+    // shape has to exist or the open handler would throw on a missing method.
+    async startSession() {
+      return { sessionId: 'preview_session', expiresAt: new Date().toISOString(), resumed: false };
+    },
+
+    async saveProgress(): Promise<void> {
+      /* preview never persists */
+    },
+
     async upload(): Promise<string> {
       await delay(350); // keep the real "uploading…" affordance visible
       mediaCounter += 1;
@@ -30,8 +40,55 @@ export function withPreviewMocks(api: KYCApi): KYCApi {
     async status(verificationId: string): Promise<VerificationStatusResponse> {
       return {
         verificationId,
-        status: 'pending',
+        status: 'processing',
+        checkStatus: 'pending',
         createdAt: new Date().toISOString(),
+      };
+    },
+
+    // The registry check is a PAID call, so the builder preview must never make
+    // it: an author walking their own flow would be charging the org a lookup
+    // per click. Canned officers keep the prefill visible, which is the part
+    // worth previewing.
+    async businessRegions() {
+      return { regions: [] };
+    },
+    async businessSearch() {
+      await delay(300);
+      return {
+        results: [
+          { name: 'Preview Trading Ltd', registrationNumber: 'RC0000001', status: 'ACTIVE' },
+          { name: 'Preview Holdings Plc', registrationNumber: 'RC0000002', status: 'ACTIVE' },
+        ],
+        source: 'preview',
+      };
+    },
+
+    async businessSelect(body: { registrationNumber: string }) {
+      await delay(400);
+      return {
+        checked: true,
+        found: true,
+        charged: false,
+        business: {
+          name: 'Preview Trading Ltd',
+          registrationNumber: body.registrationNumber,
+          registrationDate: '2018-03-12T00:00:00.000Z',
+          typeOfEntity: 'PRIVATE COMPANY LIMITED BY SHARES',
+          companyStatus: 'ACTIVE',
+          address: '12 Preview Avenue',
+          email: 'hello@preview.example',
+          phone: '+234 800 000 0000',
+          taxId: '01234567-0001',
+          vatNumber: null,
+          natureOfBusiness: 'Wholesale and retail trading',
+          city: 'Lagos',
+          state: 'Lagos',
+          keyPeople: [
+            { name: 'Jane Preview', designation: 'DIRECTOR' },
+            { name: 'Bola Preview', designation: 'SHAREHOLDER' },
+          ],
+        },
       };
     },
 

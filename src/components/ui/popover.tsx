@@ -4,6 +4,7 @@ import * as React from 'react';
 import * as PopoverPrimitive from '@radix-ui/react-popover';
 import { cn } from '../../lib/utils';
 import { useThemeVars } from '../../lib/theme-context';
+import { usePortalHost } from '../../lib/sdk-frame-context';
 
 const Popover = PopoverPrimitive.Root;
 const PopoverTrigger = PopoverPrimitive.Trigger;
@@ -15,8 +16,10 @@ const PopoverContent = React.forwardRef<
   // kyc-root only restores the DEFAULT tokens inside the portal; the brand
   // overrides are inline vars on the modal root, so re-apply them here.
   const themeVars = useThemeVars();
+  // SdkFrame mounts portal into the SDK's shadow frame; null = document.body.
+  const portalHost = usePortalHost();
   return (
-  <PopoverPrimitive.Portal>
+  <PopoverPrimitive.Portal container={portalHost ?? undefined}>
     <PopoverPrimitive.Content
       ref={ref}
       align={align}

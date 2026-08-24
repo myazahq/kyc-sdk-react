@@ -4,6 +4,7 @@ import * as React from 'react';
 import { Drawer as DrawerPrimitive } from 'vaul';
 import { cn } from '../../lib/utils';
 import { useThemeVars } from '../../lib/theme-context';
+import { usePortalHost } from '../../lib/sdk-frame-context';
 
 function Drawer({ shouldScaleBackground = true, ...props }: React.ComponentProps<typeof DrawerPrimitive.Root>) {
   return <DrawerPrimitive.Root shouldScaleBackground={shouldScaleBackground} {...props} />;
@@ -39,12 +40,18 @@ function DrawerContent({
   // kyc-root only restores the DEFAULT tokens inside the portal; the brand
   // overrides are inline vars on the modal root, so re-apply them here.
   const themeVars = useThemeVars();
+  // SdkFrame mounts portal into the SDK's shadow frame; null = document.body.
+  const portalHost = usePortalHost();
   return (
-    <DrawerPortal>
+    <DrawerPortal container={portalHost ?? undefined}>
       <DrawerOverlay />
       <DrawerPrimitive.Content
         className={cn(
-          'kyc-root fixed z-50 flex flex-col bg-background',
+          // `text-foreground` is load-bearing: in a shadow-isolated mount the
+          // host reset (`all: initial`) severs inherited page colour, so a
+          // surface that only sets its background renders BLACK text — on a
+          // dark theme, black on near-black. Same pattern as DialogContent.
+          'kyc-root fixed z-50 flex flex-col bg-background text-foreground',
           direction === 'right'
             ? // A plain full-height panel — no rounded corners, no border;
               // the overlay alone separates it from the page.

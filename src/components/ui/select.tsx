@@ -5,6 +5,7 @@ import * as SelectPrimitive from '@radix-ui/react-select';
 import { Check, ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useThemeVars } from '../../lib/theme-context';
+import { usePortalHost } from '../../lib/sdk-frame-context';
 
 const Select = SelectPrimitive.Root;
 const SelectGroup = SelectPrimitive.Group;
@@ -37,8 +38,10 @@ const SelectContent = React.forwardRef<
   // kyc-root only restores the DEFAULT tokens inside the portal; the brand
   // overrides are inline vars on the modal root, so re-apply them here.
   const themeVars = useThemeVars();
+  // SdkFrame mounts portal into the SDK's shadow frame; null = document.body.
+  const portalHost = usePortalHost();
   return (
-  <SelectPrimitive.Portal>
+  <SelectPrimitive.Portal container={portalHost ?? undefined}>
     <SelectPrimitive.Content
       ref={ref}
       position={position}

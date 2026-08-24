@@ -35,6 +35,16 @@ export function buildThemeVars(appearance?: KYCAppearance, isDark = false): CSSP
   set('--accent', appearance.accentColor);
   set('--background', appearance.backgroundColor);
 
+  // Anchored menus take the flow's surface, and they need it SET HERE, not
+  // inherited. globals.css declares `--popover: var(--background)` on :root, and
+  // a custom property is substituted where it is DECLARED — so that resolves
+  // against the root's background and inherits down already-resolved. An
+  // override further down the tree, which is what these inline vars are, cannot
+  // reach back and change it. The CSS default still covers unbranded flows,
+  // where the root's background is the right answer.
+  set('--popover', appearance.backgroundColor);
+  set('--popover-foreground', appearance.textColor);
+
   // "Surface" covers both the secondary (cards) and muted (subtle fills) tokens.
   set('--secondary', appearance.surfaceColor);
   set('--muted', appearance.surfaceColor);

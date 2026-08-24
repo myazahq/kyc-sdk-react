@@ -134,10 +134,22 @@ export function applicantCountryOptions(config: {
 /** The ordered business-application steps this workflow configures. */
 export function businessSectionSteps(
   business: WorkflowBusinessConfig | undefined,
-): BusinessSectionStep[] {
-  const steps: BusinessSectionStep[] = ['business-details'];
-  if (hasKeyPeopleCollection(business)) steps.push('business-key-people');
+  withQuestionnaire = false,
+): (BusinessSectionStep | 'questionnaire')[] {
+  const steps: (BusinessSectionStep | 'questionnaire')[] = ['business-details'];
+  // Documents BEFORE key people: they are about the company the applicant has
+  // just identified, so they follow that thread, and the register's officer
+  // list - which the key-people step is a confirmation of - is what the reader
+  // should still have in mind when they get to naming people. Asking for
+  // paperwork after that breaks the sequence in the middle.
   if (hasBusinessDocumentsStep(business)) steps.push('business-documents');
+  // The questionnaire BEFORE key people: its questions are about the COMPANY
+  // (volumes, source of funds), so they belong with the company section — and
+  // naming the directors leads into their verification, which is where the
+  // application hands over to other people and stops being the applicant's
+  // own form to finish.
+  if (withQuestionnaire) steps.push('questionnaire');
+  if (hasKeyPeopleCollection(business)) steps.push('business-key-people');
   if (hasApplicantVerification(business)) steps.push('applicant-role');
   return steps;
 }
@@ -149,33 +161,24 @@ export function businessSectionSteps(
  * map a 'submitted' return to `SUBMIT_VERIFICATION` (existing convention).
  */
 export function nextBusinessStep(
-  current: BusinessSectionStep,
+  current: BusinessSectionStep | 'questionnaire',
   config: { business?: WorkflowBusinessConfig; questionnaire?: QuestionnaireConfig },
 ): KYCStep {
   if (current === 'applicant-role') return 'id-type';
-  const order = businessSectionSteps(config.business);
+  const order = businessSectionSteps(config.business, hasActiveQuestionnaire(config.questionnaire));
   const next = order[order.indexOf(current) + 1];
   if (next) return next;
-  return hasActiveQuestionnaire(config.questionnaire) ? 'questionnaire' : 'submitted';
+  return 'submitted';
 }
 
 /** The step before `current` in the business application section. */
 export function prevBusinessStep(
-  current: BusinessSectionStep,
-  business: WorkflowBusinessConfig | undefined,
+  current: BusinessSectionStep | 'questionnaire',
+  config: { business?: WorkflowBusinessConfig; questionnaire?: QuestionnaireConfig },
 ): KYCStep {
-  const order = businessSectionSteps(business);
+  const order = businessSectionSteps(config.business, hasActiveQuestionnaire(config.questionnaire));
   const idx = order.indexOf(current);
   return idx > 0 ? order[idx - 1]! : 'consent';
-}
-
-/** The last business-application step (what the questionnaire's Back returns
- *  to when the workflow has no applicant capture leg). */
-export function lastBusinessSectionStep(
-  business: WorkflowBusinessConfig | undefined,
-): BusinessSectionStep {
-  const order = businessSectionSteps(business);
-  return order[order.length - 1]!;
 }
 
 // ---------------------------------------------------------------------------
@@ -213,16 +216,43 @@ export function isKeyPersonRowBlank(row: KeyPersonEntry): boolean {
 }
 
 /** Rows the user has begun but not made valid — what blocks Continue. */
-export function invalidKeyPersonRows(rows: KeyPersonEntry[]): number[] {
+export function invalidKeyPersonRows(
+  rows: KeyPersonEntry[],
+  emailRequiredFor: ReadonlySet<KeyPersonRole> = new Set(),
+): number[] {
   return rows
-    .map((row, i) => (!isKeyPersonRowBlank(row) && !isKeyPersonRowValid(row) ? i : -1))
+    .map((row, i) => (!isKeyPersonRowBlank(row) && !isKeyPersonRowValid(row, emailRequiredFor) ? i : -1))
     .filter((i) => i >= 0);
 }
 
-/** Row validity: name ≥2 chars + known role; email/ownership validated when typed. */
-export function isKeyPersonRowValid(row: KeyPersonEntry): boolean {
+/** Whether THIS row owes an address: not a company, and ANY held role is in
+ *  the required set - a director who is also a UBO owes one when either does. */
+export function rowNeedsEmail(
+  row: KeyPersonEntry,
+  emailRequiredFor: ReadonlySet<KeyPersonRole>,
+): boolean {
+  const roles = row.roles && row.roles.length > 0 ? row.roles : [row.role];
+  return !row.isCorporate && roles.some((r) => emailRequiredFor.has(r));
+}
+
+/**
+ * Row validity: name >=2 chars + known role; email/ownership validated when typed.
+ *
+ * `requireEmail` makes the address mandatory rather than merely well-formed.
+ * The server enforces it too, but only at SUBMIT - several steps later, as a
+ * generic failure screen, with no way back to the row that is missing one. The
+ * check belongs where the field is.
+ */
+export function isKeyPersonRowValid(
+  row: KeyPersonEntry,
+  emailRequiredFor: ReadonlySet<KeyPersonRole> = new Set(),
+): boolean {
   if (row.name.trim().length < 2) return false;
-  if (!KEY_PERSON_ROLES.includes(row.role)) return false;
+  const roles = row.roles && row.roles.length > 0 ? row.roles : [row.role];
+  if (!roles.every((r) => KEY_PERSON_ROLES.includes(r))) return false;
+  // A company has no inbox of its own and is never sent an invite, so requiring
+  // one would block a disclosure the applicant is right to make.
+  if (rowNeedsEmail(row, emailRequiredFor) && row.email.trim() === '') return false;
   if (row.email.trim() !== '' && !isValidContactEmail(row.email.trim())) return false;
   if (row.ownershipPct.trim() !== '') {
     const pct = Number(row.ownershipPct);
@@ -240,7 +270,19 @@ export function isKeyPersonRowValid(row: KeyPersonEntry): boolean {
 export function keyPeoplePayload(
   rows: KeyPersonEntry[],
   applicantIndex: number | null = null,
-): Array<{ name: string; role: KeyPersonRole; email?: string; country?: string; ownershipPct?: number; isApplicant?: boolean }> {
+): Array<{
+  name: string;
+  role: KeyPersonRole;
+  roles: KeyPersonRole[];
+  title?: string;
+  email?: string;
+  country?: string;
+  ownershipPct?: number;
+  isCorporate?: boolean;
+  registrationNumber?: string;
+  owners?: Array<{ name: string; ownershipPct?: number; email?: string; country?: string }>;
+  isApplicant?: boolean;
+}> {
   return rows
     .map((row, index) => ({ row, index }))
     .filter(({ row }) => isKeyPersonRowValid(row))
@@ -248,11 +290,43 @@ export function keyPeoplePayload(
     .map(({ row, index }) => ({
       name: row.name.trim(),
       role: row.role,
+      // Every hat they wear - the server merges the set with its own
+      // ownership escalation and derives the headline by precedence.
+      roles: row.roles && row.roles.length > 0 ? row.roles : [row.role],
+      ...(row.title?.trim() ? { title: row.title.trim() } : {}),
       ...(row.email.trim() !== '' ? { email: row.email.trim() } : {}),
       ...(row.country.trim() !== '' ? { country: row.country.trim().toUpperCase() } : {}),
       ...(row.ownershipPct.trim() !== '' ? { ownershipPct: Number(row.ownershipPct) } : {}),
+      // A company cannot also be the person filling in the form, so the
+      // applicant's own entry is never sent as one.
+      ...(row.isCorporate && index !== applicantIndex ? { isCorporate: true } : {}),
+      ...(row.isCorporate && row.registrationNumber.trim() !== ''
+        ? { registrationNumber: row.registrationNumber.trim() }
+        : {}),
+      ...(row.isCorporate && index !== applicantIndex ? ownersPayload(row.owners) : {}),
       ...(index === applicantIndex ? { isApplicant: true } : {}),
     }));
+}
+
+/** Declared owners, dropping the half-typed ones. Absent when none are valid. */
+function ownersPayload(
+  owners: KeyPersonEntry['owners'],
+): { owners?: Array<{ name: string; ownershipPct?: number; email?: string; country?: string }> } {
+  const valid = (owners ?? [])
+    .filter((o) => o.name.trim().length >= 2)
+    .slice(0, 10)
+    .map((o) => {
+      const pct = Number(o.ownershipPct);
+      return {
+        name: o.name.trim(),
+        ...(o.ownershipPct.trim() !== '' && Number.isFinite(pct) && pct >= 0 && pct <= 100
+          ? { ownershipPct: pct }
+          : {}),
+        ...(o.email.trim() !== '' ? { email: o.email.trim() } : {}),
+        ...(o.country.trim() !== '' ? { country: o.country.trim().toUpperCase() } : {}),
+      };
+    });
+  return valid.length > 0 ? { owners: valid } : {};
 }
 
 /**
@@ -290,6 +364,20 @@ export function namesLooselyMatch(a: string, b: string): boolean {
   if (ta.length === 0 || tb.length === 0) return false;
   const [shorter, longer] = ta.length <= tb.length ? [ta, tb] : [tb, ta];
   return shorter.every((t) => longer.includes(t));
+}
+
+/** Whether every listed person must carry an email address. */
+export function keyPeopleRequireEmail(
+  business: import('../types/business').WorkflowBusinessConfig | undefined,
+): Set<KeyPersonRole> {
+  const kp = business?.keyPeople;
+  if (!kp?.enabled || !kp.collect || !kp.requireEmail) return new Set();
+  if (kp.requireEmailRoles?.length) return new Set(kp.requireEmailRoles);
+  // The roles that are actually sent an invite. Asking a screening-only
+  // signatory for an address blocks the form over a field nothing will read.
+  return new Set(
+    KEY_PERSON_ROLES.filter((r) => (kp.perRole?.[r] ?? kp.level ?? 'screening_only') === 'full_kyc'),
+  );
 }
 
 /** Minimum applicant-listed people the workflow demands (0 = skippable). */

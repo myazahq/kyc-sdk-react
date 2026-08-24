@@ -2,9 +2,15 @@
 
 import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { KYCProvider, useKYCContext } from './context/KYCContext';
+
+// Bearer prefix a hosted mount authenticates with (mirrors kyc-core's
+// HANDOFF_TOKEN_PREFIX and MyazaKYCHosted). A key starting with this IS a
+// session, so such a mount must never start another.
+const HANDOFF_TOKEN_PREFIX = 'hs_';
 import { KYCConfigProvider, useKYCConfig, type ServerSdkConfig } from './context/KYCConfigContext';
 import { KYCModal } from './components/KYCModal';
 import { Button } from './components/ui/button';
+import { SdkFrame } from './lib/sdk-frame';
 import { buildThemeVars } from './lib/theme';
 import { primeFaceMesh } from './liveness/face-mesh';
 import { configureSpeech } from './liveness/speech';
@@ -12,11 +18,14 @@ import { mergeWorkflowConfig, overlayApplicantWorkflow } from './lib/workflow-me
 import { safeReportError } from './lib/errors';
 import { isDesktopDevice } from './lib/device';
 import { confirmMobileDevice, type DeviceClassResult } from './lib/device-class';
+import { useSessionProgress } from './hooks/useSessionProgress';
 import { resolveBaseUrl } from './lib/resolve-url';
 import { createKYCApi, KYCApiError, type WorkflowResolutionResponse, type HandoffSessionSnapshot } from './services/api';
 import { KYCError } from './types/verification';
 import { listIdTypeDefinitions } from './utils/id-definitions';
 import { resetIntegritySignals } from './lib/integrity-signals';
+import { persistentDeviceId } from './lib/fingerprint';
+import { startSessionOnce } from './lib/start-session-once';
 import { resetStepLog } from './lib/step-log';
 import type { MyazaKYCConfig, MyazaKYCProps, UseMyazaKYCReturn, KYCStep, AnyCountry } from './types/config';
 import type { SubjectType, WorkflowBusinessConfig } from './types/business';
@@ -98,9 +107,12 @@ function KYCInner({
   country,
   countries,
   idTypes,
+  multiId,
+  resubmit,
   metadata,
   userId,
   userData,
+  businessPrefill,
   assetsBasePath,
   enableSelfie,
   enableDocumentCapture,
@@ -153,6 +165,7 @@ function KYCInner({
     ...(workflowId ? { workflowId } : {}),
     ...(idTypes ? { idTypes } : {}),
     ...(countries ? { countries } : {}),
+    ...(multiId ? { multiId } : {}),
     ...(enableSelfie !== undefined ? { enableSelfie } : {}),
     ...(enableDocumentCapture !== undefined ? { enableDocumentCapture } : {}),
     ...(allowDocumentUpload !== undefined ? { allowDocumentUpload } : {}),
@@ -178,8 +191,9 @@ function KYCInner({
     ...(metadata ? { metadata } : {}),
     ...(userId ? { userId } : {}),
     ...(userData ? { userData } : {}),
+    ...(businessPrefill ? { businessPrefill } : {}),
     ...(assetsBasePath ? { assetsBasePath } : {}),
-  }), [country, workflowId, idTypes, countries, enableSelfie, enableDocumentCapture, allowDocumentUpload, enableLiveness, livenessMode, flashSequenceLength, deviceIntelligence, deviceHandoff, requireMobileDevice, voiceGuidance, showThemeToggle, progressStyle, fullScreen, disableClose, appearance, consent, success, emailVerification, phoneVerification, questionnaire, proofOfAddress, nfc, metadata, userId, userData, assetsBasePath]);
+  }), [country, workflowId, idTypes, countries, multiId, enableSelfie, enableDocumentCapture, allowDocumentUpload, enableLiveness, livenessMode, flashSequenceLength, deviceIntelligence, deviceHandoff, requireMobileDevice, voiceGuidance, showThemeToggle, progressStyle, fullScreen, disableClose, appearance, consent, success, emailVerification, phoneVerification, questionnaire, proofOfAddress, nfc, metadata, userId, userData, businessPrefill, assetsBasePath]);
 
   // Pre-load MediaPipe Face Mesh model as soon as the SDK mounts and apply the
   // voice-guidance config (enabled + language) for the spoken liveness prompts.
@@ -248,11 +262,63 @@ function KYCInner({
     if (requireMobileDevice === true && !previewMode) void confirmDevice();
   }, [requireMobileDevice, previewMode, confirmDevice]);
 
+  // One client for the session calls, built from the same inputs the config
+  // provider uses — this component renders that provider, so it sits above it.
+  const sessionApiRef = useRef(createKYCApi(resolveBaseUrl(apiKey, devUrl), apiKey));
+
+  // Start (or resume) the server-side session for this attempt.
+  //
+  // Deliberately on OPEN rather than on mount: a page that merely renders the
+  // trigger would otherwise mint a session for every visitor who never engages.
+  //
+  // Skipped in two cases. Preview never touches the server. A hosted mount
+  // already IS a session — it authenticates with an `hs_` bearer rather than an
+  // API key — so starting another would orphan the one it is running in.
+  //
+  // Best-effort by contract: sessions are for resuming and visibility, and a
+  // failure here must never stop someone verifying.
+  // Persist progress as the user advances (no-ops without a session).
+  useSessionProgress(sessionApiRef.current, state);
+
+  const startSessionRef = useRef(false);
+  const beginSession = useCallback(async () => {
+    if (startSessionRef.current || previewMode) return;
+    if (apiKey.startsWith(HANDOFF_TOKEN_PREFIX)) return;
+    startSessionRef.current = true;
+    try {
+      // Collapsed at MODULE scope, not just per instance: StrictMode remounts
+      // the component with fresh refs, so the per-instance guard above still
+      // let each launch mint TWO sessions — the flow adopted one and the other
+      // sat on the org's list forever as a "Not started" ghost. Both mounts now
+      // share one in-flight request (and therefore one session).
+      const { sessionId, progress } = await startSessionOnce(
+        `${apiKey}|${workflowId ?? ''}|${userId ?? metadata?.userId ?? ''}`,
+        () =>
+          sessionApiRef.current.startSession({
+            externalUserId: userId ?? metadata?.userId,
+            workflowId,
+            // Anonymous mounts resume by device: without a userId the server
+            // has nothing else to find the previous attempt by, and every
+            // relaunch minted a fresh session.
+            deviceRef: persistentDeviceId(),
+          }),
+      );
+      dispatch({ type: 'SET_SESSION_ID', payload: sessionId });
+      // Resuming: put the user back where they were. Media references have been
+      // pruned server-side of anything that expired, so a restored capture slot
+      // is one whose bytes genuinely still exist.
+      if (progress) dispatch({ type: 'RESTORE_PROGRESS', payload: progress });
+    } catch {
+      /* resuming is a convenience; verifying is not conditional on it */
+    }
+  }, [apiKey, devUrl, dispatch, metadata, previewMode, userId, workflowId]);
+
   const handleOpen = useCallback(async () => {
     resetIntegritySignals(); // fresh capture-integrity slate per session
     resetStepLog(); // fresh step journey per session
     seedUserData();
     onStart?.();
+    void beginSession();
 
     // Mobile-only workflow: the flow may start ONLY on a confirmed handheld.
     // confirmMobileDevice reads hardware (GPU renderer + motion sensor), so a
@@ -273,7 +339,7 @@ function KYCInner({
     } else {
       dispatch({ type: 'OPEN_MODAL' });
     }
-  }, [dispatch, onStart, seedUserData, deviceHandoff, cameraNeeded, requireMobileDevice, previewMode, confirmDevice]);
+  }, [dispatch, onStart, seedUserData, deviceHandoff, cameraNeeded, requireMobileDevice, previewMode, confirmDevice, beginSession]);
 
   // Preview/embedded surfaces: start the flow immediately, no trigger button.
   // Skips the handoff gate — an auto-opened preview never hands off.
@@ -285,6 +351,7 @@ function KYCInner({
     resetStepLog();
     seedUserData();
     onStart?.();
+    void beginSession();
     // A mobile-only workflow gates the auto-open too — otherwise `defaultOpen`
     // would be a silent bypass of the whole setting.
     if (requireMobileDevice === true && !previewMode) {
@@ -326,6 +393,8 @@ function KYCInner({
       country={country as AnyCountry}
       countries={countries}
       idTypes={idTypes}
+      multiId={multiId}
+      resubmit={resubmit}
       metadata={metadata}
       userId={userId}
       userData={userData}
@@ -335,6 +404,7 @@ function KYCInner({
       enableLiveness={enableLiveness}
       livenessMode={livenessMode}
       flashSequenceLength={flashSequenceLength}
+      deviceIntelligence={deviceIntelligence}
       deviceHandoff={deviceHandoff}
       progressStyle={progressStyle}
       requireMobileDevice={requireMobileDevice}
@@ -527,9 +597,15 @@ export function MyazaKYC<C extends AnyCountry>(props: MyazaKYCProps<C>) {
     country: props.country ?? businessCountry,
   } as unknown as KYCInnerProps;
   return (
-    <KYCProvider>
-      {props.workflowId ? <WorkflowGate {...inner} /> : <KYCInner {...inner} />}
-    </KYCProvider>
+    // Shadow-DOM style isolation: the SDK carries its own stylesheet and the
+    // host app's CSS cannot reach in (nor the SDK's out). `styleIsolation={
+    // false}` restores the light-DOM mount, which needs the global
+    // `@myazahq/kyc-sdk-react/styles.css` import — the hosted page's mode.
+    <SdkFrame isolate={props.styleIsolation !== false}>
+      <KYCProvider>
+        {props.workflowId ? <WorkflowGate {...inner} /> : <KYCInner {...inner} />}
+      </KYCProvider>
+    </SdkFrame>
   );
 }
 

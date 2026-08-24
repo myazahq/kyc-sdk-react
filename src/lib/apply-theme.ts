@@ -1,5 +1,7 @@
 /**
- * Apply the workflow's configured initial theme to the document root.
+ * Apply the workflow's configured initial theme to the SDK's theme root — the
+ * SdkFrame's shadow portal frame when the mount is isolated (pass it as
+ * `themeRoot`), else the document root (hosted page).
  *
  * 'light' / 'dark' pin the mode; 'system' follows the device's
  * prefers-color-scheme — live, so an OS-level switch mid-session repaints the
@@ -10,9 +12,10 @@
  */
 export function applyConfiguredTheme(
   theme: 'light' | 'dark' | 'system' | undefined,
+  themeRoot?: HTMLElement | null,
 ): (() => void) | undefined {
   if (!theme || typeof document === 'undefined') return undefined;
-  const root = document.documentElement;
+  const root = themeRoot ?? document.documentElement;
   if (theme === 'system') {
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
     const apply = () => root.classList.toggle('dark', mq.matches);

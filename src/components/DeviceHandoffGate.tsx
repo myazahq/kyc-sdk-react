@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useEffect, useReducer, useRef, useState } from 'react';
-import { QRCodeSVG } from 'qrcode.react';
+import { StyledQRCode } from './StyledQRCode';
+import { MYAZA_QR_LOGO } from '../lib/qr-logo';
 import {
   Check,
   Copy,
@@ -20,6 +21,7 @@ import { BrandLogoChip } from './BrandLogoChip';
 import { VisuallyHidden } from './VisuallyHidden';
 import { useKYCConfig } from '../context/KYCConfigContext';
 import { useBranding } from '../hooks/useBranding';
+import { themeRootOrDocument, useThemeRoot } from '../lib/sdk-frame-context';
 import { useDeviceHandoff } from '../hooks/useDeviceHandoff';
 import { hasNoWebcam } from '../lib/device';
 import { buildThemeVars } from '../lib/theme';
@@ -54,10 +56,14 @@ interface DeviceHandoffGateProps {
 // exported and the gate renders outside it).
 function ThemeToggle() {
   const [, rerender] = useReducer((x: number) => x + 1, 0);
-  const dark = typeof document !== 'undefined' && document.documentElement.classList.contains('dark');
+  // The SDK's theme root: SdkFrame's shadow frame when isolated (so the
+  // toggle never rewrites the host page's <html> class), else documentElement.
+  const root = themeRootOrDocument(useThemeRoot());
+  const dark = root?.classList.contains('dark') ?? false;
   const toggle = () => {
-    const next = !document.documentElement.classList.contains('dark');
-    document.documentElement.classList.toggle('dark', next);
+    if (!root) return;
+    const next = !root.classList.contains('dark');
+    root.classList.toggle('dark', next);
     try { localStorage.setItem('myaza-kyc-theme', next ? 'dark' : 'light'); } catch { /* ignore */ }
     rerender();
   };
@@ -113,7 +119,11 @@ export default function DeviceHandoffGate({
 
   // Apply the configured initial theme ('system' follows the device),
   // matching KYCModal.
-  useEffect(() => applyConfiguredTheme(config.appearance?.theme), [config.appearance?.theme]);
+  const configuredThemeRoot = useThemeRoot();
+  useEffect(
+    () => applyConfiguredTheme(config.appearance?.theme, configuredThemeRoot),
+    [config.appearance?.theme, configuredThemeRoot],
+  );
 
   // Best-effort: if there's no webcam, lead harder with the QR.
   useEffect(() => {
@@ -334,9 +344,9 @@ function GateBody({
       </div>
 
       {/* QR */}
-      <div className="flex h-[232px] w-[232px] items-center justify-center rounded-2xl border border-border bg-white p-4">
+      <div className="flex h-[248px] w-[248px] items-center justify-center rounded-2xl border border-border bg-white p-1.5">
         {url ? (
-          <QRCodeSVG value={url} size={200} level="M" marginSize={0} />
+          <StyledQRCode value={url} size={240} logo={MYAZA_QR_LOGO} />
         ) : (
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         )}

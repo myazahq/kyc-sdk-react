@@ -17,6 +17,7 @@ import { useLightLevel } from '../hooks/useLightLevel';
 import { primeSpeech } from '../liveness/speech';
 import { KYCError } from '../types/verification';
 import type { ChallengeEntry } from '../liveness/challenge-manager';
+import { usePortalHost } from '../lib/sdk-frame-context';
 
 // Self-contained active-liveness capture for biometric re-authentication. Reuses
 // the SDK's liveness HOOKS and shared sub-components, but is decoupled from the
@@ -39,6 +40,7 @@ export function BiometricLivenessCapture({
   onError,
   onBack,
 }: BiometricLivenessCaptureProps) {
+  const portalHost = usePortalHost();
   const primerStatus = useCameraPrimer();
   const [primed, setPrimed] = React.useState(false);
   const needsPrimer = primerStatus === 'needed' && !primed;
@@ -200,7 +202,7 @@ export function BiometricLivenessCapture({
                 : null),
             }}
           />,
-          document.body,
+          portalHost ?? document.body,
         )}
 
       <StepHeader

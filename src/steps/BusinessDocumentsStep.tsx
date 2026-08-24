@@ -93,9 +93,9 @@ export function BusinessDocumentsStep() {
     <div className="space-y-6 animate-slide-up">
       <StepHeader
         title="Business documents"
-        description="Upload the supporting documents for your business. Required documents are marked with *."
+        description="Upload the supporting documents for your business. Each one must clearly show the registered business name and registration number. Required documents are marked with *."
         onBack={() =>
-          dispatch({ type: 'SET_STEP', payload: prevBusinessStep('business-documents', config.business) })
+          dispatch({ type: 'SET_STEP', payload: prevBusinessStep('business-documents', config) })
         }
       />
 

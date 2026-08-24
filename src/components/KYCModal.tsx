@@ -5,6 +5,7 @@ import { buildThemeVars } from '../lib/theme';
 import { applyConfiguredTheme } from '../lib/apply-theme';
 import { ThemeVarsContext } from '../lib/theme-context';
 import { useIsDark } from '../lib/use-is-dark';
+import { useThemeRoot } from '../lib/sdk-frame-context';
 import { useBrandFonts } from '../lib/use-brand-fonts';
 import {
   Dialog,
@@ -25,7 +26,9 @@ import { hasActiveQuestionnaire } from '../lib/questionnaire';
 import { hasProofOfAddressStep } from '../lib/post-capture';
 import { hasEmailVerificationStep, hasPhoneVerificationStep } from '../lib/contact-steps';
 import { isBusinessFlow } from '../lib/business';
-import { getStepPosition } from '../lib/step-order';
+import { multiIdPlan } from '../lib/multi-id';
+import { MultiIdProgress } from './MultiIdProgress';
+import { getStepPosition, resolveNarrowedStep } from '../lib/step-order';
 import { ProofOfAddressStep } from '../steps/ProofOfAddressStep';
 import type { KYCStep } from '../types/config';
 import { PoweredBy } from './PoweredBy';
@@ -47,6 +50,7 @@ import { NfcStep } from '../steps/NfcStep';
 import { QuestionnaireStep } from '../steps/QuestionnaireStep';
 import { PreviewCapturePlaceholder } from '../steps/PreviewCapturePlaceholder';
 import { SubmittedStep } from '../steps/SubmittedStep';
+import { CompletedStep } from '../steps/CompletedStep';
 
 interface KYCModalProps {
   open: boolean;
@@ -98,7 +102,7 @@ function ConfigErrorScreen({ message, onClose }: { message: string; onClose: () 
   );
 }
 
-function CurrentStep() {
+function CurrentStep({ plan }: { plan: ReturnType<typeof multiIdPlan> }) {
   const { state } = useKYCContext();
   const config = useKYCConfig();
 
@@ -118,7 +122,7 @@ function CurrentStep() {
     case 'country-select':
       return <CountrySelectStep />;
     case 'id-type':
-      return <IdTypeStep country={config.country} allowedIdTypes={config.idTypes} />;
+      return <IdTypeStep country={config.country} allowedIdTypes={plan ? plan.safeOptions : config.idTypes} />;
     case 'document-capture':
       // Preview mode never touches the camera — a static placeholder stands in
       // for the capture steps (the flow stays walkable via its Continue).
@@ -145,15 +149,23 @@ function CurrentStep() {
     case 'questionnaire':
       return <QuestionnaireStep />;
     case 'submitted':
-      return <SubmittedStep />;
+      // A rehydrated session is already submitted — SubmittedStep submits on
+      // mount, so routing a returning applicant through it would file their
+      // application a second time.
+      return config.completedSummary ? <CompletedStep /> : <SubmittedStep />;
   }
 }
 
 const CAPTURE_STEPS: KYCStep[] = ['document-capture', 'liveness'];
 
 export function KYCModal({ open, onClose, showThemeToggle, disableClose, fullScreen }: KYCModalProps) {
-  const { state } = useKYCContext();
+  const { state, dispatch } = useKYCContext();
   const config = useKYCConfig();
+
+  // Multi-ID flows: the applicant picks each slot's ID from what the admin
+  // allowed, minus what earlier slots used, minus any pick that would strand a
+  // later slot (lib/multi-id mirrors the server's rule exactly).
+  const plan = multiIdPlan(config, state, config.serverConfig.idTypes);
   const isTerminal = state.currentStep === 'submitted';
   // The flow can't be dismissed on the terminal step, or when the consumer
   // disables close (programmatic close() is then the only way out).
@@ -196,8 +208,14 @@ export function KYCModal({ open, onClose, showThemeToggle, disableClose, fullScr
 
   // Apply the configured initial light/dark mode — 'system' follows (and
   // tracks) the device preference. Runs on mount (and if the prop changes);
-  // the in-flow ThemeToggle can still flip it during a session.
-  useEffect(() => applyConfiguredTheme(config.appearance?.theme), [config.appearance?.theme]);
+  // the in-flow ThemeToggle can still flip it during a session. Targets the
+  // SDK's theme root (SdkFrame's shadow frame when isolated), so a configured
+  // theme never rewrites the host page's <html> class.
+  const themeRoot = useThemeRoot();
+  useEffect(
+    () => applyConfiguredTheme(config.appearance?.theme, themeRoot),
+    [config.appearance?.theme, themeRoot],
+  );
 
   // Header progress. The two styles are mutually exclusive: two indicators on
   // one header would be noise, and the point of the bar is that it costs no
@@ -213,10 +231,27 @@ export function KYCModal({ open, onClose, showThemeToggle, disableClose, fullScr
     hasPhoneVerification,
     hasPoa,
     hasQuestionnaire,
+    // Present only on a session a reviewer sent back. Narrows the order to the
+    // steps they ticked, so somebody fixing one blurry photo is not walked
+    // through the whole flow again.
+    resubmit: config.resubmit,
+    multiId: plan ? { index: plan.index, count: plan.count } : null,
   };
+  // A reviewer's send-back narrows the flow, and web advances step by step —
+  // each screen decides where Continue goes — so nothing consulted that
+  // narrowing: it reached the progress indicator and stopped, while the
+  // applicant walked the whole flow. This is the ONE seam every dispatch lands
+  // in, so mapping the current step here honours the narrowing without
+  // rewriting the per-screen logic that makes the flow correct.
+  const shownStep = resolveNarrowedStep(state.currentStep, stepOptions);
+  const skipping = shownStep !== state.currentStep;
+  useEffect(() => {
+    if (skipping) dispatch({ type: 'SET_STEP', payload: shownStep });
+  }, [skipping, shownStep, dispatch]);
+
   // index < 0 / total 0 means "nothing to draw" — the success screen, or a step
   // that isn't part of this flow. Mirrors the RN SDK's stepInfo.
-  const { index: stepIndex, total: stepCount } = getStepPosition(state.currentStep, stepOptions);
+  const { index: stepIndex, total: stepCount } = getStepPosition(shownStep, stepOptions);
   const stepFraction = stepCount > 0 ? (stepIndex + 1) / stepCount : 0;
   // The header's title row. Steps portal their StepHeader into it, so the
   // title sits in the header block exactly as it does on RN and Flutter.
@@ -248,7 +283,18 @@ export function KYCModal({ open, onClose, showThemeToggle, disableClose, fullScr
       <DialogContent
         fullscreen={fullscreen}
         overlayClassName={litForCapture ? 'bg-white' : undefined}
-        className="kyc-root"
+        // The DIALOG must not be the scroll container.
+        //
+        // DialogContent carries overflow-y-auto for consumers that put plain
+        // content inside it. This one manages its own regions: the header is
+        // fixed and the step body scrolls. Left as-is, the desktop dialog
+        // (max-height with no height) gives the inner h-full nothing definite
+        // to resolve against, so the dialog scrolls instead and takes the
+        // header with it. Mobile is inset-0 and therefore already had a real
+        // height, which is why it only ever looked wrong on desktop.
+        //
+        // twMerge lets these win over the base classes.
+        className="kyc-root flex flex-col overflow-hidden"
         style={themeVars}
         onPointerDownOutside={(e) => { if (dismissBlocked) e.preventDefault(); }}
         onEscapeKeyDown={(e) => { if (dismissBlocked) e.preventDefault(); }}
@@ -258,7 +304,10 @@ export function KYCModal({ open, onClose, showThemeToggle, disableClose, fullScr
           <DialogDescription>Verify your identity with Myaza</DialogDescription>
         </VisuallyHidden>
 
-        <div className="flex h-full flex-col overflow-hidden rounded-[inherit]">
+        {/* min-h-0 so the scrolling child can actually shrink: a flex item
+            defaults to min-height:auto and would refuse to be smaller than its
+            content, which silently disables the child's overflow. */}
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[inherit]">
           {!immersive && <SandboxBanner />}
           {!immersive && <KYCHeader
             showThemeToggle={showThemeToggle}
@@ -290,7 +339,16 @@ export function KYCModal({ open, onClose, showThemeToggle, disableClose, fullScr
               {configError ? (
                 <ConfigErrorScreen message={configError} onClose={onClose} />
               ) : (
-                <CurrentStep />
+                <>
+                  {plan && ['id-type', 'id-input', 'document-capture', 'liveness'].includes(state.currentStep) && (
+                    <MultiIdProgress plan={plan} slots={state.multiIdSlots} />
+                  )}
+                  {/* A step the reviewer narrowed away is never rendered, not
+                      even for the frame before the skip lands — the applicant
+                      would see it flash past and reasonably wonder what they
+                      missed. */}
+                  {!skipping && <CurrentStep plan={plan} />}
+                </>
               )}
             </div>
           </KYCErrorBoundary>

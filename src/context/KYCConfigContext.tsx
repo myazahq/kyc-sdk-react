@@ -1,10 +1,11 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import type { ResubmitConfig } from '../lib/resubmit';
 import type { AnyCountry, AnyIdType, EmailVerificationConfig, IdTypeDefinition, KYCAppearance, KYCConsentContent, KYCSuccessContent, PhoneVerificationConfig, QuestionnaireConfig, ProofOfAddressConfig, NfcConfig, ProgressStyle } from '../types/config';
 import type { SubjectType, WorkflowBusinessConfig } from '../types/business';
 import type { KYCSubmission } from '../types/verification';
-import { createKYCApi, KYCApiError, type KYCApi, type SdkConfigIdType, type SdkConfigResponse, type SdkConfigBranding, type WorkflowConfigPayload } from '../services/api';
+import { createKYCApi, KYCApiError, type CompletedSessionSummary, type KYCApi, type SdkConfigIdType, type SdkConfigResponse, type SdkConfigBranding, type WorkflowConfigPayload } from '../services/api';
 import { overlayApplicantWorkflow } from '../lib/workflow-merge';
 import { withPreviewMocks } from '../services/preview-mock';
 import { useKYCContext } from './KYCContext';
@@ -25,6 +26,14 @@ export interface ServerSdkConfig {
   environment?: 'DEVELOPMENT' | 'SANDBOX' | 'PRODUCTION';
   /** Org branding (logo, name, color) returned by the config endpoint. */
   branding?: SdkConfigBranding;
+  /**
+   * The visitor's country, guessed from their IP by the server.
+   *
+   * The LAST resort for a country field nothing else answers, and only ever a
+   * default the applicant can change. Null on a local/private address or where
+   * no geo database is deployed, so every consumer needs a fallback anyway.
+   */
+  geoCountry?: string | null;
   /** Loader error message, if `status === 'error'`. */
   error?: string;
   /** HTTP status of the failed config request, if `status === 'error'`. */
@@ -65,7 +74,18 @@ export interface KYCConfigValue {
    * Multi-region configuration (>1 entry adds the country-select step). The
    * effective `country`/`idTypes` above already reflect the picked entry.
    */
-  countries?: Array<{ country: AnyCountry; idTypes?: AnyIdType[] }>;
+  countries?: Array<{
+    country: AnyCountry;
+    idTypes?: AnyIdType[];
+    /** Multi-ID: which of this country's IDs each verification may offer. */
+    multiIdSlots?: Array<{ idTypes?: string[] }>;
+  }>;
+  /**
+   * Multi-ID POLICY: the applicant verifies `count` IDs in one run, one selfie,
+   * one submission judged by `minPassed`. The per-verification ID allowlists
+   * are per country, on `countries[].multiIdSlots`.
+   */
+  multiId?: { count: number; minPassed: number };
   /**
    * What this session verifies. 'business' switches to the KYB flow (consent →
    * business-details → questionnaire → submitted). Only ever set by a resolved
@@ -81,6 +101,8 @@ export interface KYCConfigValue {
   userId?: string;
   /** Pre-populated user data from the consuming app */
   userData?: { firstName?: string; lastName?: string; dateOfBirth?: string; businessName?: string };
+  /** Company details known upfront (KYB). Seeds the details step; editable. */
+  businessPrefill?: { country?: string; registrationNumber?: string; registrationName?: string };
   enableSelfie?: boolean;
   enableDocumentCapture?: boolean;
   /** Allow picking a document photo from the device instead of the camera. Default true. */
@@ -128,6 +150,14 @@ export interface KYCConfigValue {
   phoneVerification?: PhoneVerificationConfig;
   /** Extra-info questionnaire shown before submission (compliance declarations). */
   questionnaire?: QuestionnaireConfig;
+  /**
+   * A reviewer sent this attempt back to redo specific steps.
+   *
+   * Arrives on ONE session's config snapshot, never on a published workflow, so
+   * it is only ever present when somebody clicked "Send back". Absent means the
+   * ordinary full flow.
+   */
+  resubmit?: ResubmitConfig;
   /** Proof of Address document collection (after capture). */
   proofOfAddress?: ProofOfAddressConfig;
   /** NFC chip verification (native SDKs; web renders it for preview only). */
@@ -145,6 +175,21 @@ export interface KYCConfigValue {
    * "you can close this tab" line when no redirect is configured.
    */
   hostedMode?: boolean;
+  /**
+   * The hosted session's own token (hosted mounts only).
+   *
+   * The success screen re-reads the server's settled view of the key people
+   * with it, so the list shown at submit converges on the one a refresh would
+   * show instead of contradicting it.
+   */
+  hostedToken?: string;
+  /**
+   * Set only when this mount is REHYDRATING a session that was already
+   * submitted: the applicant has come back to their link. Its presence is what
+   * routes the terminal step to CompletedStep instead of SubmittedStep, so no
+   * flow runs and nothing is submitted a second time.
+   */
+  completedSummary?: CompletedSessionSummary;
   /**
    * Server-driven config (fetched on mount): which IDs the org may use and
    * which SDK features are enabled per ID. Steps should consult this — it
@@ -313,6 +358,7 @@ export function KYCConfigProvider({ children, apiOverride, serverConfigOverride,
           idTypes: res.idTypes,
           environment: res.environment,
           branding: res.branding,
+          geoCountry: res.geoCountry,
         });
       })
       .catch((err: unknown) => {

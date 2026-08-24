@@ -1,3 +1,4 @@
+import type { ResubmitConfig } from '../lib/resubmit';
 import type { ButtonHTMLAttributes } from 'react';
 
 import type { KYCSubmission, KYCError } from './verification';
@@ -453,10 +454,25 @@ export interface MyazaKYCConfig<C extends AnyCountry = AnyCountry> {
    * the root {@link idTypes} list. `country` acts as the default/primary.
    * Typically supplied by a dashboard-built Workflow rather than hand-written.
    */
-  countries?: Array<{ country: AnyCountry; idTypes?: AnyIdType[] }>;
+  countries?: Array<{
+    country: AnyCountry;
+    idTypes?: AnyIdType[];
+    /** Multi-ID: which of this country's IDs each verification may offer. */
+    multiIdSlots?: Array<{ idTypes?: string[] }>;
+  }>;
 
   /** Subset of ID types to offer. Only types valid for the given country are accepted. */
   idTypes?: IdTypeForCountry<C>[];
+
+  /**
+   * Multi-ID verification: the applicant verifies `count` IDs in one run, with
+   * one selfie shared across all of them and ONE submission the server judges
+   * by the pass policy (`minPassed` of `count`). This is the POLICY; WHICH IDs
+   * each verification offers is per country (`countries[].multiIdSlots`), so
+   * multi-region flows work — the applicant picks their country first, then
+   * walks that country's slots. Normally supplied by a workflow.
+   */
+  multiId?: { count: number; minPassed: number };
 
   /**
    * The org's own reference for the person being verified (e.g. your internal
@@ -478,6 +494,21 @@ export interface MyazaKYCConfig<C extends AnyCountry = AnyCountry> {
      * NOT collected from the user (the registry lookup is the source of truth).
      */
     businessName?: string;
+  };
+
+  /**
+   * What is already known about the COMPANY (KYB flows).
+   *
+   * The business counterpart to `userData`: it seeds the details step so an
+   * applicant minted a link for a named company does not retype what the org
+   * already holds. PREFILL, never assertion, so every value stays editable and
+   * the registry lookup remains the source of truth.
+   */
+  businessPrefill?: {
+    /** The register the company is on, so the applicant does not pick it. */
+    country?: string;
+    registrationNumber?: string;
+    registrationName?: string;
   };
 
   /** Enable the live-selfie capture step */
@@ -631,6 +662,16 @@ export interface MyazaKYCConfig<C extends AnyCountry = AnyCountry> {
   questionnaire?: QuestionnaireConfig;
 
   /**
+   * A reviewer sent this attempt back to redo specific steps.
+   *
+   * Never set by a consumer and never part of a published workflow — it is
+   * stamped onto ONE session's config snapshot when somebody clicks "Send back",
+   * so it arrives through the hosted bootstrap like any other session config.
+   * Absent means the ordinary full flow.
+   */
+  resubmit?: ResubmitConfig;
+
+  /**
    * Email Verification: an in-flow OTP possession check right after consent.
    * The user enters their email, receives a code, and types it in; the
    * verified contact + signals (disposable domain, free provider) are
@@ -681,6 +722,16 @@ export interface MyazaKYCConfig<C extends AnyCountry = AnyCountry> {
   assetsBasePath?: string;
 
   /**
+   * Shadow-DOM style isolation (default `true`). The SDK renders inside its
+   * own shadow roots carrying its own stylesheet, so your app's CSS cannot
+   * restyle the SDK and the SDK's styles cannot leak into your app — no
+   * global `styles.css` import needed. Set `false` to mount in the light DOM
+   * instead (the pre-2.x behaviour), which requires importing
+   * `@myazahq/kyc-sdk-react/styles.css` globally yourself.
+   */
+  styleIsolation?: boolean;
+
+  /**
    * Arbitrary, free-form metadata forwarded verbatim with every verification
    * request. Nothing here is required or interpreted by the SDK/server — use
    * {@link userId} for the user reference, not a `userId` key in here.
@@ -692,7 +743,7 @@ export interface MyazaKYCConfig<C extends AnyCountry = AnyCountry> {
   onStepChange?: (step: KYCStep) => void;
   /**
    * Fires immediately after the user submits their verification.
-   * The submission is always status: 'pending' — results arrive async via webhook.
+   * The submission is always status: 'processing' — results arrive async via webhook.
    */
   onSubmit?: (submission: KYCSubmission) => void;
   onClose?: () => void;

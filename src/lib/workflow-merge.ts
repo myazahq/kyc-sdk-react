@@ -14,6 +14,9 @@ const WORKFLOW_KEYS = [
   'country',
   'countries',
   'idTypes',
+  // Multi-ID (KYC only; deliberately NOT in APPLICANT_LEG_KEYS below — a KYB
+  // applicant leg is one person's single check inside a business application).
+  'multiId',
   'enableSelfie',
   'enableDocumentCapture',
   'allowDocumentUpload',
@@ -36,6 +39,8 @@ const WORKFLOW_KEYS = [
   'questionnaire',
   'proofOfAddress',
   'nfc',
+  // Set only on a session a reviewer sent back, never on a published flow.
+  'resubmit',
   'assetsBasePath',
 ] as const;
 

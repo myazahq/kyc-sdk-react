@@ -8,8 +8,7 @@ import { Label } from '../components/ui/label';
 import { useKYCContext } from '../context/KYCContext';
 import { useKYCConfig } from '../context/KYCConfigContext';
 import { stepAfterCapture } from '../lib/post-capture';
-import { isBusinessFlow } from '../lib/business';
-import { splitFullName } from '../lib/business-application';
+import { multiIdPlan } from '../lib/multi-id';
 import { validateIdNumber } from '../utils/validators';
 import type { AnyCountry } from '../types/config';
 
@@ -37,27 +36,17 @@ export function IdInputStep({ country }: IdInputStepProps = {}) {
   // Derived state
   // ---------------------------------------------------------------------------
 
-  // Pre-provided names: the consumer's userData — or, on the KYB applicant
-  // leg, the full name already typed on the applicant-role step. Asking again
-  // here would be the same question twice; the applicant submission falls
-  // back to that name (see submit-business.ts). A single-word applicant name
-  // still shows the Last Name field, so gov-DB data validation isn't starved.
-  const applicantName = isBusinessFlow(config)
-    ? splitFullName(state.businessApplication.applicantName)
-    : undefined;
-  const hasFirstName = !!config.userData?.firstName || !!applicantName?.firstName;
-  const hasLastName = !!config.userData?.lastName || !!applicantName?.lastName;
-  const needsNameFields = !hasFirstName || !hasLastName;
-
+  // This step asks for the ID NUMBER and nothing else. The name is the
+  // integrator's to supply — through `userData` on the mount, or on the session
+  // when it is created — because their record is the meaningful claim. A
+  // subject typing their own name and us checking it against the register only
+  // proves they know their own name, and asking for it invited the typo that
+  // fails a lookup the register would have matched.
   const idValidation = state.selectedIdType
     ? validateIdNumber(resolvedCountry, state.selectedIdType, state.idNumber)
     : { valid: state.idNumber.trim() !== '', message: '' };
 
-  const isFormValid =
-    state.idNumber.trim() !== '' &&
-    idValidation.valid &&
-    (hasFirstName || state.userData.firstName.trim() !== '') &&
-    (hasLastName || state.userData.lastName.trim() !== '');
+  const isFormValid = state.idNumber.trim() !== '' && idValidation.valid;
 
   // ---------------------------------------------------------------------------
   // Navigation
@@ -73,10 +62,18 @@ export function IdInputStep({ country }: IdInputStepProps = {}) {
     const skipLiveness =
       config.enableSelfie === false ||
       (features ? !features.livenessCheck : config.enableLiveness === false);
-    dispatch({
-      type: 'SET_STEP',
-      payload: skipLiveness ? stepAfterCapture(config) : 'liveness',
-    });
+    const afterRun = skipLiveness ? stepAfterCapture(config) : 'liveness';
+    // Multi-ID: this slot is done — commit its evidence and move to the next
+    // slot's picker, or on to liveness after the last slot.
+    const plan = multiIdPlan(config, state, config.serverConfig.idTypes);
+    if (plan) {
+      dispatch({
+        type: 'COMMIT_MULTI_ID_SLOT',
+        payload: { nextStep: plan.last ? afterRun : 'id-type' },
+      });
+      return;
+    }
+    dispatch({ type: 'SET_STEP', payload: afterRun });
   };
 
   const handleBack = () => {
@@ -94,8 +91,8 @@ export function IdInputStep({ country }: IdInputStepProps = {}) {
   return (
     <div className="space-y-5 animate-slide-up">
       <StepHeader
-        title="Enter Your Details"
-        description={`Provide your ${idLabel}${needsNameFields ? ' and personal information' : ''} for verification.`}
+        title={`Enter your ${idLabel}`}
+        description="We’ll check this against the official record."
         onBack={handleBack}
         country={resolvedCountry}
       />
@@ -119,39 +116,6 @@ export function IdInputStep({ country }: IdInputStepProps = {}) {
             <p className="text-sm text-destructive">{idValidation.message}</p>
           )}
         </div>
-
-        {/* First Name + Last Name — only if not pre-provided by app */}
-        {needsNameFields && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {!hasFirstName && (
-              <div className="space-y-2">
-                <Label htmlFor="firstName">First Name</Label>
-                <Input
-                  id="firstName"
-                  placeholder="Enter your first name"
-                  value={state.userData.firstName}
-                  onChange={(e) =>
-                    dispatch({ type: 'SET_USER_DATA', payload: { firstName: e.target.value } })
-                  }
-                />
-              </div>
-            )}
-
-            {!hasLastName && (
-              <div className="space-y-2">
-                <Label htmlFor="lastName">Last Name</Label>
-                <Input
-                  id="lastName"
-                  placeholder="Enter your last name"
-                  value={state.userData.lastName}
-                  onChange={(e) =>
-                    dispatch({ type: 'SET_USER_DATA', payload: { lastName: e.target.value } })
-                  }
-                />
-              </div>
-            )}
-          </div>
-        )}
       </div>
 
       <Button

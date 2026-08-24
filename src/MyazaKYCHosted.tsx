@@ -1,36 +1,13 @@
 'use client';
 
-import React, { Suspense, lazy, useEffect, useState } from 'react';
-import { Loader2 } from 'lucide-react';
-import { KYCProvider, useKYCContext } from './context/KYCContext';
-import { KYCConfigProvider, type ServerSdkConfig } from './context/KYCConfigContext';
-import { KYCModal } from './components/KYCModal';
+import React, { useEffect, useState } from 'react';
+import { Check, Loader2 } from 'lucide-react';
 import { buildThemeVars } from './lib/theme';
-import { isDesktopDevice } from './lib/device';
-import { confirmMobileDevice } from './lib/device-class';
-import { primeFaceMesh } from './liveness/face-mesh';
-import { configureSpeech } from './liveness/speech';
-import { createKYCApi, type HandoffBootstrapResponse, type HandoffSessionSnapshot, type KYCApi } from './services/api';
-import { overlayApplicantWorkflow } from './lib/workflow-merge';
-
-// Lazy-loaded so the QR/handoff code (+ qrcode.react) stays out of the initial
-// hosted bundle — it only loads when a DESKTOP visitor reaches the gate.
-const DeviceHandoffGate = lazy(() => import('./components/DeviceHandoffGate'));
-import type {
-  AnyCountry,
-  AnyIdType,
-  EmailVerificationConfig,
-  KYCAppearance,
-  KYCConsentContent,
-  KYCSuccessContent,
-  PhoneVerificationConfig,
-  QuestionnaireConfig,
-  ProofOfAddressConfig,
-  NfcConfig,
-  ProgressStyle,
-  VoiceGuidanceOption,
-} from './types/config';
-import type { SubjectType, WorkflowBusinessConfig } from './types/business';
+import { createKYCApi, type CompletedSessionSummary, type HandoffBootstrapResponse, type KYCApi } from './services/api';
+import { HostedCompleted } from './hosted/HostedCompleted';
+import { HostedFlow } from './hosted/HostedFlow';
+import { HANDOFF_TOKEN_PREFIX } from './hosted/token';
+import { SdkFrame } from './lib/sdk-frame';
 
 export interface MyazaKYCHostedProps {
   /**
@@ -38,10 +15,19 @@ export interface MyazaKYCHostedProps {
    * (`/verify/<token>`). The SDK presents it as a `hs_<token>` bearer.
    */
   token: string;
+  /**
+   * Mount INSIDE a host application rather than on the hosted page. Implies
+   * shadow-DOM style isolation (the SDK carries its own stylesheet; no global
+   * `styles.css` import, and the host app's CSS cannot reach in), swaps the
+   * full-page loading/terminal chrome for compact blocks that sit in a panel,
+   * and makes the modal closable — the success screen's action becomes a real
+   * Done button wired to {@link onClose}. The hosted page passes nothing and
+   * keeps its full-page, light-DOM behaviour exactly as before.
+   */
+  embedded?: boolean;
+  /** Embedded mounts: the modal was closed or the flow's Done was pressed. */
+  onClose?: () => void;
 }
-
-// Bearer prefix for handoff session tokens (mirrors kyc-core's HANDOFF_TOKEN_PREFIX).
-const HANDOFF_TOKEN_PREFIX = 'hs_';
 
 /**
  * Hosted "continue on your phone" entry point. Rendered by the Myaza-hosted
@@ -50,11 +36,12 @@ const HANDOFF_TOKEN_PREFIX = 'hs_';
  * authenticating every upload/verify with the session token (relative base URL,
  * so requests go through the hosting origin's API proxy).
  */
-export function MyazaKYCHosted({ token }: MyazaKYCHostedProps) {
+export function MyazaKYCHosted({ token, embedded = false, onClose }: MyazaKYCHostedProps) {
   // Relative base ('') → requests hit the hosting origin and its /api proxy.
   const [api] = useState<KYCApi>(() => createKYCApi('', `${HANDOFF_TOKEN_PREFIX}${token}`));
-  const [phase, setPhase] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [phase, setPhase] = useState<'loading' | 'ready' | 'completed' | 'error'>('loading');
   const [bootstrap, setBootstrap] = useState<HandoffBootstrapResponse | null>(null);
+  const [summary, setSummary] = useState<CompletedSessionSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -68,6 +55,30 @@ export function MyazaKYCHosted({ token }: MyazaKYCHostedProps) {
       })
       .catch((err: unknown) => {
         if (cancelled) return;
+        // Already submitted is the person who FINISHED coming back to their own
+        // link. Telling them it is unavailable reads as though their
+        // application was lost, which is the opposite of what happened. Rebuild
+        // the success screen instead — for a KYB applicant it is where their
+        // directors' verification links live, and those outlive the session.
+        if (
+          err !== null &&
+          typeof err === 'object' &&
+          (err as { code?: string }).code === 'handoff_session_used'
+        ) {
+          api
+            .completedSession(token)
+            .then((data) => {
+              if (cancelled) return;
+              setSummary(data);
+              setPhase('completed');
+            })
+            .catch(() => {
+              // The summary is an enrichment, not the message. Falling back to
+              // the plain confirmation still tells them the true thing.
+              if (!cancelled) setPhase('completed');
+            });
+          return;
+        }
         setError(err instanceof Error ? err.message : 'This verification link is no longer valid.');
         setPhase('error');
       });
@@ -76,216 +87,73 @@ export function MyazaKYCHosted({ token }: MyazaKYCHostedProps) {
     };
   }, [api, token]);
 
+  const frame = (body: React.ReactNode) => <SdkFrame isolate={embedded}>{body}</SdkFrame>;
+
   if (phase === 'loading') {
-    return (
-      <CenteredScreen>
+    return frame(
+      <CenteredScreen compact={embedded}>
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
         <p className="text-sm text-muted-foreground">Loading your verification…</p>
-      </CenteredScreen>
+      </CenteredScreen>,
+    );
+  }
+
+  // Somebody returning should land on the screen they left — the real one, with
+  // the org's branding, its success copy, and (for KYB) the people the review is
+  // still waiting on, each with a link to copy and a live status. Embedded
+  // mounts get the SAME screen as a closable modal: a submitted application's
+  // key-people invite links live here, and the applicant's job is not finished
+  // until those people verify.
+  if (phase === 'completed' && summary) {
+    const done = (
+      <HostedCompleted token={token} api={api} summary={summary} embedded={embedded} onClose={onClose} />
+    );
+    return embedded ? frame(done) : done;
+  }
+
+  // Only when the summary could not be loaded. The confirmation is still true;
+  // it is the people list that is missing.
+  if (phase === 'completed') {
+    return frame(
+      <CenteredScreen compact={embedded}>
+        <span className="flex h-20 w-20 items-center justify-center rounded-full bg-emerald-500/10">
+          <Check className="h-10 w-10 text-emerald-500" />
+        </span>
+        <h1 className="text-lg font-semibold font-heading">Verification submitted</h1>
+        <p className="max-w-xs text-center text-sm text-muted-foreground">
+          This has already been sent for review. There is nothing more for you to do{embedded ? '.' : ', and you can close this tab.'}
+        </p>
+      </CenteredScreen>,
     );
   }
 
   if (phase === 'error' || !bootstrap) {
-    return (
-      <CenteredScreen>
+    return frame(
+      <CenteredScreen compact={embedded}>
         <h1 className="text-lg font-semibold font-heading">Link unavailable</h1>
         <p className="max-w-xs text-center text-sm text-muted-foreground">
           {error ?? 'This verification link has expired or already been used. Return to your computer to start again.'}
         </p>
-      </CenteredScreen>
+      </CenteredScreen>,
     );
   }
 
-  return <HostedFlow token={token} api={api} bootstrap={bootstrap} />;
+  return frame(<HostedFlow token={token} api={api} bootstrap={bootstrap} embedded={embedded} onClose={onClose} />);
 }
 
-function CenteredScreen({ children }: { children: React.ReactNode }) {
+function CenteredScreen({ children, compact }: { children: React.ReactNode; compact?: boolean }) {
+  // Compact: an embedded mount sits inside a host panel, where a
+  // min-h-screen block would blow the layout open.
   return (
     <div
-      className="kyc-root flex min-h-screen flex-col items-center justify-center gap-4 bg-background p-6 text-foreground"
+      className={
+        compact
+          ? 'kyc-root flex flex-col items-center justify-center gap-4 rounded-2xl bg-background px-6 py-12 text-foreground'
+          : 'kyc-root flex min-h-screen flex-col items-center justify-center gap-4 bg-background p-6 text-foreground'
+      }
       style={buildThemeVars(undefined)}
     >
       {children}
     </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Hosted flow — seeds the providers from the bootstrap and runs the steps
-// ---------------------------------------------------------------------------
-
-function HostedFlow({
-  token,
-  api,
-  bootstrap,
-}: {
-  token: string;
-  api: KYCApi;
-  bootstrap: HandoffBootstrapResponse;
-}) {
-  const snap = bootstrap.configSnapshot;
-  const isBusiness = snap.subjectType === 'business' && !!snap.business;
-  // KYB: overlay the mapped applicant workflow's capture template (resolved by
-  // the bootstrap) over the snapshot — same treatment as WorkflowGate's embed
-  // path. No-op when nothing was mapped.
-  const leg = overlayApplicantWorkflow(
-    bootstrap.applicantWorkflow,
-    snap as unknown as Record<string, unknown>,
-  ) as typeof snap & { applicantWorkflowId?: string };
-  // Offer "continue on your phone" only when the flow has a capture/upload step
-  // a phone camera actually helps with (mirrors <MyazaKYC/>). Individual flows:
-  // liveness or document capture. KYB flows: the applicant's in-flow KYC or
-  // company-document uploads (photograph on a phone) — a bare registry lookup
-  // (all typed) gains nothing. The workflow/hosted-link can also switch handoff
-  // off (`deviceHandoff: false`); default on.
-  const captureNeeded = isBusiness
-    ? snap.business?.applicant?.verification === true || snap.business?.documents?.enabled === true
-    : snap.enableLiveness !== false || snap.enableDocumentCapture !== false;
-  const cameraNeeded = snap.deviceHandoff !== false && captureNeeded;
-  const serverConfigOverride: ServerSdkConfig = {
-    status: 'ready',
-    idTypes: bootstrap.idTypes,
-    environment: bootstrap.environment,
-    branding: bootstrap.branding,
-  };
-
-  return (
-    <KYCProvider>
-      <KYCConfigProvider
-        apiKey={`${HANDOFF_TOKEN_PREFIX}${token}`}
-        apiOverride={api}
-        serverConfigOverride={serverConfigOverride}
-        hostedMode
-        subjectType={snap.subjectType as SubjectType | undefined}
-        business={snap.business as WorkflowBusinessConfig | undefined}
-        applicantWorkflowId={leg.applicantWorkflowId}
-        // Business snapshots carry no top-level country — the registry country
-        // stands in so the context never sees undefined. (`leg` = the snapshot
-        // with the applicant workflow's capture keys overlaid, when mapped.)
-        country={(leg.country ?? snap.business?.country) as AnyCountry}
-        countries={leg.countries as Array<{ country: AnyCountry; idTypes?: AnyIdType[] }> | undefined}
-        idTypes={leg.idTypes as AnyIdType[] | undefined}
-        metadata={snap.metadata}
-        userId={snap.userId}
-        enableSelfie={leg.enableSelfie}
-        enableDocumentCapture={leg.enableDocumentCapture}
-        allowDocumentUpload={leg.allowDocumentUpload}
-        enableLiveness={leg.enableLiveness}
-        livenessMode={leg.livenessMode as 'gestures' | 'flash' | 'both' | undefined}
-        flashSequenceLength={leg.flashSequenceLength as number | undefined}
-        deviceHandoff={snap.deviceHandoff}
-        progressStyle={snap.progressStyle as ProgressStyle | undefined}
-        requireMobileDevice={snap.requireMobileDevice}
-        appearance={snap.appearance as KYCAppearance | undefined}
-        consent={snap.consent as KYCConsentContent | undefined}
-        success={snap.success as KYCSuccessContent | undefined}
-        emailVerification={snap.emailVerification as EmailVerificationConfig | undefined}
-        phoneVerification={snap.phoneVerification as PhoneVerificationConfig | undefined}
-        questionnaire={snap.questionnaire as QuestionnaireConfig | undefined}
-        proofOfAddress={snap.proofOfAddress as ProofOfAddressConfig | undefined}
-        nfc={leg.nfc as NfcConfig | undefined}
-        userData={snap.userData}
-        assetsBasePath={snap.assetsBasePath}
-      >
-        <HostedFlowInner
-          snapshot={snap}
-          cameraNeeded={cameraNeeded}
-          mobileOnly={snap.requireMobileDevice === true}
-          handoffDisabled={snap.deviceHandoff === false}
-          voiceGuidance={snap.voiceGuidance as VoiceGuidanceOption | undefined}
-          // Business flows have no liveness step — never load the face model —
-          // unless the workflow runs the applicant's own capture leg in-flow.
-          enableLiveness={
-            isBusiness && snap.business?.applicant?.verification !== true
-              ? false
-              : leg.enableLiveness
-          }
-          showThemeToggle={snap.showThemeToggle}
-          fullScreen={snap.fullScreen}
-        />
-      </KYCConfigProvider>
-    </KYCProvider>
-  );
-}
-
-function HostedFlowInner({
-  snapshot,
-  cameraNeeded,
-  mobileOnly,
-  handoffDisabled,
-  voiceGuidance,
-  enableLiveness,
-  showThemeToggle,
-  fullScreen,
-}: {
-  snapshot: HandoffSessionSnapshot;
-  cameraNeeded: boolean;
-  /** Mobile-only workflow — the flow may not run on this device unless it's a confirmed handheld. */
-  mobileOnly: boolean;
-  handoffDisabled: boolean;
-  voiceGuidance?: VoiceGuidanceOption;
-  enableLiveness?: boolean;
-  showThemeToggle?: boolean;
-  fullScreen?: boolean;
-}) {
-  const { state, dispatch } = useKYCContext();
-  // A DESKTOP hosted-link visitor is offered the "continue on your phone" gate
-  // first (the gate mints a CHILD handoff session for the phone and polls it).
-  // A phone visitor — the common hosted case — or a no-camera flow goes straight
-  // into the modal.
-  const [gateOpen, setGateOpen] = useState(false);
-
-  useEffect(() => {
-    // Mobile-only workflow: the flow opens only on a hardware-confirmed
-    // handheld (GPU + motion, not viewport — see lib/device-class.ts). Anything
-    // else lands on the gate, which offers the phone QR and no way through.
-    if (mobileOnly) {
-      void confirmMobileDevice().then(({ deviceClass }) => {
-        if (deviceClass === 'mobile') dispatch({ type: 'OPEN_MODAL' });
-        else setGateOpen(true);
-      });
-    } else if (cameraNeeded && isDesktopDevice()) {
-      setGateOpen(true);
-    } else {
-      dispatch({ type: 'OPEN_MODAL' });
-    }
-    if (enableLiveness !== false) primeFaceMesh();
-    configureSpeech(voiceGuidance);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Verify on this computer instead: leave the gate, run the flow here. Never
-  // reachable on a mobile-only workflow — the gate hides every path to it.
-  const continueHere = () => {
-    if (mobileOnly) return;
-    setGateOpen(false);
-    dispatch({ type: 'OPEN_MODAL' });
-  };
-
-  // On the phone there is nothing to "close" back to — the flow is the whole
-  // page — so close is disabled. The terminal Submitted step ends the journey;
-  // the desktop is notified via its session poll.
-  return (
-    <>
-      {gateOpen && (
-        <Suspense fallback={null}>
-          <DeviceHandoffGate
-            snapshot={snapshot}
-            onContinueHere={continueHere}
-            // No parent surface to return to on the hosted page — dismissing the
-            // gate simply falls through to verifying on this device (a
-            // mobile-only flow makes both a no-op and keeps the gate up).
-            onClose={continueHere}
-            showThemeToggle={showThemeToggle}
-            mobileOnly={mobileOnly}
-            noHandoff={mobileOnly && handoffDisabled}
-            // Nothing to dismiss to on a mobile-only hosted link — hide the X
-            // rather than leave a button that does nothing.
-            disableClose={mobileOnly}
-          />
-        </Suspense>
-      )}
-      <KYCModal open={state.isOpen} onClose={() => undefined} showThemeToggle={showThemeToggle} disableClose fullScreen={fullScreen} />
-    </>
   );
 }

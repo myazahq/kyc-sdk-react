@@ -50,6 +50,21 @@ export function useDeviceHandoff(
   const [nonce, setNonce] = useState(0);
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // The in-flight mint, keyed by what a mint is FOR. Two effect invocations for
+  // the same key share one request and therefore one session.
+  //
+  // `cancelled` below reads like it prevents a duplicate and does not: it only
+  // drops the state update, while the request has already reached the server and
+  // the row already exists. Under StrictMode that minted two sessions per visit,
+  // the first immediately orphaned. Dev-only today, because `api` is memoised —
+  // but nothing here guaranteed that, and a mint with no guard is one unstable
+  // dependency away from a session per render.
+  //
+  // Sharing the PROMISE rather than skipping the second run is what keeps this
+  // correct: the first invocation's handler is cancelled, so if the second were
+  // skipped no handler would ever apply the result and the QR would hang on
+  // "creating" forever.
+  const mintRef = useRef<{ key: string; promise: ReturnType<typeof api.createHandoffSession> } | null>(null);
   const snapshotRef = useRef(snapshot);
   snapshotRef.current = snapshot;
 
@@ -70,8 +85,12 @@ export function useDeviceHandoff(
     setError(null);
     setVerificationId(null);
 
-    api
-      .createHandoffSession(snapshotRef.current)
+    const mintKey = `${nonce}`;
+    if (mintRef.current?.key !== mintKey) {
+      mintRef.current = { key: mintKey, promise: api.createHandoffSession(snapshotRef.current) };
+    }
+
+    mintRef.current.promise
       .then((res) => {
         if (cancelled) return;
         setSessionId(res.sessionId);
@@ -99,6 +118,9 @@ export function useDeviceHandoff(
         }, POLL_INTERVAL_MS);
       })
       .catch((err: unknown) => {
+        // Drop the failed attempt so a retry actually retries rather than
+        // re-reading the same rejection.
+        if (mintRef.current?.key === mintKey) mintRef.current = null;
         if (cancelled) return;
         setError(err instanceof Error ? err.message : 'Could not start device handoff.');
         setPhase('error');

@@ -5,6 +5,7 @@ import { Maximize2, Minimize2, Moon, Sun, X } from 'lucide-react';
 
 import { useBranding } from '../hooks/useBranding';
 import { cn } from '../lib/utils';
+import { themeRootOrDocument, useThemeRoot } from '../lib/sdk-frame-context';
 import { BrandLogoChip } from './BrandLogoChip';
 import { ProgressBar } from './ProgressBar';
 import { StepIndicator } from './StepIndicator';
@@ -19,11 +20,15 @@ import { StepIndicator } from './StepIndicator';
 
 function ThemeToggle() {
   const [, rerender] = useReducer((x: number) => x + 1, 0);
-  const dark = typeof document !== 'undefined' && document.documentElement.classList.contains('dark');
+  // The SDK's theme root: SdkFrame's shadow frame when isolated (so the
+  // toggle never rewrites the host page's <html> class), else documentElement.
+  const root = themeRootOrDocument(useThemeRoot());
+  const dark = root?.classList.contains('dark') ?? false;
 
   const toggle = () => {
-    const next = !document.documentElement.classList.contains('dark');
-    document.documentElement.classList.toggle('dark', next);
+    if (!root) return;
+    const next = !root.classList.contains('dark');
+    root.classList.toggle('dark', next);
     try { localStorage.setItem('myaza-kyc-theme', next ? 'dark' : 'light'); } catch { /* ignore */ }
     rerender();
   };

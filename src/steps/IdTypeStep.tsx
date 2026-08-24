@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   Fingerprint,
   FileText,
@@ -17,8 +17,10 @@ import { useKYCContext } from '../context/KYCContext';
 import { useKYCConfig } from '../context/KYCConfigContext';
 import { listIdTypeDefinitions } from '../utils/id-definitions';
 import { isBusinessFlow } from '../lib/business';
+import { multiIdEvidenceStep, multiIdPlan } from '../lib/multi-id';
 import { applicantCountryOptions, applicantSelfCountry } from '../lib/business-application';
 import type { AnyIdType, AnyCountry, IdTypeDefinition } from '../types/config';
+import { defaultCountry } from '../lib/country-default';
 
 // Keyed by idType key, so the generic Global-Documents types (passport /
 // drivers-license / national-id) get sensible icons in ANY country; unknown
@@ -48,8 +50,10 @@ export function IdTypeStep({ country, allowedIdTypes }: IdTypeStepProps = {}) {
   const config = useKYCConfig();
   const { serverConfig } = config;
 
-  // Determine which country to use — prop override or default to NG
-  const resolvedCountry: AnyCountry = country ?? 'NG';
+  // Which country's documents to offer. A named country wins; failing that the
+  // visitor's own is a better guess than whichever one is hardcoded, and Global
+  // Documents means any ISO country resolves to a usable list.
+  const resolvedCountry = (defaultCountry(country, serverConfig.geoCountry) ?? 'NG') as AnyCountry;
 
   // Local curated definitions ∪ server-synthesized ones (Global Documents) —
   // countries with no local ID_TYPES entry render entirely from server rows.
@@ -105,7 +109,38 @@ export function IdTypeStep({ country, allowedIdTypes }: IdTypeStepProps = {}) {
     dispatch({ type: 'SET_STEP', payload: next });
   };
 
+  // Multi-ID: a slot whose safe options narrowed to ONE ID has no choice to
+  // make — auto-select it and go straight to its evidence step. (The options
+  // are already filtered to non-stranding picks, so this can never dead-end.)
+  const plan = multiIdPlan(config, state, config.serverConfig.idTypes);
+  const soleOption = plan && visibleTypes.length === 1 ? visibleTypes[0]!.key : null;
+  useEffect(() => {
+    if (soleOption) handleSelect(soleOption);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [soleOption]);
+
+  // Multi-ID: from a LATER verification's picker, back steps into the one
+  // before it — popping that slot and restoring what was captured, so the
+  // applicant can change an ID they already did. From the FIRST picker there
+  // is nothing to pop, so back means what it always did (the country picker,
+  // or consent) — which is also how the country gets changed mid-run.
   const handleBack = () => {
+    if (plan && plan.index > 0) {
+      const previous = state.multiIdSlots[state.multiIdSlots.length - 1];
+      dispatch({
+        type: 'UNCOMMIT_MULTI_ID_SLOT',
+        payload: {
+          step: multiIdEvidenceStep(
+            previous ? config.getIdTypeDefinition(previous.idType, resolvedCountry) : null,
+          ),
+        },
+      });
+      return;
+    }
+    handleBackToStart();
+  };
+
+  const handleBackToStart = () => {
     // Applicant mode (KYB applicant-verification leg): id-type was reached
     // from applicant-role — via country-select when the org's grants offered
     // the applicant more than one country to pick from. A self-selected key

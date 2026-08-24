@@ -15,6 +15,8 @@ import { Dialog, DialogContent, DialogTitle, DialogDescription } from './compone
 import { PoweredBy } from './components/PoweredBy';
 import { VisuallyHidden } from './components/VisuallyHidden';
 import { BiometricLivenessCapture } from './components/BiometricLivenessCapture';
+import { SdkFrame } from './lib/sdk-frame';
+import { useThemeRoot } from './lib/sdk-frame-context';
 
 // ---------------------------------------------------------------------------
 // MyazaBiometricAuth — returning-user face re-authentication ("prove it's still
@@ -47,6 +49,12 @@ export interface MyazaBiometricAuthConfig {
   /** A technical error (network, not enrolled, insufficient credits, …). */
   onError?: (error: KYCError) => void;
   onClose?: () => void;
+  /**
+   * Shadow-DOM style isolation (default `true`) — same contract as
+   * `<MyazaKYC/>`: `false` mounts in the light DOM and requires the global
+   * `@myazahq/kyc-sdk-react/styles.css` import.
+   */
+  styleIsolation?: boolean;
 }
 
 export type MyazaBiometricAuthProps = MyazaBiometricAuthConfig &
@@ -82,7 +90,18 @@ function mapAuthError(err: unknown): KYCError {
   return new KYCError('network_error', 'Something went wrong. Please try again.');
 }
 
-export function MyazaBiometricAuth({
+export function MyazaBiometricAuth({ styleIsolation, ...props }: MyazaBiometricAuthProps) {
+  // The isolation boundary must sit ABOVE BiometricAuthInner: its hooks
+  // (useIsDark, useThemeRoot, usePortalHost) read the contexts SdkFrame
+  // provides.
+  return (
+    <SdkFrame isolate={styleIsolation !== false}>
+      <BiometricAuthInner {...props} />
+    </SdkFrame>
+  );
+}
+
+function BiometricAuthInner({
   apiKey,
   devUrl,
   externalUserId,
@@ -98,7 +117,7 @@ export function MyazaBiometricAuth({
   onClose,
   children,
   ...triggerProps
-}: MyazaBiometricAuthProps) {
+}: Omit<MyazaBiometricAuthProps, 'styleIsolation'>) {
   const api = useMemo(() => createKYCApi(resolveBaseUrl(apiKey, devUrl), apiKey), [apiKey, devUrl]);
   const isDarkTheme = useIsDark();
   const themeVars = buildThemeVars(appearance, isDarkTheme);
@@ -108,11 +127,12 @@ export function MyazaBiometricAuth({
   const [view, setView] = useState<View>('intro');
   const [outcome, setOutcome] = useState<Outcome | null>(null);
 
+  const themeRoot = useThemeRoot();
   useEffect(() => {
     if (!open) return;
     // 'system' follows (and tracks) the device preference while open.
-    return applyConfiguredTheme(appearance?.theme);
-  }, [open, appearance?.theme]);
+    return applyConfiguredTheme(appearance?.theme, themeRoot);
+  }, [open, appearance?.theme, themeRoot]);
 
   const handleOpen = () => {
     setOutcome(null);

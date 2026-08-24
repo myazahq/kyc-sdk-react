@@ -17,6 +17,8 @@
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
@@ -48,7 +50,11 @@
 }
 
 @layer base {
-  :root {
+  /* `:host` alongside `:root` so the same compiled sheet works adopted into
+     the SdkFrame shadow roots (where there is no :root to match) AND imported
+     globally (where :host matches nothing) — one build, both mounts. Tailwind
+     v4 already emits its own theme variables on `:root, :host`. */
+  :root, :host {
     --background: #FFFFFF;
     --foreground: #070330;
     --primary: #5645F5;
@@ -64,6 +70,12 @@
     --border: #D3CFFC;
     --input: #D3CFFC;
     --ring: #5645F5;
+    /* Floating surfaces (anchored menus) sit ON the flow, so they take the
+       flow's own background. Defined as a var rather than a literal so an org's
+       branded --background carries through: these menus portal to the body,
+       where the only tokens they have are the ones merged onto their style. */
+    --popover: var(--background);
+    --popover-foreground: var(--foreground);
     --radius: 0.75rem;
     --kyc-success: #0DA211;
     --kyc-success-light: #D8F4DC;
@@ -91,6 +103,12 @@
     --border: #302D53;
     --input: #302D53;
     --ring: #7B6EF7;
+    /* Floating surfaces (anchored menus) sit ON the flow, so they take the
+       flow's own background. Defined as a var rather than a literal so an org's
+       branded --background carries through: these menus portal to the body,
+       where the only tokens they have are the ones merged onto their style. */
+    --popover: var(--background);
+    --popover-foreground: var(--foreground);
   }
 
   /* Scope all SDK design tokens to the modal root so the SDK is visually
@@ -98,6 +116,15 @@
      Covers semantic color tokens, the Tailwind radius scale (host @theme inline
      often remaps rounded-* to var(--radius-*)), and font families. */
   .kyc-root {
+    /* Containing block for anchored menus.
+       use-dropdown-anchor measures a menu's coordinates RELATIVE to this
+       element and portals it here with position: absolute. Without a position
+       of its own the element is not a containing block, so those coordinates
+       resolve against some ancestor further up and the menu lands in the wrong
+       place, reading as though the dropdown were part of the page rather than
+       floating over it. */
+    position: relative;
+
     /* Semantic color tokens */
     --background: #FFFFFF;
     --foreground: #070330;
@@ -114,6 +141,12 @@
     --border: #D3CFFC;
     --input: #D3CFFC;
     --ring: #5645F5;
+    /* Floating surfaces (anchored menus) sit ON the flow, so they take the
+       flow's own background. Defined as a var rather than a literal so an org's
+       branded --background carries through: these menus portal to the body,
+       where the only tokens they have are the ones merged onto their style. */
+    --popover: var(--background);
+    --popover-foreground: var(--foreground);
 
     /* Tailwind radius scale — host @theme inline often maps rounded-* to
        var(--radius-*) → var(--radius), which bloats with our larger --radius.
@@ -161,6 +194,12 @@
     --border: #302D53;
     --input: #302D53;
     --ring: #7B6EF7;
+    /* Floating surfaces (anchored menus) sit ON the flow, so they take the
+       flow's own background. Defined as a var rather than a literal so an org's
+       branded --background carries through: these menus portal to the body,
+       where the only tokens they have are the ones merged onto their style. */
+    --popover: var(--background);
+    --popover-foreground: var(--foreground);
   }
 
   /* Reset element-level base rules that host apps often apply via @layer base

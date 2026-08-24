@@ -17,22 +17,36 @@ import type { AnyCountry } from '../types/config';
 export function CountryRegionPicker({
   countries,
   selected,
+  geoCountry,
   onPick,
 }: {
   countries: string[];
   selected: string | null;
+  /**
+   * The visitor's IP country. Lifted out of its continent to the very top and
+   * tagged, so the one country most likely to be theirs is the first thing they
+   * see rather than something to scroll for.
+   */
+  geoCountry?: string | null;
   onPick: (country: AnyCountry) => void;
 }) {
   const [query, setQuery] = useState('');
-  const groups = useMemo(() => {
+  const { pinned, groups } = useMemo(() => {
     const q = query.trim().toLowerCase();
     const visible = q
       ? countries.filter(
           (c) => regionCountryName(c).toLowerCase().includes(q) || c.toLowerCase().includes(q),
         )
       : countries;
-    return groupCountriesByRegion(visible);
-  }, [countries, query]);
+    const geo = geoCountry?.toUpperCase();
+    // Still subject to the search: typing narrows to what was asked for rather
+    // than keeping a row that does not match it.
+    const hit = geo && visible.includes(geo) ? geo : null;
+    return {
+      pinned: hit,
+      groups: groupCountriesByRegion(hit ? visible.filter((c) => c !== hit) : visible),
+    };
+  }, [countries, query, geoCountry]);
 
   return (
     // Fill the parent (the step body is flex-col h-full): search pinned, list
@@ -50,7 +64,26 @@ export function CountryRegionPicker({
       </div>
 
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-0.5">
-        {groups.length === 0 ? (
+        {pinned && (
+          <button
+            type="button"
+            onClick={() => onPick(pinned as AnyCountry)}
+            className={cn(
+              'flex w-full items-center gap-3 rounded-xl border p-4 text-left transition-colors',
+              selected === pinned
+                ? 'border-primary bg-primary/5 ring-1 ring-primary/40'
+                : 'border-border hover:border-primary/40 hover:bg-muted/40',
+            )}
+          >
+            <CountryFlag code={pinned} className="h-8 w-8" title={regionCountryName(pinned)} />
+            <span className="flex-1 text-base font-medium">{regionCountryName(pinned)}</span>
+            <span className="shrink-0 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+              Your location
+            </span>
+            <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+          </button>
+        )}
+        {groups.length === 0 && !pinned ? (
           <p className="py-10 text-center text-sm text-muted-foreground">No countries found.</p>
         ) : (
           groups.map((group) => (

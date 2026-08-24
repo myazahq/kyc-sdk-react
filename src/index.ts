@@ -65,3 +65,8 @@ export type {
 // `KYCError` is a class (extends Error) — export it as a value so consumers can
 // `instanceof`-narrow the error passed to onError.
 export { KYCError } from './types/verification';
+
+// The branded QR, exported so the dashboard renders the SAME code an applicant
+// sees in the SDK rather than growing a second, plainer one of its own.
+export { StyledQRCode, type StyledQRCodeProps } from './components/StyledQRCode';
+export { MYAZA_QR_LOGO } from './lib/qr-logo';

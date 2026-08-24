@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { CheckCircle2, Loader2, Mail, Smartphone } from 'lucide-react';
 import { StepHeader } from '../components/StepHeader';
 import { Button } from '../components/ui/button';
@@ -12,11 +12,13 @@ import {
 } from '../lib/contact-channels';
 import { ContactDestinationField } from './ContactDestinationField';
 import { ContactCodePanel } from './ContactCodePanel';
+import { stepAfterContactVerified } from './contact-recovery';
 import { useKYCContext } from '../context/KYCContext';
 import { useKYCConfig } from '../context/KYCConfigContext';
 import { stepAfterContact } from '../lib/contact-steps';
 import { isBusinessFlow } from '../lib/business';
 import { describeSendError, describeCheckError } from '../lib/contact-errors';
+import { defaultCountry } from '../lib/country-default';
 
 // Contact-verification OTP step (email or phone — one component, two mounts).
 // enter → send → code entry → verified → continue. The proof token is stored
@@ -63,13 +65,25 @@ export function ContactVerificationStep({ channel }: { channel: 'email' | 'phone
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Entered via submit recovery? (The server refused this channel's proof at
+  // submit — the token had expired or was already claimed — so the person was
+  // walked back here.) Captured at mount: verifying clears the flag, and
+  // Continue must still route back to 'submitted' afterwards.
+  const expiredList = Array.isArray(state.contact.expired) ? state.contact.expired : [];
+  const recovery = useRef(expiredList.includes(channel)).current;
+
   const advance = () =>
     dispatch({
       type: 'SET_STEP',
-      payload: stepAfterContact(
-        { ...config, subjectTypeIsBusiness: isBusinessFlow(config) },
-        isEmail ? 'email-verification' : 'phone-verification',
-      ),
+      payload: stepAfterContactVerified({
+        recovery,
+        expired: expiredList,
+        channel,
+        forward: stepAfterContact(
+          { ...config, subjectTypeIsBusiness: isBusinessFlow(config) },
+          isEmail ? 'email-verification' : 'phone-verification',
+        ),
+      }),
     });
 
   /** `switchTo` re-sends over the other channel when the first one didn't land. */
@@ -102,7 +116,17 @@ export function ContactVerificationStep({ channel }: { channel: 'email' | 'phone
     setBusy(true);
     setError(null);
     try {
-      const res = await config.api.contactCheck({ challengeId, code: value });
+      // The session + country let the server charge this check as it runs
+      // rather than at submit. Both are optional and validated server-side, so
+      // an older SDK simply keeps the old billing moment.
+      // The session lets the server bill this component on completion, which is
+      // this call. Optional: without it the charge happens at submit.
+      const res = await config.api.contactCheck({
+        challengeId,
+        code: value,
+        ...(state.sessionId ? { sessionId: state.sessionId } : {}),
+        ...(config.country ? { country: config.country } : {}),
+      });
       dispatch({ type: 'SET_CONTACT_PROOF', payload: { channel, token: res.token, destination } });
       advance();
     } catch (err) {
@@ -127,6 +151,14 @@ export function ContactVerificationStep({ channel }: { channel: 'email' | 'phone
         }
       />
 
+      {recovery && !alreadyVerified && (
+        <div className="rounded-xl bg-secondary/15 p-4 text-sm">
+          Your earlier confirmation has expired, so please verify{' '}
+          {isEmail ? 'your email' : 'your number'} once more. Everything else is saved, and we will
+          submit again straight after.
+        </div>
+      )}
+
       {alreadyVerified ? (
         <div className="flex items-center gap-3 rounded-xl bg-primary/5 p-4">
           <CheckCircle2 className="h-5 w-5 shrink-0 text-primary" />
@@ -141,7 +173,15 @@ export function ContactVerificationStep({ channel }: { channel: 'email' | 'phone
             email={email}
             onEmailChange={setEmail}
             onPhoneChange={setPhone}
-            defaultCountry={config.phoneVerification?.defaultCountry ?? config.country}
+            // The APPLICANT's own number, so where they are beats which
+            // register this flow checks. An org-configured default still wins:
+            // that is a decision somebody made about their own customers.
+            geoCountry={config.serverConfig?.geoCountry}
+            defaultCountry={defaultCountry(
+              config.phoneVerification?.defaultCountry,
+              config.serverConfig?.geoCountry,
+              config.country,
+            )}
             disabled={busy}
           />
           <ContactChannelPicker offered={offeredChannels} picked={via} onPick={setVia} disabled={busy} />

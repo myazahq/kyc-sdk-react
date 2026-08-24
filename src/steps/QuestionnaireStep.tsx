@@ -7,7 +7,7 @@ import { useKYCContext } from '../context/KYCContext';
 import { useKYCConfig } from '../context/KYCConfigContext';
 import { hasProofOfAddressStep } from '../lib/post-capture';
 import { isBusinessFlow } from '../lib/business';
-import { hasApplicantVerification, lastBusinessSectionStep } from '../lib/business-application';
+import { nextBusinessStep, prevBusinessStep } from '../lib/business-application';
 import { QuestionField } from './QuestionnaireFields';
 import type { QuestionnaireAnswerValue } from '../types/config';
 
@@ -33,25 +33,23 @@ export function QuestionnaireStep() {
   };
 
   const handleBack = () => {
-    // Mirror the forward path. Business flows return to the last application
-    // step — unless the workflow ran the applicant capture leg, which ends the
-    // same way an individual flow does (liveness / capture), handled below.
-    const business = isBusinessFlow(config);
-    if (business && !hasApplicantVerification(config.business)) {
-      dispatch({ type: 'SET_STEP', payload: lastBusinessSectionStep(config.business) });
+    // Mirror the forward path. In a business flow the questionnaire sits
+    // inside the company section (after documents, before key people), so Back
+    // walks that order.
+    if (isBusinessFlow(config)) {
+      dispatch({ type: 'SET_STEP', payload: prevBusinessStep('questionnaire', config) });
       return;
     }
-    // Individual capture leg (classic KYC, or the applicant's within KYB):
-    // Proof of Address when it ran (never on KYB), else liveness, else capture.
-    const backTo =
-      !business && hasProofOfAddressStep(config.proofOfAddress)
-        ? 'proof-of-address'
-        : config.enableSelfie !== false
-          ? 'liveness'
-          : state.selectedIdType &&
-              config.getIdTypeDefinition(state.selectedIdType)?.requiresDocumentCapture === false
-            ? 'id-input'
-            : 'document-capture';
+    // Individual capture leg: Proof of Address when it ran, else liveness,
+    // else capture.
+    const backTo = hasProofOfAddressStep(config.proofOfAddress)
+      ? 'proof-of-address'
+      : config.enableSelfie !== false
+        ? 'liveness'
+        : state.selectedIdType &&
+            config.getIdTypeDefinition(state.selectedIdType)?.requiresDocumentCapture === false
+          ? 'id-input'
+          : 'document-capture';
     dispatch({ type: 'SET_STEP', payload: backTo });
   };
 
@@ -100,6 +98,16 @@ export function QuestionnaireStep() {
       if (answers[field.key] !== undefined && answers[`${field.key}_currency`] === undefined) {
         const fallback = field.currencies?.[0];
         if (fallback) setAnswer(`${field.key}_currency`, fallback);
+      }
+    }
+    // Business flows continue INTO the rest of the application (key people,
+    // then the applicant's own verification); only the individual flow — and a
+    // business flow with nothing after the questionnaire — submits here.
+    if (isBusinessFlow(config)) {
+      const next = nextBusinessStep('questionnaire', config);
+      if (next !== 'submitted') {
+        dispatch({ type: 'SET_STEP', payload: next });
+        return;
       }
     }
     dispatch({ type: 'SUBMIT_VERIFICATION' });

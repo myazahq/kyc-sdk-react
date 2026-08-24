@@ -7,7 +7,16 @@ import { Button } from '../components/ui/button';
 import { cn } from '../lib/utils';
 import { KeyPersonForm } from './KeyPersonForm';
 import { isKeyPersonRowValid } from '../lib/business-application';
+import type { KeyPeopleSection } from '../lib/key-people-sections';
 import type { KeyPersonEntry } from '../context/types';
+import type { KeyPersonRole } from '../types/business';
+
+/** What the sheet calls itself, per the section that opened it. */
+const ADD_TITLES: Record<KeyPeopleSection, string> = {
+  ubos: 'Add a beneficial owner',
+  shareholders: 'Add a shareholder',
+  representatives: 'Add a representative',
+};
 
 /**
  * The add/edit key-person sheet. The list step stays a clean stack of summary
@@ -20,16 +29,26 @@ import type { KeyPersonEntry } from '../context/types';
  * person's %, and trapping the user inside this sheet would force them to
  * discard their work to go adjust it.
  */
+const EMPTY_ROLES: ReadonlySet<KeyPersonRole> = new Set();
+
 export function KeyPersonSheet({
   mode,
+  section,
+  corporateKyb = false,
   initial,
   uboThreshold,
   otherPctTotal,
   onSave,
   onRemove,
   onClose,
+  defaultCountry,
+  emailRequiredFor = EMPTY_ROLES,
 }: {
   mode: 'add' | 'edit';
+  /** The section whose add-tile or card opened the sheet. */
+  section: KeyPeopleSection;
+  /** The workflow sends corporate shareholders their own KYB application. */
+  corporateKyb?: boolean;
   initial: KeyPersonEntry;
   uboThreshold?: number;
   /** Sum of every OTHER person's ownership % — for the combined warning. */
@@ -38,6 +57,10 @@ export function KeyPersonSheet({
   /** Edit mode only — removes the person and closes. */
   onRemove?: () => void;
   onClose: () => void;
+  /** The workflow demands an address for everyone listed. */
+  emailRequiredFor?: ReadonlySet<KeyPersonRole>;
+  /** The business's own country, pinned to the top of the country picker. */
+  defaultCountry?: string;
 }) {
   const [draft, setDraft] = useState<KeyPersonEntry>(initial);
   // Bottom drawer on mobile; side sheet from the right on desktop — matching
@@ -57,7 +80,7 @@ export function KeyPersonSheet({
   const fmtPct = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
   const combinedPctError =
     combinedTotal > 100
-      ? `Combined ownership would be ${fmtPct(combinedTotal)}% — over by ${fmtPct(combinedTotal - 100)}%.`
+      ? `Combined ownership would be ${fmtPct(combinedTotal)}%, over by ${fmtPct(combinedTotal - 100)}%.`
       : null;
 
   const canSave = isKeyPersonRowValid(draft);
@@ -67,7 +90,11 @@ export function KeyPersonSheet({
       <DrawerContent direction={direction}>
         <div className={cn('flex items-center justify-between px-4 sm:px-6', direction === 'right' ? 'pt-5' : 'pt-3')}>
           <DrawerTitle className="text-base font-bold">
-            {mode === 'add' ? 'Add a person' : 'Edit person'}
+            {mode === 'add'
+              ? ADD_TITLES[section]
+              : draft.isCorporate
+                ? 'Edit company'
+                : 'Edit person'}
           </DrawerTitle>
           <button
             type="button"
@@ -86,7 +113,11 @@ export function KeyPersonSheet({
           )}
         >
           <KeyPersonForm
+            emailRequiredFor={emailRequiredFor}
+            defaultCountry={defaultCountry}
             entry={draft}
+            section={section}
+            corporateKyb={corporateKyb}
             onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))}
             uboThreshold={uboThreshold}
             combinedPctError={combinedPctError}
@@ -95,7 +126,7 @@ export function KeyPersonSheet({
 
         <div className="px-4 pb-6 pt-2 sm:px-6">
           <Button className="w-full" disabled={!canSave} onClick={() => canSave && onSave(draft)}>
-            {mode === 'add' ? 'Add person' : 'Save changes'}
+            {mode === 'add' ? (draft.isCorporate ? 'Add company' : 'Add person') : 'Save changes'}
           </Button>
           {mode === 'edit' && onRemove && (
             <button
@@ -103,7 +134,7 @@ export function KeyPersonSheet({
               onClick={onRemove}
               className="mt-1 flex h-11 w-full items-center justify-center text-sm font-semibold text-destructive transition-opacity hover:opacity-80"
             >
-              Remove this person
+              {draft.isCorporate ? 'Remove this company' : 'Remove this person'}
             </button>
           )}
         </div>

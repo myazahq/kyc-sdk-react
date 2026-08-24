@@ -26,18 +26,123 @@ export interface BusinessDetails {
   email: string;
   phone: string;
   website: string;
+  /** Registry facts the applicant states; submitted as their own answer. */
+  dateOfIncorporation: string;
+  taxId: string;
+  vatNumber: string;
+  companyType: string;
+  natureOfBusiness: string;
+  /** Registry region (ISO 3166-2) for the countries whose register is split. */
+  subdivisionCode?: string;
+  /** Non-production only: the canned outcome to return instead of a lookup. */
+  sandboxOutcome?: 'verified' | 'not_found';
+}
+
+/**
+ * The registry check run when the applicant confirms their company.
+ *
+ * `skipped` is a normal outcome, not a failure: the organisation could not be
+ * charged, so the flow carries on and the check happens at submission instead.
+ * The applicant is never shown a dead end over an account they cannot top up.
+ */
+export interface BusinessCheckState {
+  status: 'idle' | 'checking' | 'found' | 'not_found' | 'skipped' | 'unavailable' | 'limit_reached';
+  /** What the register holds, when it answered. */
+  company: {
+    name: string | null;
+    registrationNumber: string;
+    registrationDate: string | null;
+    typeOfEntity: string | null;
+    companyStatus: string | null;
+    address: string | null;
+    email: string | null;
+    phone: string | null;
+    taxId: string | null;
+    vatNumber: string | null;
+    natureOfBusiness: string | null;
+    city: string | null;
+    state: string | null;
+  } | null;
+  /** The officers on file — what makes the key-people question a confirmation. */
+  keyPeople: RegistryOfficer[];
+  /** Which company was checked, so a changed number re-runs it. */
+  checkedNumber: string | null;
+  /**
+   * Which form fields the REGISTER filled, as opposed to the applicant.
+   *
+   * Kept so that changing which company this is can clear exactly those and
+   * nothing else. Without it, switching company left the previous register's
+   * address and email sitting in the form under the new company's name - and
+   * because the prefill only writes into empty fields, those leftovers also
+   * blocked the new register's real values from ever landing.
+   */
+  prefilled: (keyof BusinessDetails)[];
+}
+
+/** One officer as the register names them - the key-people prefill's input. */
+export interface RegistryOfficer {
+  name: string | null;
+  designation: string | null;
+  /** Everything else the register said about them (older servers omit these). */
+  roles?: string[] | null;
+  ownershipPct?: number | null;
+  email?: string | null;
+  isCorporate?: boolean | null;
+  registrationNumber?: string | null;
 }
 
 /** One row on the business-key-people step. Inputs kept as strings for
  *  controlled fields; the submit payload builder parses/filters them. */
 export interface KeyPersonEntry {
   name: string;
+  /**
+   * The headline role — derived from `roles` by precedence (mirrors the
+   * server's role/roles pair). Kept because the one-role surfaces (await
+   * list, applicant self-pick, the card's meta line) read it.
+   */
   role: KeyPersonRole;
+  /**
+   * Every hat this person wears. One human is a director AND a 30% owner,
+   * and the register files them that way; the sectioned step lets the
+   * applicant say the same (quick-add grants an existing person another
+   * role). Never empty; `role` is always its strongest member.
+   */
+  roles: KeyPersonRole[];
+  /** Their own words for the position ("CFO, Board Member"). Display only. */
+  title: string;
   email: string;
   /** ISO-2 country of the person (drives their verification link's country). */
   country: string;
   /** Ownership percentage as typed (optional; validated 0–100 when present). */
   ownershipPct: string;
+  /**
+   * This shareholder is a company, not a person.
+   *
+   * A company can never be a beneficial owner, so it is screened as an entity
+   * and is never asked to verify an identity it does not have. Saying so here
+   * is what stops the flow sending a document-and-selfie link to a limited
+   * company and then waiting for it.
+   */
+  isCorporate: boolean;
+  /** A corporate shareholder's own registration number, as typed. */
+  registrationNumber: string;
+  /**
+   * The people who own a corporate shareholder, as the applicant knows them.
+   *
+   * The only route to the humans above a parent no register can be asked about:
+   * a foreign holding company, an offshore vehicle. Declared and corroborated
+   * by nothing, and recorded as exactly that.
+   */
+  owners: KeyPersonOwnerEntry[];
+}
+
+/** One declared owner of a corporate key person. */
+export interface KeyPersonOwnerEntry {
+  name: string;
+  /** Their share OF THE COMPANY above, as typed. The server multiplies it down. */
+  ownershipPct: string;
+  email: string;
+  country: string;
 }
 
 /** One uploaded slot on the business-documents step. */
@@ -60,6 +165,13 @@ export interface BusinessApplicationState {
    * one screening, no duplicate invite.
    */
   applicantKeyPersonIndex: number | null;
+  /**
+   * The applicant attests that no natural person qualifies as a UBO (public
+   * share structures, complex trusts, nominee arrangements) - the FATF
+   * fallback. An attestation the server records and the org can branch on,
+   * never a verdict; the registry lookup still says what it says.
+   */
+  uboUnidentifiable: boolean;
 }
 
 export interface MediaIds {
@@ -77,11 +189,44 @@ export interface KYCState {
   status: ApiStatus;
   isOpen: boolean;
 
+  /**
+   * The resumable session this attempt belongs to, from `session.start`. Not a
+   * credential — auth is still the API key — just the id the finished
+   * verification links back to. Null on hosted mounts (which authenticate AS a
+   * session already) and in preview.
+   */
+  sessionId: string | null;
+
   // Step 1b – country selection (multi-region flows; null = use config default)
   selectedCountry: AnyCountry | null;
 
   // Step 2 – ID type selection
   selectedIdType: AnyIdType | null;
+
+  /** Multi-ID flows: which slot is being walked (0-based; == count when all
+   *  committed and the run has moved on to liveness/submission). */
+  multiIdSlotIndex: number;
+  /**
+   * Evidence committed per finished slot, in pick order.
+   *
+   * The submission's `idChecks` are built from this — by an explicit whitelist,
+   * because the preview images below must never reach the wire (nor the session
+   * progress blob). They are kept only so going BACK to an earlier ID restores
+   * what was captured instead of forcing a pointless retake.
+   */
+  multiIdSlots: Array<{
+    idType: string;
+    idNumber?: string;
+    documentFront?: string;
+    documentBack?: string;
+    /** Local previews — restored on back, never sent anywhere. */
+    documentFrontImage?: string | null;
+    documentBackImage?: string | null;
+    /** Each check's OWN document recording, uploaded with the submission.
+   *  Local blobs — stripped from every payload by multiIdWireSlots. */
+    documentFrontVideoBlob?: Blob | null;
+    documentBackVideoBlob?: Blob | null;
+  }>;
 
   // Step 3 – Document capture (base64 previews for display only)
   documentFrontImage: string | null;
@@ -104,6 +249,8 @@ export interface KYCState {
 
   // Step 2b — business (KYB) workflow details (replaces id-type/capture steps)
   business: BusinessDetails;
+  /** Step 2b — the paid registry check at company selection. */
+  businessCheck: BusinessCheckState;
 
   // Steps 2c/2d/2e — KYB application extras (key people, documents, applicant)
   businessApplication: BusinessApplicationState;
@@ -116,6 +263,14 @@ export interface KYCState {
     emailAddress: string | null;
     phoneToken: string | null;
     phoneNumber: string | null;
+    // Channels whose proof the SERVER refused at submit (422
+    // contact_verification_required). Proofs are single-use and expire ~30
+    // minutes after the OTP check, but they ride session progress and are
+    // restored on resume — so a resumed attempt can carry a dead proof while
+    // the step still shows "verified". This list is what routes the person
+    // back to re-verify instead of a Try Again that resubmits the same dead
+    // token forever; SET_CONTACT_PROOF clears its channel.
+    expired: Array<'email' | 'phone'>;
   };
 
   // Step 4b — extra-info questionnaire answers, keyed by question key
@@ -142,14 +297,30 @@ export interface KYCState {
 
 export type KYCAction =
   | { type: 'OPEN_MODAL' }
+  | { type: 'SET_SESSION_ID'; payload: string }
+  | {
+      type: 'RESTORE_PROGRESS';
+      payload: {
+        step?: string;
+        mediaIds?: Record<string, string>;
+        data?: Record<string, unknown>;
+      };
+    }
   | { type: 'CLOSE_MODAL' }
   | { type: 'SET_STEP'; payload: KYCStep }
   | { type: 'SET_COUNTRY'; payload: AnyCountry }
   | { type: 'SELECT_ID_TYPE'; payload: AnyIdType }
+  // Multi-ID: commit the current slot's evidence (ID type + number/documents)
+  // and move to nextStep — the next slot's picker, or liveness after the last.
+  | { type: 'COMMIT_MULTI_ID_SLOT'; payload: { nextStep: KYCStep } }
+  // Multi-ID: step BACK into the last committed slot — pops it and restores its
+  // evidence, so the applicant can change an ID they already did.
+  | { type: 'UNCOMMIT_MULTI_ID_SLOT'; payload: { step: KYCStep } }
   | { type: 'SET_ID_NUMBER'; payload: string }
   | { type: 'SET_USER_DATA'; payload: Partial<KYCUserData> }
   // Business (KYB) details
   | { type: 'SET_BUSINESS_DETAILS'; payload: Partial<BusinessDetails> }
+  | { type: 'SET_BUSINESS_CHECK'; payload: Partial<BusinessCheckState> }
   // KYB application extras (key people / documents / applicant role+name)
   | { type: 'SET_BUSINESS_APPLICATION'; payload: Partial<BusinessApplicationState> }
   // Document capture
@@ -171,6 +342,9 @@ export type KYCAction =
   | { type: 'CLEAR_LIVENESS_VIDEO' }
   // Contact verification (email/phone OTP proof)
   | { type: 'SET_CONTACT_PROOF'; payload: { channel: 'email' | 'phone'; token: string; destination: string } }
+  // The server refused these channels' proofs at submit (stale/claimed) — drop
+  // the tokens and flag the channels so their steps re-verify then resubmit.
+  | { type: 'CLEAR_CONTACT_PROOFS'; payload: { channels: Array<'email' | 'phone'> } }
   // Questionnaire
   | { type: 'SET_QUESTIONNAIRE_ANSWER'; payload: { key: string; value: QuestionnaireAnswerValue | undefined } }
   // Proof of Address

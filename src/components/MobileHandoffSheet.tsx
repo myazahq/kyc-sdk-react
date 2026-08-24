@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { QRCodeSVG } from 'qrcode.react';
+import { StyledQRCode } from './StyledQRCode';
+import { MYAZA_QR_LOGO } from '../lib/qr-logo';
 import { Check, Copy, Loader2, RefreshCcw, Smartphone } from 'lucide-react';
 import {
   Drawer,
@@ -126,9 +127,9 @@ export function MobileHandoffSheet() {
                 </Button>
               </div>
             ) : (
-              <div className="flex h-48 w-48 items-center justify-center rounded-2xl border border-border bg-white p-3.5">
+              <div className="flex h-56 w-56 items-center justify-center rounded-2xl border border-border bg-white p-1.5">
                 {handoff.url ? (
-                  <QRCodeSVG value={handoff.url} size={172} level="M" marginSize={0} />
+                  <StyledQRCode value={handoff.url} size={216} logo={MYAZA_QR_LOGO} />
                 ) : (
                   <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" />
                 )}

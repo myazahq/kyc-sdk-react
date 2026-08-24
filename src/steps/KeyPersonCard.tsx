@@ -1,16 +1,18 @@
 'use client';
 
 import React from 'react';
-import { Pencil } from 'lucide-react';
+import { Building2, Pencil, X } from 'lucide-react';
 import { CountryFlag } from '../components/CountryFlag';
 import {
   KEY_PERSON_ROLE_LABELS,
   initialsOf,
   isKeyPersonRowValid,
+  rowNeedsEmail,
 } from '../lib/business-application';
 import { regionCountryName } from '../lib/regions';
 import { cn } from '../lib/utils';
 import type { KeyPersonEntry } from '../context/types';
+import type { KeyPersonRole } from '../types/business';
 
 /**
  * One saved key person, summarised — monogram avatar with their ID-issuing
@@ -22,20 +24,56 @@ import type { KeyPersonEntry } from '../context/types';
  * Same visual language as the applicant step's "this is me" cards, so the two
  * screens read as one system.
  */
-export function KeyPersonCard({ entry, onClick }: { entry: KeyPersonEntry; onClick: () => void }) {
-  const name = entry.name.trim() || 'Unnamed person';
+const EMPTY_ROLES: ReadonlySet<KeyPersonRole> = new Set();
+
+export function KeyPersonCard({
+  entry,
+  emailRequiredFor = EMPTY_ROLES,
+  onClick,
+  roleLabel,
+  onRemove,
+}: {
+  entry: KeyPersonEntry;
+  /** Roles the workflow demands an address from. */
+  emailRequiredFor?: ReadonlySet<KeyPersonRole>;
+  onClick: () => void;
+  /** Names the hat the HOSTING section is about (sectioned step); falls back
+   *  to the headline role. */
+  roleLabel?: string;
+  /** The sectioned step's X: take this person out of that section. */
+  onRemove?: () => void;
+}) {
+  const corp = entry.isCorporate;
+  const name = entry.name.trim() || (corp ? 'Unnamed company' : 'Unnamed person');
   const country = entry.country.trim() ? entry.country.trim().toUpperCase() : null;
   const pct = entry.ownershipPct.trim();
   // A row persisted by the old inline UI (or interrupted mid-edit) may be
   // incomplete — the card says so instead of silently blocking Continue.
-  const incomplete = !isKeyPersonRowValid(entry);
+  const incomplete = !isKeyPersonRowValid(entry, emailRequiredFor);
+  // Say WHICH thing is missing, on the row it is missing from. A person who
+  // needs an email is a different fix from a half-typed row, and "incomplete"
+  // sends them into the form to work out which.
+  const problem =
+    rowNeedsEmail(entry, emailRequiredFor) && entry.email.trim() === '' && entry.name.trim().length >= 2
+      ? 'Email required, tap to add'
+      : 'Incomplete, tap to finish';
 
-  const meta = [KEY_PERSON_ROLE_LABELS[entry.role], pct ? `${pct}% ownership` : null]
+  const meta = [
+    // Says why this row has no verification link beside it, on the row itself.
+    corp ? 'Company' : null,
+    roleLabel ?? KEY_PERSON_ROLE_LABELS[entry.role],
+    (entry.title ?? '').trim() || null,
+    pct ? `${pct}% ownership` : null,
+  ]
     .filter(Boolean)
     .join(' · ');
   // The flag alone doesn't say WHICH country — spell it out, alongside the
   // email their invite goes to.
-  const detail = [country ? regionCountryName(country) : null, entry.email.trim() || null]
+  const detail = [
+    country ? regionCountryName(country) : null,
+    corp ? entry.registrationNumber.trim() || null : null,
+    entry.email.trim() || null,
+  ]
     .filter(Boolean)
     .join(' · ');
 
@@ -51,7 +89,7 @@ export function KeyPersonCard({ entry, onClick }: { entry: KeyPersonEntry; onCli
     >
       {/* Monogram avatar with the ID-issuing-country flag badge. */}
       <span className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
-        {initialsOf(name)}
+        {corp ? <Building2 className="h-4 w-4" aria-hidden /> : initialsOf(name)}
         {country && (
           <span className="absolute -bottom-0.5 -right-1 rounded-full ring-2 ring-background">
             <CountryFlag code={country} className="block h-4 w-4" />
@@ -63,15 +101,34 @@ export function KeyPersonCard({ entry, onClick }: { entry: KeyPersonEntry; onCli
         <span className="block truncate text-sm font-semibold">{name}</span>
         <span className="mt-0.5 block truncate text-xs text-muted-foreground">{meta}</span>
         {incomplete ? (
-          <span className="mt-0.5 block truncate text-xs text-destructive">
-            Incomplete — tap to finish
-          </span>
+          <span className="mt-0.5 block truncate text-xs text-destructive">{problem}</span>
         ) : detail !== '' ? (
           <span className="mt-0.5 block truncate text-xs text-muted-foreground">{detail}</span>
         ) : null}
       </span>
 
       <Pencil className="h-4 w-4 shrink-0 text-muted-foreground" />
+      {onRemove && (
+        <span
+          role="button"
+          tabIndex={0}
+          aria-label={`Remove ${name} from this section`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove();
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              e.stopPropagation();
+              onRemove();
+            }
+          }}
+          className="-mr-1 rounded-full p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          <X className="h-4 w-4" aria-hidden />
+        </span>
+      )}
     </button>
   );
 }

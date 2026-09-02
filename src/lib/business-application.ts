@@ -12,7 +12,7 @@ import type {
   KeyPersonRole,
   WorkflowBusinessConfig,
 } from '../types/business';
-import type { KYCStep, QuestionnaireConfig } from '../types/config';
+import type { KYCStep, QuestionnaireConfig, AddressCollectionConfig } from '../types/config';
 import type { KeyPersonEntry } from '../context/types';
 import { hasActiveQuestionnaire } from './questionnaire';
 import { isValidContactEmail } from './business';
@@ -135,8 +135,15 @@ export function applicantCountryOptions(config: {
 export function businessSectionSteps(
   business: WorkflowBusinessConfig | undefined,
   withQuestionnaire = false,
-): (BusinessSectionStep | 'questionnaire')[] {
-  const steps: (BusinessSectionStep | 'questionnaire')[] = ['business-details'];
+  withAddressCollection = false,
+): (BusinessSectionStep | 'questionnaire' | 'address-collection')[] {
+  const steps: (BusinessSectionStep | 'questionnaire' | 'address-collection')[] = [
+    'business-details',
+  ];
+  // The premises pin follows the company details it is about — before the
+  // paperwork, and long before the application hands over to other people.
+  // Mirrors the RN SDK's businessSectionSteps.
+  if (withAddressCollection) steps.push('address-collection');
   // Documents BEFORE key people: they are about the company the applicant has
   // just identified, so they follow that thread, and the register's officer
   // list - which the key-people step is a confirmation of - is what the reader
@@ -161,11 +168,19 @@ export function businessSectionSteps(
  * map a 'submitted' return to `SUBMIT_VERIFICATION` (existing convention).
  */
 export function nextBusinessStep(
-  current: BusinessSectionStep | 'questionnaire',
-  config: { business?: WorkflowBusinessConfig; questionnaire?: QuestionnaireConfig },
+  current: BusinessSectionStep | 'questionnaire' | 'address-collection',
+  config: {
+    business?: WorkflowBusinessConfig;
+    questionnaire?: QuestionnaireConfig;
+    addressCollection?: AddressCollectionConfig;
+  },
 ): KYCStep {
   if (current === 'applicant-role') return 'id-type';
-  const order = businessSectionSteps(config.business, hasActiveQuestionnaire(config.questionnaire));
+  const order = businessSectionSteps(
+    config.business,
+    hasActiveQuestionnaire(config.questionnaire),
+    config.addressCollection?.enabled === true,
+  );
   const next = order[order.indexOf(current) + 1];
   if (next) return next;
   return 'submitted';
@@ -173,10 +188,18 @@ export function nextBusinessStep(
 
 /** The step before `current` in the business application section. */
 export function prevBusinessStep(
-  current: BusinessSectionStep | 'questionnaire',
-  config: { business?: WorkflowBusinessConfig; questionnaire?: QuestionnaireConfig },
+  current: BusinessSectionStep | 'questionnaire' | 'address-collection',
+  config: {
+    business?: WorkflowBusinessConfig;
+    questionnaire?: QuestionnaireConfig;
+    addressCollection?: AddressCollectionConfig;
+  },
 ): KYCStep {
-  const order = businessSectionSteps(config.business, hasActiveQuestionnaire(config.questionnaire));
+  const order = businessSectionSteps(
+    config.business,
+    hasActiveQuestionnaire(config.questionnaire),
+    config.addressCollection?.enabled === true,
+  );
   const idx = order.indexOf(current);
   return idx > 0 ? order[idx - 1]! : 'consent';
 }

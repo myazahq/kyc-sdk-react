@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { ResubmitConfig } from '../lib/resubmit';
-import type { AnyCountry, AnyIdType, EmailVerificationConfig, IdTypeDefinition, KYCAppearance, KYCConsentContent, KYCSuccessContent, PhoneVerificationConfig, QuestionnaireConfig, ProofOfAddressConfig, NfcConfig, ProgressStyle } from '../types/config';
+import type { AnyCountry, AnyIdType, EmailVerificationConfig, IdTypeDefinition, KYCAppearance, KYCConsentContent, KYCSuccessContent, PhoneVerificationConfig, QuestionnaireConfig, ProofOfAddressConfig, NfcConfig, ProgressStyle, AddressCollectionConfig } from '../types/config';
 import type { SubjectType, WorkflowBusinessConfig } from '../types/business';
 import type { KYCSubmission } from '../types/verification';
 import { createKYCApi, KYCApiError, type CompletedSessionSummary, type KYCApi, type SdkConfigIdType, type SdkConfigResponse, type SdkConfigBranding, type WorkflowConfigPayload } from '../services/api';
@@ -34,6 +34,24 @@ export interface ServerSdkConfig {
    * no geo database is deployed, so every consumer needs a fallback anyway.
    */
   geoCountry?: string | null;
+  /**
+   * Google Maps browser key for the address step. Only ever populated from the
+   * HOSTED session bootstrap (Myaza's key, referrer-restricted to the hosted
+   * origin) — /config never returns one, so an embedded mount structurally
+   * cannot render Google Maps and uses the built-in OpenStreetMap picker.
+   */
+  googleMapsBrowserKey?: string | null;
+  /**
+   * The framed Google-map picker URL for EMBEDDED mounts — /config mints it
+   * (with a signed grant pinned to this page's origin) when the platform has a
+   * maps key. The frame runs on the HOSTED origin, which is what lets a
+   * referrer-restricted key serve maps on an org's own domain.
+   */
+  mapsFrameUrl?: string | null;
+  /** Whether the platform's forward address search is available. */
+  addressSearch?: boolean;
+  /** Which search backend ('autocomplete' | 'basic'). */
+  addressSearchMode?: 'autocomplete' | 'basic';
   /** Loader error message, if `status === 'error'`. */
   error?: string;
   /** HTTP status of the failed config request, if `status === 'error'`. */
@@ -92,6 +110,9 @@ export interface KYCConfigValue {
    * workflow config / hosted session snapshot — never by consumer props.
    */
   subjectType?: SubjectType;
+  /** Workflow scope — what this flow verifies (absent = full verification).
+   *  Only ever set by a resolved workflow config / hosted session snapshot. */
+  scope?: import('../lib/scope').WorkflowScope;
   /** Business (KYB) configuration — present when `subjectType === 'business'`. */
   business?: WorkflowBusinessConfig;
   /** Subset of ID types to offer. Only types valid for `country` will appear. */
@@ -160,6 +181,8 @@ export interface KYCConfigValue {
   resubmit?: ResubmitConfig;
   /** Proof of Address document collection (after capture). */
   proofOfAddress?: ProofOfAddressConfig;
+  /** Address Intelligence: smart-address capture (after Proof of Address). */
+  addressCollection?: AddressCollectionConfig;
   /** NFC chip verification (native SDKs; web renders it for preview only). */
   nfc?: NfcConfig;
   onSubmit?: (submission: KYCSubmission) => void;
@@ -359,6 +382,9 @@ export function KYCConfigProvider({ children, apiOverride, serverConfigOverride,
           environment: res.environment,
           branding: res.branding,
           geoCountry: res.geoCountry,
+          mapsFrameUrl: res.mapsFrameUrl,
+          addressSearch: res.addressSearch,
+          addressSearchMode: res.addressSearchMode,
         });
       })
       .catch((err: unknown) => {
@@ -444,6 +470,7 @@ export function KYCConfigProvider({ children, apiOverride, serverConfigOverride,
       config.phoneVerification,
       config.questionnaire,
       config.proofOfAddress,
+      config.addressCollection,
       config.nfc,
       config.onSubmit,
       config.onClose,

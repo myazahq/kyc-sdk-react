@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Building2, Landmark, FileText, ReceiptText } from 'lucide-react';
+import { Building2, FileText, FolderOpen, Landmark, MapPin, ReceiptText } from 'lucide-react';
 import { Label } from './ui/label';
 import { RadioGroup, RadioGroupItem } from './ui/radio-group';
 import { Card } from './ui/card';
@@ -11,6 +11,8 @@ import { getBusinessProductDef } from '../lib/business';
 const PRODUCT_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   business: Building2,
   'business-tax': Landmark,
+  'business-address': MapPin,
+  'business-filings': FolderOpen,
   'business-taxid': FileText,
   'business-tin': ReceiptText,
 };

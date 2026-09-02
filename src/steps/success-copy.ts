@@ -1,6 +1,7 @@
 import { fillTokens, type CopyTokens } from '../lib/tokens';
 import type { SubmitSuccessAction } from './SubmittedScreens';
 import type { KYCSuccessContent } from '../types/config';
+import type { WorkflowScope } from '../lib/scope';
 
 // The success screen's words and its terminal affordance, in one place.
 //
@@ -13,12 +14,26 @@ export function successTitle(success: KYCSuccessContent | undefined, tokens: Cop
   return success?.title ? fillTokens(success.title, tokens) : 'Verification Submitted!';
 }
 
+// Scope-honest defaults: an address-only applicant told "your identity
+// verification has been submitted" is being told about a check that never ran.
+// Same rule as the consent copy — the default names what was ACTUALLY
+// submitted; an org's own success.description always wins.
+const SCOPE_DESCRIPTIONS: Partial<Record<WorkflowScope, string>> = {
+  address: "Your address verification has been submitted. You'll be notified of the result.",
+  'biometric-authentication': "Your face check has been submitted. You'll be notified of the result.",
+  'biometric-enrollment': "Your face enrolment has been submitted. You'll be notified of the result.",
+  questionnaire: "Your answers have been submitted. You'll be notified of the result.",
+  contact: "Your contact verification has been submitted. You'll be notified of the result.",
+};
+
 export function successDescription(
   success: KYCSuccessContent | undefined,
   tokens: CopyTokens,
   isBusiness: boolean,
+  scope?: WorkflowScope | null,
 ): string {
   if (success?.description) return fillTokens(success.description, tokens);
+  if (scope && SCOPE_DESCRIPTIONS[scope]) return SCOPE_DESCRIPTIONS[scope]!;
   return isBusiness
     ? "Your business verification has been submitted for review. You'll be notified of the result."
     : "Your identity verification has been submitted for review. You'll be notified of the result.";

@@ -5,7 +5,7 @@ import { StepHeader } from '../components/StepHeader';
 import { Button } from '../components/ui/button';
 import { useKYCContext } from '../context/KYCContext';
 import { useKYCConfig } from '../context/KYCConfigContext';
-import { hasProofOfAddressStep } from '../lib/post-capture';
+import { hasProofOfAddressStep, hasAddressCollectionStep, addressReturnStep } from '../lib/post-capture';
 import { isBusinessFlow } from '../lib/business';
 import { nextBusinessStep, prevBusinessStep } from '../lib/business-application';
 import { QuestionField } from './QuestionnaireFields';
@@ -40,9 +40,11 @@ export function QuestionnaireStep() {
       dispatch({ type: 'SET_STEP', payload: prevBusinessStep('questionnaire', config) });
       return;
     }
-    // Individual capture leg: Proof of Address when it ran, else liveness,
-    // else capture.
-    const backTo = hasProofOfAddressStep(config.proofOfAddress)
+    // Individual capture leg: the address step when it ran, else Proof of
+    // Address, else liveness, else capture.
+    const backTo = hasAddressCollectionStep(config.addressCollection)
+      ? addressReturnStep(config)
+      : hasProofOfAddressStep(config.proofOfAddress)
       ? 'proof-of-address'
       : config.enableSelfie !== false
         ? 'liveness'

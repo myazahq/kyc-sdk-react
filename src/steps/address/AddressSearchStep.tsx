@@ -1,0 +1,87 @@
+'use client';
+
+import React, { useEffect } from 'react';
+import { StepHeader } from '../../components/StepHeader';
+import { useKYCContext } from '../../context/KYCContext';
+import { pickedAddressState } from '../address-helpers';
+import { useAddressFlow } from './use-address-flow';
+import { useAddressIntroGate } from './AddressIntroGate';
+import { SearchScreen } from './SearchScreen';
+
+/** Step 1 of the address flow: find the address as words. Every path — a
+ *  picked suggestion, the current location, or "place a pin instead" — lands
+ *  on the pin step. */
+export function AddressSearchStep() {
+  const { state, dispatch } = useKYCContext();
+  const flow = useAddressFlow();
+  const gate = useAddressIntroGate('address-search', flow.steps[0]!);
+
+  // Warm the GPS + reverse geocode from the moment the flow is reached —
+  // UNDER the welcome screen too (user decision 2026-08-29): by the time
+  // "Got it" is tapped the fix is usually already resolved, so the button
+  // carries the address immediately and the pin lands with no hesitation.
+  useEffect(() => {
+    flow.startPrefetch();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (gate) return gate;
+
+  const toPin = () => dispatch({ type: 'SET_STEP', payload: 'address-collection' });
+
+  return (
+    <div className="space-y-5 animate-slide-up">
+      <StepHeader
+        title="Find your address"
+        description="Search it, use your current location, or place a pin on the map."
+        onBack={() => flow.goBack('address-search')}
+      />
+      <SearchScreen
+        country={flow.country}
+        onResolved={(hit) => {
+          dispatch({
+            type: 'SET_ADDRESS',
+            payload: {
+              ...pickedAddressState(state.address, hit),
+              ...(hit.formatted
+                ? { label: hit.formatted, pickedAt: { lat: hit.lat, lng: hit.lng } }
+                : {}),
+              // A pick that RESOLVES a street retires the typed one — the
+              // input only existed because no source knew the street, and a
+              // hidden field must not keep leading the composed line.
+              ...(hit.road ? { street: undefined } : {}),
+              // Places picks carry the breakdown; basic-search hits fall back
+              // to the label line in the sheet.
+              ...(hit.road || hit.area || hit.city || hit.state || hit.postcode
+                ? {
+                    parts: {
+                      street: hit.road ?? null,
+                      area: hit.area ?? null,
+                      city: hit.city ?? null,
+                      state: hit.state ?? null,
+                      postcode: hit.postcode ?? null,
+                    },
+                  }
+                : {}),
+            },
+          });
+          toPin();
+        }}
+        locationHint={flow.currentFix?.label ?? null}
+        locating={flow.locating}
+        onUseMyLocation={() => void flow.applyCurrentFix(toPin)}
+        onPinInstead={toPin}
+      />
+      {flow.error && <p className="text-sm text-destructive">{flow.error}</p>}
+      {flow.address?.requirePin !== true && (
+        <button
+          type="button"
+          onClick={flow.exitForward}
+          className="w-full text-center text-sm text-muted-foreground underline-offset-2 hover:underline"
+        >
+          Skip for now
+        </button>
+      )}
+    </div>
+  );
+}

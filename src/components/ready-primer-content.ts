@@ -1,4 +1,4 @@
-import { IdCard, ScanFace, ScanLine, Sun, Timer, UserRound } from 'lucide-react';
+import { BellRing, IdCard, LocateFixed, MapPin, MapPinned, ScanFace, ScanLine, Sun, Timer, UserRound } from 'lucide-react';
 import type { ReadyPrimerProps } from './ReadyPrimer';
 
 /**
@@ -30,5 +30,16 @@ export const READY_LIVENESS: ReadyContent = {
     { icon: UserRound, label: 'Put your face in the circle' },
     { icon: Sun, label: 'Find even lighting, remove sunglasses' },
     { icon: Timer, label: 'Takes about 10 seconds' },
+  ],
+};
+
+export const READY_ADDRESS: ReadyContent = {
+  icon: MapPin,
+  title: "Let's confirm your address",
+  body: "You'll place a pin exactly where you live. Over the next few days your phone quietly confirms you're really there. No paperwork, nothing else to do.",
+  checklist: [
+    { icon: MapPinned, label: 'Put the pin right on your building' },
+    { icon: LocateFixed, label: 'Keep location enabled on this phone' },
+    { icon: BellRing, label: "You'll be notified once it's confirmed" },
   ],
 };

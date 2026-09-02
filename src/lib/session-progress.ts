@@ -34,6 +34,7 @@ export interface SessionProgressPayload {
     businessApplication?: unknown;
     contact?: unknown;
     questionnaireAnswers?: unknown;
+    address?: unknown;
   };
 }
 
@@ -59,6 +60,7 @@ export function progressFromState(state: KYCState): SessionProgressPayload {
       businessApplication: state.businessApplication,
       contact: state.contact,
       questionnaireAnswers: state.questionnaireAnswers,
+      address: state.address ?? undefined,
     },
   };
 }

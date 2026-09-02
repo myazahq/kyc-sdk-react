@@ -13,6 +13,7 @@ import { Calendar as CalendarIcon } from 'lucide-react';
 import { Calendar } from './ui/calendar';
 import { cn } from '../lib/utils';
 import { useDropdownAnchor } from '../lib/use-dropdown-anchor';
+import { eventPathIncludes } from '../lib/event-path';
 import { DropdownSurface } from './DropdownSurface';
 
 export function formatIsoDate(date: Date): string {
@@ -52,8 +53,9 @@ export function DateField({
   useEffect(() => {
     if (!open) return undefined;
     const onPointerDown = (e: PointerEvent) => {
-      const t = e.target as Node;
-      if (rootRef.current?.contains(t) || menuRef.current?.contains(t)) return;
+      // composedPath, not e.target: the SDK renders in a shadow frame and a
+      // document listener sees retargeted events (see lib/event-path.ts).
+      if (eventPathIncludes(e, rootRef.current, menuRef.current)) return;
       setOpen(false);
     };
     const onKeyDown = (e: KeyboardEvent) => {

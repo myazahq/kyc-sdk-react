@@ -53,7 +53,8 @@ export type MediaUploadType =
   | 'document_back_video'
   | 'liveness_video'
   | 'proof_of_address'
-  | 'business_document';
+  | 'business_document'
+  | 'address_photo';
 
 /** Response from `POST /api/kyc/upload` — the stored mediaId. */
 export interface UploadResponse {
@@ -144,6 +145,32 @@ export interface VerifyRequest {
   deviceIntelligence?: boolean;
   /** What kind of proof-of-address document `mediaIds.proofOfAddress` is. */
   proofOfAddressType?: 'utility_bill' | 'bank_statement' | 'tenancy_agreement' | 'other';
+  /**
+   * Smart-address submission (Address Intelligence): the claimed pin plus the
+   * optional one-shot device fix taken at confirmation (attestPresence). The
+   * server drops the block when the workflow's address step is off.
+   */
+  address?: {
+    lat: number;
+    lng: number;
+    accuracy?: number;
+    directions?: string;
+    label?: string;
+    propertyName?: string;
+    propertyNumber?: string;
+    street?: string;
+    /** The edit-details claims: unit + area/region corrections. */
+    unit?: string;
+    neighbourhood?: string;
+    city?: string;
+    state?: string;
+    postcode?: string;
+    streetView?: { panoId: string; heading: number; pitch: number; fov: number };
+    deviceLat?: number;
+    deviceLng?: number;
+    deviceAccuracy?: number;
+    capturedAt?: string;
+  };
   userData?: {
     firstName?: string;
     lastName?: string;
@@ -166,6 +193,7 @@ export interface VerifyRequest {
     documentBackVideo?: string;
     livenessVideo?: string;
     proofOfAddress?: string;
+    addressPhoto?: string;
   };
   metadata: {
     requestId: string;
@@ -283,6 +311,61 @@ export interface SdkConfigResponse {
    * country the applicant confirmed.
    */
   geoCountry?: string | null;
+  /** Whether the platform's forward address search is available (the address
+   *  step shows its search box only when it is). */
+  addressSearch?: boolean;
+  /** Which search backend: 'autocomplete' (Places, as-you-type) or 'basic'
+   *  (explicit-submit). Absent when addressSearch is false. */
+  addressSearchMode?: 'autocomplete' | 'basic';
+  /** Framed Google-map picker URL for embedded mounts (grant-carrying; absent
+   *  when the platform has no maps key or the request had no Origin). */
+  mapsFrameUrl?: string | null;
+}
+
+/** One Places autocomplete suggestion. */
+export interface PlaceSuggestion {
+  placeId: string;
+  mainText: string;
+  secondaryText: string;
+}
+
+/** A picked suggestion, resolved to coordinates + structured pieces. */
+export interface ResolvedPlace {
+  lat: number;
+  lng: number;
+  houseNumber: string | null;
+  road: string | null;
+  formatted: string | null;
+  area?: string | null;
+  city?: string | null;
+  state?: string | null;
+  postcode?: string | null;
+}
+
+/** The pin's address broken down — what the details sheet displays as rows. */
+export interface AddressParts {
+  street?: string | null;
+  area?: string | null;
+  city?: string | null;
+  state?: string | null;
+  postcode?: string | null;
+  /** ISO-2 of the pin's own place, from the reverse geocode. */
+  country?: string | null;
+}
+
+export interface AddressReverseResult {
+  line: string | null;
+  road: string | null;
+  parts?: AddressParts | null;
+}
+
+/** One forward-search candidate for the address step's search box. */
+export interface AddressSearchHit {
+  label: string;
+  lat: number;
+  lng: number;
+  houseNumber: string | null;
+  road: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -342,6 +425,9 @@ export interface WorkflowConfigPayload {
    * workflows use the `business` block below instead of country/idTypes.
    */
   subjectType?: 'individual' | 'business';
+  /** Workflow scope — what the flow verifies (absent = full verification).
+   *  Scoped submissions carry the scope's marker idType. */
+  scope?: string;
   /** Business (KYB) configuration — present when `subjectType === 'business'`. */
   business?: {
     /** ISO-2 registry country (NOT limited to the individual catalogue). */
@@ -401,6 +487,7 @@ export interface WorkflowConfigPayload {
   questionnaire?: { title?: string; description?: string; fields: unknown[] };
   /** Proof of Address step configuration. */
   proofOfAddress?: { enabled?: boolean; documentTypes?: string[]; maxAgeDays?: number };
+  addressCollection?: { enabled?: boolean; requirePin?: boolean; photo?: string; directions?: string; attestPresence?: boolean };
   /** NFC chip verification configuration (native SDKs; web = preview only). */
   nfc?: { enabled?: boolean; idTypes?: string[]; allowSkip?: boolean };
   assetsBasePath?: string;
@@ -443,6 +530,8 @@ export interface WorkflowResolutionResponse {
 export interface HandoffSessionSnapshot {
   /** Absent for business (KYB) sessions — `business.country` carries theirs. */
   country?: string;
+  /** Workflow scope — what the session's flow verifies (absent = full). */
+  scope?: string;
   /** Company details the org already held when the session was minted. */
   businessPrefill?: { registrationNumber?: string; registrationName?: string };
   /** What the session verifies. Absent = 'individual'. */
@@ -506,6 +595,7 @@ export interface HandoffSessionSnapshot {
   questionnaire?: { title?: string; description?: string; fields: unknown[] };
   /** Proof of Address step configuration. */
   proofOfAddress?: { enabled?: boolean; documentTypes?: string[]; maxAgeDays?: number };
+  addressCollection?: { enabled?: boolean; requirePin?: boolean; photo?: string; directions?: string; attestPresence?: boolean };
   /** NFC chip verification configuration (native SDKs; web = preview only). */
   nfc?: { enabled?: boolean; idTypes?: string[]; allowSkip?: boolean };
   metadata?: Record<string, string>;
@@ -562,6 +652,16 @@ export interface HandoffBootstrapResponse {
    * country the applicant confirmed.
    */
   geoCountry?: string | null;
+  /**
+   * Myaza's Google Maps browser key for the address step — HOSTED pages only
+   * (the key is referrer-restricted to the hosted origin, so /config never
+   * carries one; embeds render the built-in OpenStreetMap picker instead).
+   */
+  googleMapsBrowserKey?: string | null;
+  /** Whether the platform's forward address search is available. */
+  addressSearch?: boolean;
+  /** Which search backend ('autocomplete' | 'basic'); absent when none. */
+  addressSearchMode?: 'autocomplete' | 'basic';
   /** Org allowlist + per-ID feature flags (same shape as /config). */
   idTypes: SdkConfigIdType[];
   expiresAt: string;
@@ -617,6 +717,9 @@ export interface CompletedSessionSummary {
    * value was inferred from polling instead.
    */
   keyPeopleSettled?: boolean;
+  /** The submission carried an address pin — a presence check could really
+   *  have started. Absent on an older server. */
+  addressCollected?: boolean;
   /** User-safe prose, present on outcomes the applicant can act on. */
   reason?: string | null;
   reasonCode?: string | null;
@@ -888,6 +991,43 @@ export function createKYCApi(baseUrl: string, apiKey: string) {
 
     async config(): Promise<SdkConfigResponse> {
       return request<SdkConfigResponse>('/config');
+    },
+
+    /**
+     * Forward address search for the address step's search box. Explicit
+     * submit only — never call per keystroke (the server's map source forbids
+     * autocomplete). 404 when the platform has no geocoder configured.
+     */
+    async addressSearch(query: string, country?: string | null): Promise<{ results: AddressSearchHit[] }> {
+      const params = new URLSearchParams({ q: query });
+      if (country) params.set('country', country);
+      return request<{ results: AddressSearchHit[] }>(`/address/search?${params}`);
+    },
+
+    /** The street line for a pin ("11 Bassey Street"), for the summary card
+     *  after Use-my-location or a drag. Display only. */
+    async addressReverse(lat: number, lng: number): Promise<AddressReverseResult> {
+      return request<AddressReverseResult>(
+        `/address/reverse?lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}`,
+      );
+    },
+
+    /** Places-backed as-you-type suggestions (debounce client-side; one
+     *  session token per typing session — it is the billing unit). */
+    async addressAutocomplete(
+      query: string,
+      session: string,
+      country?: string | null,
+    ): Promise<{ suggestions: PlaceSuggestion[] }> {
+      const params = new URLSearchParams({ q: query, session });
+      if (country) params.set('country', country);
+      return request<{ suggestions: PlaceSuggestion[] }>(`/address/autocomplete?${params}`);
+    },
+
+    /** Resolve a picked suggestion to coordinates + structured pieces. */
+    async addressPlace(placeId: string, session: string): Promise<{ place: ResolvedPlace }> {
+      const params = new URLSearchParams({ session });
+      return request<{ place: ResolvedPlace }>(`/address/place/${encodeURIComponent(placeId)}?${params}`);
     },
 
     /**

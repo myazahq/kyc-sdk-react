@@ -10,6 +10,7 @@ import type { ApplicantWorkflowPayload, WorkflowConfigPayload } from '../service
  */
 const WORKFLOW_KEYS = [
   'subjectType',
+  'scope',
   'business',
   'country',
   'countries',
@@ -38,6 +39,7 @@ const WORKFLOW_KEYS = [
   'phoneVerification',
   'questionnaire',
   'proofOfAddress',
+  'addressCollection',
   'nfc',
   // Set only on a session a reviewer sent back, never on a published flow.
   'resubmit',

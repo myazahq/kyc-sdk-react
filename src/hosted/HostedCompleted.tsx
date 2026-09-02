@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { KYCProvider, useKYCContext } from '../context/KYCContext';
 import { KYCConfigProvider, type ServerSdkConfig } from '../context/KYCConfigContext';
 import { KYCModal } from '../components/KYCModal';
-import type { AnyCountry, KYCAppearance, KYCSuccessContent } from '../types/config';
+import type { AddressCollectionConfig, AnyCountry, KYCAppearance, KYCSuccessContent } from '../types/config';
 import type { CompletedSessionSummary, KYCApi } from '../services/api';
 
 // The hosted page for a session that is ALREADY submitted.
@@ -114,6 +114,10 @@ export function HostedCompleted({
         appearance={snap.appearance as KYCAppearance | undefined}
         success={snap.success as KYCSuccessContent | undefined}
         userData={snap.userData}
+        // Without this the returning screen cannot know presence is on, and
+        // the "address check active" card silently vanished on reload — the
+        // one instruction that still applies (keep location on).
+        addressCollection={snap.addressCollection as AddressCollectionConfig | undefined}
         assetsBasePath={snap.assetsBasePath}
       >
         <MarkOpen />

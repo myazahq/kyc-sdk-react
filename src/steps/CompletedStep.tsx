@@ -5,6 +5,8 @@ import { useKYCConfig } from '../context/KYCConfigContext';
 import { KeyPeopleAwaitList, type AwaitRow } from './KeyPeopleAwaitList';
 import { SubmitSuccessScreen, type TerminalTone } from './SubmittedScreens';
 import { successAction, successDescription, successTitle } from './success-copy';
+import { configScope } from '../lib/scope';
+import { PresenceExpectations } from './presence-expectations';
 import type { AwaitingPersonPayload, CompletedSessionSummary } from '../services/api';
 
 // The success screen as an applicant sees it when they come BACK to their link.
@@ -107,9 +109,20 @@ export function CompletedStep() {
             // the registration number is the most useful thing this screen can
             // say. The generic line is the fallback, never a replacement.
             summary?.reason || decided.description
-          : successDescription(config.success, tokens, isBusiness)
+          : successDescription(config.success, tokens, isBusiness, configScope(config))
       }
-      extra={rows.length > 0 ? <KeyPeopleAwaitList rows={rows} /> : undefined}
+      extra={
+        <>
+          {/* The presence card, exactly as the live success screen shows it —
+              a reloaded finished link must not lose the one instruction that
+              still applies (keep location on). Only on a success-ish outcome
+              and only when the submission really carried a pin. */}
+          {(!decided || decided.tone === 'success') &&
+            config.addressCollection?.presence?.enabled === true &&
+            summary?.addressCollected === true && <PresenceExpectations />}
+          {rows.length > 0 && <KeyPeopleAwaitList rows={rows} />}
+        </>
+      }
       action={successAction({
         success: config.success,
         hostedMode: config.hostedMode === true,

@@ -8,6 +8,7 @@ import { cn } from '../lib/utils';
 import { businessCountryName, groupBusinessCountries } from '../lib/business';
 import { groupCountriesByRegion } from '../lib/regions';
 import { useDropdownAnchor } from '../lib/use-dropdown-anchor';
+import { eventPathIncludes } from '../lib/event-path';
 import { DropdownSurface } from './DropdownSurface';
 
 /**
@@ -99,10 +100,11 @@ export function BusinessCountrySelect({
     if (!open) return;
     searchRef.current?.focus();
     const onPointerDown = (e: PointerEvent) => {
-      const t = e.target as Node;
-      // The menu is portaled out of rootRef, so it needs its own test — without
+      // composedPath, not e.target: the SDK renders in a shadow frame and a
+      // document listener sees retargeted events (see lib/event-path.ts). The
+      // menu is portaled out of rootRef, so it needs its own test — without
       // it, picking a country would register as an outside click.
-      if (rootRef.current?.contains(t) || menuRef.current?.contains(t)) return;
+      if (eventPathIncludes(e, rootRef.current, menuRef.current)) return;
       setOpen(false);
       setQuery('');
     };

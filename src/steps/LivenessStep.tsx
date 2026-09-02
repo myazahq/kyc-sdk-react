@@ -15,6 +15,7 @@ import { useKYCContext } from '../context/KYCContext';
 import { useKYCConfig } from '../context/KYCConfigContext';
 import { multiIdEvidenceStep } from '../lib/multi-id';
 import { stepAfterCapture } from '../lib/post-capture';
+import { stepBeforeLiveness } from '../lib/contact-steps';
 import { useCamera } from '../hooks/useCamera';
 import { useCameraPrimer } from '../hooks/useCameraPrimer';
 import { useImageCapture } from '../hooks/useImageCapture';
@@ -33,6 +34,7 @@ import {
 } from '../lib/capture-settings';
 import type { ChallengeEntry } from '../liveness/challenge-manager';
 import { usePortalHost } from '../lib/sdk-frame-context';
+import { CaptureRing } from '../components/CaptureRing';
 
 // ---------------------------------------------------------------------------
 // LivenessStep — active liveness check with gesture challenges
@@ -52,10 +54,15 @@ export function LivenessStep() {
   // OS prompt only fires — once the user taps "Grant access".
   const primerStatus = useCameraPrimer();
   const [primed, setPrimed] = useState(false);
+  // A selfie that survived a session restore: the uploaded mediaId is the
+  // durable record (session progress deliberately drops the preview bytes), so
+  // its presence means "already captured" exactly as it does for documents —
+  // the step opens on review, never on a fresh gesture run.
+  const restoredSelfie = !preview && Boolean(kycState.mediaIds.selfie);
   // "Here's what happens next" gate — the selfie camera never opens
   // unannounced. A returning user with a captured selfie skips it.
   const [ready, setReady] = useState(false);
-  const showReadyPrimer = !ready && !preview;
+  const showReadyPrimer = !ready && !preview && !restoredSelfie;
   const needsPrimer = ready && primerStatus === 'needed' && !primed && !preview;
 
   // Where the preview circle sits in the VIEWPORT, so the flash overlay can
@@ -65,7 +72,7 @@ export function LivenessStep() {
 
   const camera = useCamera({
     facingMode: 'user',
-    enabled: ready && !preview && (primerStatus === 'granted' || primed),
+    enabled: ready && !preview && !restoredSelfie && (primerStatus === 'granted' || primed),
   });
   const { capture } = useImageCapture({ videoRef: camera.videoRef, mirror: true });
   const { compress, isCompressing } = useImageCompress();
@@ -259,6 +266,16 @@ export function LivenessStep() {
     }
   }
 
+  // A preview that came back from the reducer with no uploaded mediaId is an
+  // interrupted upload (it failed, or the user left mid-flight): resume it once
+  // on mount. Idempotent — with a mediaId there is nothing to do.
+  useEffect(() => {
+    if (preview && !kycState.mediaIds.selfie && !isUploading) {
+      void uploadSelfie(preview);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Report a denied camera permission to onError once. Liveness can't proceed
   // without a camera, so the dedicated permission screen (below) is shown too.
   const permissionReportedRef = useRef(false);
@@ -295,6 +312,9 @@ export function LivenessStep() {
     primeSpeech();
     setPreview(null);
     setUploadError(null);
+    setReady(true);
+    // Clears the preview AND mediaIds.selfie, so the restored-selfie review
+    // (no bytes, mediaId only) falls back into a fresh capture too.
     dispatch({ type: 'CLEAR_SELFIE_IMAGE' });
     dispatch({ type: 'CLEAR_LIVENESS_VIDEO' });
     // Discard current recording; a new one starts when camera restarts
@@ -333,29 +353,41 @@ export function LivenessStep() {
       });
       return;
     }
-    dispatch({ type: 'SET_STEP', payload: hasDocCapture ? 'document-capture' : 'id-input' });
+    // Scope-aware: a face-scoped flow has no evidence step to go back to.
+    dispatch({
+      type: 'SET_STEP',
+      payload: stepBeforeLiveness(config, hasDocCapture ? 'document-capture' : 'id-input'),
+    });
   };
 
   // ---------------------------------------------------------------------------
   // Preview mode (after selfie is captured)
   // ---------------------------------------------------------------------------
 
-  if (preview) {
+  if (preview || restoredSelfie) {
     return (
       <div className="space-y-5 animate-slide-up">
-        <StepHeader title="Selfie Captured" description="Review your selfie before continuing." onBack={handleBack} />
+        <StepHeader
+          title="Selfie Captured"
+          description={
+            preview
+              ? 'Review your selfie before continuing.'
+              : 'Your selfie from earlier is saved. Continue, or retake it if you prefer.'
+          }
+          onBack={handleBack}
+        />
 
         <div className="relative mx-auto w-56 sm:w-64 overflow-hidden rounded-full border-4 border-primary/20">
-          <img src={preview} alt="Selfie preview" className="aspect-square w-full object-cover" />
-
-          {isUploading && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/40 animate-fade-in">
-              <div className="relative flex items-center justify-center">
-                <div className="absolute h-16 w-16 rounded-full border-2 border-primary/40 animate-pulse-ring" />
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/15 backdrop-blur-sm">
-                  <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                </div>
-              </div>
+          {preview ? (
+            <img src={preview} alt="Selfie preview" className="aspect-square w-full object-cover" />
+          ) : (
+            // Restored session: the bytes are gone by design (only the mediaId
+            // travels), so show a completed state rather than a broken image.
+            <div className="flex aspect-square w-full flex-col items-center justify-center gap-2 bg-muted/40">
+              <span className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/15">
+                <Check className="h-7 w-7 text-primary" />
+              </span>
+              <span className="px-6 text-center text-xs text-muted-foreground">Selfie already captured</span>
             </div>
           )}
         </div>
@@ -377,7 +409,7 @@ export function LivenessStep() {
           </Button>
           <Button
             className="flex-1 gap-2"
-            onClick={uploadError ? () => uploadSelfie(preview) : handleContinue}
+            onClick={uploadError && preview ? () => uploadSelfie(preview) : handleContinue}
             disabled={isCompressing || isUploading}
           >
             {isUploading ? (
@@ -488,19 +520,22 @@ export function LivenessStep() {
       ? warningText
       : getInstructionText(liveness.state);
 
+  // The ring is on the frame from positioning to the shutter, so for that whole
+  // stretch the border is its TRACK — the same faint primary the review screen's
+  // frame already wears, so the two screens share one line. The phase colours
+  // that used to live on the border (warning while a gesture is pending,
+  // success when it lands) still live on the instruction text and the passed
+  // flash; a warning still turns the track red under the arc, which is the
+  // one message that must not wait for progress.
+  const ringOnFrame =
+    !isLoading && !isFaceMeshLoading && phase !== 'loading' && phase !== 'failed';
   const ringColor = isLoading || isFaceMeshLoading
     ? 'border-gray-300'
-    : hasWrongGesture || hasPositionWarning
+    : hasWrongGesture || hasPositionWarning || phase === 'failed'
       ? 'border-destructive'
-      : phase === 'challenge_passed' || phase === 'capturing' || phase === 'complete'
-        ? 'border-[var(--kyc-success)]'
-        : phase === 'challenge'
-          ? 'border-[var(--kyc-warning)]'
-          : phase === 'failed'
-            ? 'border-destructive'
-            : liveness.isFaceDetected
-              ? 'border-primary/60'
-              : 'border-gray-300';
+      : ringOnFrame
+        ? 'border-primary/20'
+        : 'border-gray-300';
 
   return (
     <div className="space-y-5 animate-slide-up">
@@ -628,13 +663,37 @@ export function LivenessStep() {
               </div>
             )}
 
-            {/* Capturing flash */}
-            {phase === 'capturing' && (
-              <div className="absolute inset-0 flex items-center justify-center bg-white/30 animate-fade-in">
-                <p className="text-sm font-semibold text-white drop-shadow-md">Got it!</p>
-              </div>
+            {/* The shutter. Fires on `complete`, when the frame has actually
+                been taken — it used to sit on `capturing` reading "Got it!",
+                which announced a photo that had not been taken yet and left the
+                real wait (steadying, then flushing the recording) looking
+                finished. The ring below carries that wait instead. */}
+            {phase === 'complete' && (
+              <div className="pointer-events-none absolute inset-0 bg-white animate-capture-flash" />
             )}
           </div>
+
+          {/* The ring — drawn OUTSIDE the clipping container so it traces the
+              frame's own edge rather than being cut off inside it. On the frame
+              for the whole test, from positioning to the shutter, one line
+              building one way; the hook paces it. It stays mounted through
+              `complete` so the closure is actually SEEN: the counter reaches
+              the shutter and the phase changes in the same frame. */}
+          {ringOnFrame && (
+            <CaptureRing
+              progressRef={liveness.livenessProgressRef}
+              // Primary while it builds: progress is the brand colour, outcome
+              // is the semantic one. It turns success-green ONLY as it closes,
+              // on the same frame as the shutter flash, the solid border and
+              // the "Saving your selfie" text, so the colour change is itself
+              // the completion signal — earned at the shutter, not claimed
+              // from the first frame of positioning.
+              className={cn(
+                'transition-colors duration-300',
+                phase === 'complete' ? 'text-[var(--kyc-success)]' : 'text-primary',
+              )}
+            />
+          )}
         </div>
 
         {/* Lighting warning (too dark or too bright) */}
@@ -747,7 +806,9 @@ function getInstructionText(state: ReturnType<typeof useLiveness>['state']): str
     case 'capturing':
       return state.guidance ?? 'Kindly hold still...';
     case 'complete':
-      return 'Capture complete';
+      // The shutter has fired; the recording is still being flushed. "Capture
+      // complete" beside a sweeping ring told the user two different things.
+      return 'Saving your selfie';
     case 'failed':
       return '';
     default:

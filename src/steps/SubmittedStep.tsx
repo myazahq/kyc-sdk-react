@@ -1,5 +1,6 @@
 "use client";
 
+import { configScope, SCOPE_ID_TYPES } from '../lib/scope';
 import { useEffect, useRef, useState } from "react";
 import { useKYCContext } from "../context/KYCContext";
 import { useKYCConfig } from "../context/KYCConfigContext";
@@ -16,6 +17,7 @@ import { toAwaitRows } from "./CompletedStep";
 import { KeyPeoplePending } from "./KeyPeoplePending";
 import { useAwaitingPeople } from "./use-awaiting-people";
 import { successAction, successDescription, successTitle } from "./success-copy";
+import { PresenceExpectations } from "./presence-expectations";
 import { SubmittingScreen, SubmitErrorScreen, SubmitSuccessScreen } from "./SubmittedScreens";
 
 export function SubmittedStep() {
@@ -75,7 +77,14 @@ export function SubmittedStep() {
 		// the checks (the server judges it by the workflow's pass policy). The
 		// primary (first) slot fills the single-ID fields.
 		const multiSlots = state.multiIdSlots.length >= 2 ? state.multiIdSlots : null;
-		const primaryIdType = multiSlots ? multiSlots[0]!.idType : state.selectedIdType;
+		// Scoped flows carry the scope's transport marker instead of a picked ID —
+		// the server requires a published workflow of the matching scope for it.
+		const scope = configScope(config);
+		const primaryIdType = scope
+			? SCOPE_ID_TYPES[scope]
+			: multiSlots
+				? multiSlots[0]!.idType
+				: state.selectedIdType;
 		if (!primaryIdType) {
 			dispatch({ type: "SET_ERROR", payload: new KYCError("unknown", "Missing ID type.") });
 			return;
@@ -148,6 +157,63 @@ export function SubmittedStep() {
 					// The liveness method that ran — per-method billing for
 					// prop-configured mounts (a workflow's mode wins server-side).
 					...(config.livenessMode ? { livenessMode: config.livenessMode } : {}),
+					// What kind of PoA document mediaIds.proofOfAddress is. This pair was
+					// MISSING until 2026-08-25: the step uploaded the document, stored the
+					// mediaId in state, and the submission then omitted both fields — so
+					// the media was never claimed (swept on its TTL), the PoA check never
+					// ran and the component never billed, from the web SDK only.
+					...(state.mediaIds.proofOfAddress
+						? { proofOfAddressType: state.poaDocumentType ?? 'other' }
+						: {}),
+					// Smart-address submission (Address Intelligence) — the pin, the
+					// directions and, when attestPresence took one, the device fix.
+					...(state.address
+						? {
+								address: {
+									lat: state.address.lat,
+									lng: state.address.lng,
+									// The line the applicant CONFIRMED (search pick /
+									// reverse geocode): the server prefers it for the
+									// composed address over its own weaker derivation.
+									...(state.address.label?.trim() ? { label: state.address.label.trim() } : {}),
+									...(state.address.accuracy != null ? { accuracy: state.address.accuracy } : {}),
+									...(state.address.directions.trim()
+										? { directions: state.address.directions.trim() }
+										: {}),
+									...(state.address.propertyName.trim()
+										? { propertyName: state.address.propertyName.trim() }
+										: {}),
+									...(state.address.propertyNumber.trim()
+										? { propertyNumber: state.address.propertyNumber.trim() }
+										: {}),
+									...(state.address.street?.trim()
+										? { street: state.address.street.trim() }
+										: {}),
+									// The rest of the edit-details form — claims,
+									// sent only when actually typed.
+									...(state.address.unit?.trim() ? { unit: state.address.unit.trim() } : {}),
+									...(state.address.neighbourhood?.trim()
+										? { neighbourhood: state.address.neighbourhood.trim() }
+										: {}),
+									...(state.address.city?.trim() ? { city: state.address.city.trim() } : {}),
+									...(state.address.state?.trim() ? { state: state.address.state.trim() } : {}),
+									...(state.address.postcode?.trim()
+										? { postcode: state.address.postcode.trim() }
+										: {}),
+									...(state.address.streetView ? { streetView: state.address.streetView } : {}),
+									...(state.address.deviceLat != null && state.address.deviceLng != null
+										? {
+												deviceLat: state.address.deviceLat,
+												deviceLng: state.address.deviceLng,
+												...(state.address.deviceAccuracy != null
+													? { deviceAccuracy: state.address.deviceAccuracy }
+													: {}),
+												...(state.address.capturedAt ? { capturedAt: state.address.capturedAt } : {}),
+											}
+										: {}),
+								},
+							}
+						: {}),
 					...(config.userId ? { userId: config.userId } : {}),
 					...(userData ? { userData } : {}),
 					// Extra-info questionnaire answers — validated server-side
@@ -170,6 +236,9 @@ export function SubmittedStep() {
 						documentFront: multiSlots ? undefined : state.mediaIds.documentFront,
 						documentBack: multiSlots ? undefined : state.mediaIds.documentBack,
 						selfie: state.mediaIds.selfie,
+						// Run-level like the selfie: one PoA document / door photo per run.
+						proofOfAddress: state.mediaIds.proofOfAddress,
+						addressPhoto: state.mediaIds.addressPhoto,
 						...videoIds,
 					},
 					metadata: buildSubmitMetadata(config.metadata, requestId, config.deviceIntelligence !== false),
@@ -241,8 +310,13 @@ export function SubmittedStep() {
 	return (
 		<SubmitSuccessScreen
 			title={successTitle(config.success, tokens)}
-			description={successDescription(config.success, tokens, isBusinessFlow(config))}
+			description={successDescription(config.success, tokens, isBusinessFlow(config), configScope(config))}
 			extra={
+				<>
+					{config.addressCollection?.presence?.enabled === true && state.address && (
+						<PresenceExpectations />
+					)}
+					{
 				/* ONE list, from the server, once it is final.
 				 *
 				 * There used to be two: links built from what the applicant typed,
@@ -262,6 +336,8 @@ export function SubmittedStep() {
 					: isBusinessFlow(config) && invitesExpected
 						? <KeyPeoplePending />
 						: undefined
+					}
+				</>
 			}
 			action={successAction({
 				success: config.success,

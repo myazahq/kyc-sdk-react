@@ -5,10 +5,12 @@ import { CheckCircle2, Loader2, Upload, X } from 'lucide-react';
 import { UploadedFileThumb } from '../components/UploadedFilePreview';
 import { MyazaSelect } from '../components/MyazaSelect';
 import { StepHeader } from '../components/StepHeader';
+import { AddressCountryControl } from './address/AddressCountryControl';
 import { Button } from '../components/ui/button';
 import { useKYCContext } from '../context/KYCContext';
 import { useKYCConfig } from '../context/KYCConfigContext';
-import { hasActiveQuestionnaire } from '../lib/questionnaire';
+import { poaOfferedKinds, stepAfterProofOfAddress } from '../lib/post-capture';
+import { lastContactStep } from '../lib/contact-steps';
 import { cn } from '../lib/utils';
 import type { PoaDocumentType } from '../types/config';
 
@@ -19,7 +21,6 @@ const TYPE_LABELS: Record<PoaDocumentType, string> = {
   other: 'Other document',
 };
 
-const ALL_TYPES: PoaDocumentType[] = ['utility_bill', 'bank_statement', 'tenancy_agreement', 'other'];
 const ACCEPTED_MIMES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
 const MAX_BYTES = 20 * 1024 * 1024;
 
@@ -37,10 +38,10 @@ export function ProofOfAddressStep() {
   // In-memory File for tap-to-preview (lost on remount — row degrades cleanly).
   const [pickedFile, setPickedFile] = useState<File | null>(null);
 
-  const offeredTypes =
-    config.proofOfAddress?.documentTypes && config.proofOfAddress.documentTypes.length > 0
-      ? config.proofOfAddress.documentTypes
-      : ALL_TYPES;
+  // Per-country overrides (the builder matrix's row cells) narrow the offer;
+  // config.country is the EFFECTIVE country, so on the address scope the
+  // declared-country pick re-derives this live.
+  const offeredTypes = poaOfferedKinds(config.proofOfAddress, config.country);
   const selectedType = state.poaDocumentType ?? offeredTypes[0]!;
   // The org can rename the 'other' kind in the workflow builder (e.g. "Council
   // tax letter"); fall back to the generic label when unset.
@@ -79,7 +80,9 @@ export function ProofOfAddressStep() {
 
   const handleBack = () => {
     const backTo =
-      config.enableSelfie !== false
+      config.scope === 'address'
+        ? lastContactStep(config)
+        : config.enableSelfie !== false
         ? 'liveness'
         : state.selectedIdType &&
             config.getIdTypeDefinition(state.selectedIdType)?.requiresDocumentCapture === false
@@ -89,11 +92,8 @@ export function ProofOfAddressStep() {
   };
 
   const handleContinue = () => {
-    if (hasActiveQuestionnaire(config.questionnaire)) {
-      dispatch({ type: 'SET_STEP', payload: 'questionnaire' });
-    } else {
-      dispatch({ type: 'SUBMIT_VERIFICATION' });
-    }
+    const next = stepAfterProofOfAddress(config);
+    dispatch(next === 'submitted' ? { type: 'SUBMIT_VERIFICATION' } : { type: 'SET_STEP', payload: next });
   };
 
   return (
@@ -103,6 +103,12 @@ export function ProofOfAddressStep() {
         description={`Upload a document that shows your name and home address, issued within the last ${maxAgeDays} days.`}
         onBack={handleBack}
       />
+
+      {/* Address scope only (renders null elsewhere): the applicant declares
+          their country before the document — the Didit PoA model. It follows
+          the whole flow: the search filter, the map, the vendor market, and
+          the submission's country. */}
+      <AddressCountryControl />
 
       {offeredTypes.length > 1 && (
         <div className="flex flex-col gap-1.5">

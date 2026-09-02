@@ -103,6 +103,7 @@ function KYCInner({
   workflowId,
   applicantWorkflowId,
   subjectType,
+  scope,
   business,
   country,
   countries,
@@ -144,6 +145,7 @@ function KYCInner({
   phoneVerification,
   questionnaire,
   proofOfAddress,
+  addressCollection,
   nfc,
   ...triggerProps
 }: KYCInnerProps) {
@@ -187,13 +189,14 @@ function KYCInner({
     ...(emailVerification ? { emailVerification } : {}),
     ...(phoneVerification ? { phoneVerification } : {}),
     ...(proofOfAddress ? { proofOfAddress } : {}),
+    ...(addressCollection ? { addressCollection } : {}),
     ...(nfc ? { nfc } : {}),
     ...(metadata ? { metadata } : {}),
     ...(userId ? { userId } : {}),
     ...(userData ? { userData } : {}),
     ...(businessPrefill ? { businessPrefill } : {}),
     ...(assetsBasePath ? { assetsBasePath } : {}),
-  }), [country, workflowId, idTypes, countries, multiId, enableSelfie, enableDocumentCapture, allowDocumentUpload, enableLiveness, livenessMode, flashSequenceLength, deviceIntelligence, deviceHandoff, requireMobileDevice, voiceGuidance, showThemeToggle, progressStyle, fullScreen, disableClose, appearance, consent, success, emailVerification, phoneVerification, questionnaire, proofOfAddress, nfc, metadata, userId, userData, businessPrefill, assetsBasePath]);
+  }), [country, workflowId, idTypes, countries, multiId, enableSelfie, enableDocumentCapture, allowDocumentUpload, enableLiveness, livenessMode, flashSequenceLength, deviceIntelligence, deviceHandoff, requireMobileDevice, voiceGuidance, showThemeToggle, progressStyle, fullScreen, disableClose, appearance, consent, success, emailVerification, phoneVerification, questionnaire, proofOfAddress, addressCollection, nfc, metadata, userId, userData, businessPrefill, assetsBasePath]);
 
   // Pre-load MediaPipe Face Mesh model as soon as the SDK mounts and apply the
   // voice-guidance config (enabled + language) for the spoken liveness prompts.
@@ -389,6 +392,7 @@ function KYCInner({
       applicantWorkflowId={applicantWorkflowId}
       serverConfigOverride={serverConfigOverride}
       subjectType={subjectType}
+      scope={scope}
       business={business}
       country={country as AnyCountry}
       countries={countries}
@@ -416,6 +420,7 @@ function KYCInner({
       phoneVerification={phoneVerification}
       questionnaire={questionnaire}
       proofOfAddress={proofOfAddress}
+      addressCollection={addressCollection}
       nfc={nfc}
       previewMode={previewMode}
       onSubmit={onSubmit}

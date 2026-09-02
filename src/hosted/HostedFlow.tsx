@@ -1,13 +1,14 @@
 'use client';
 
-import React, { useEffect, useRef } from 'react';
-import { KYCProvider, useKYCContext } from '../context/KYCContext';
-import { useSessionProgress } from '../hooks/useSessionProgress';
+import React from 'react';
+import { KYCProvider } from '../context/KYCContext';
+import { HostedLifecycle, HostedSessionSync } from './HostedSessionSync';
 import { KYCConfigProvider, type ServerSdkConfig } from '../context/KYCConfigContext';
 import { overlayApplicantWorkflow } from '../lib/workflow-merge';
 import { HostedFlowInner } from './HostedFlowInner';
 import { HANDOFF_TOKEN_PREFIX } from './token';
 import type { HandoffBootstrapResponse, KYCApi } from '../services/api';
+import type { KYCError, KYCSubmission } from '../types/verification';
 import type {
   AnyCountry,
   AnyIdType,
@@ -21,6 +22,7 @@ import type {
   NfcConfig,
   ProgressStyle,
   VoiceGuidanceOption,
+  AddressCollectionConfig,
 } from '../types/config';
 import type { SubjectType, WorkflowBusinessConfig } from '../types/business';
 // The hosted flow itself: providers seeded from the session's config snapshot,
@@ -28,41 +30,6 @@ import type { SubjectType, WorkflowBusinessConfig } from '../types/business';
 // MyazaKYCHosted.tsx, which is now just the entry point and its three terminal
 // screens (loading, already-completed, unavailable).
 
-/**
- * Binds a hosted flow to its session: names it, then saves progress as the
- * applicant moves.
- *
- * BOTH halves were missing. The reducer never learned the id (a hosted mount
- * holds only the token), and useSessionProgress was mounted solely in
- * <MyazaKYC/>, so hosted links — the one place someone is most likely to close
- * the tab and come back — persisted nothing at all.
- */
-function HostedSessionSync({
-  sessionId,
-  progress,
-  api,
-}: {
-  sessionId: string;
-  progress?: HandoffBootstrapResponse['progress'];
-  api: KYCApi;
-}) {
-  const { state, dispatch } = useKYCContext();
-  const restored = useRef(false);
-
-  useEffect(() => {
-    if (sessionId) dispatch({ type: 'SET_SESSION_ID', payload: sessionId });
-    // Put them back where they were. Once only: re-applying after they have
-    // moved on would drag them backwards. Media references are pruned
-    // server-side, so a restored capture slot is one whose bytes still exist.
-    if (progress && !restored.current) {
-      restored.current = true;
-      dispatch({ type: 'RESTORE_PROGRESS', payload: progress });
-    }
-  }, [sessionId, progress, dispatch]);
-
-  useSessionProgress(api, state);
-  return null;
-}
 
 // Hosted flow — seeds the providers from the bootstrap and runs the steps
 // ---------------------------------------------------------------------------
@@ -73,6 +40,10 @@ export function HostedFlow({
   bootstrap,
   embedded = false,
   onClose,
+  onStart,
+  onStepChange,
+  onSubmit,
+  onError,
 }: {
   token: string;
   api: KYCApi;
@@ -80,6 +51,10 @@ export function HostedFlow({
   /** Mounted inside a host application (see MyazaKYCHosted.embedded). */
   embedded?: boolean;
   onClose?: () => void;
+  onStart?: () => void;
+  onStepChange?: (step: import('../types/config').KYCStep) => void;
+  onSubmit?: (submission: KYCSubmission) => void;
+  onError?: (error: KYCError) => void;
 }) {
   const snap = bootstrap.configSnapshot;
   const isBusiness = snap.subjectType === 'business' && !!snap.business;
@@ -106,6 +81,9 @@ export function HostedFlow({
     environment: bootstrap.environment,
     branding: bootstrap.branding,
     geoCountry: bootstrap.geoCountry,
+    googleMapsBrowserKey: bootstrap.googleMapsBrowserKey,
+    addressSearch: bootstrap.addressSearch,
+    addressSearchMode: bootstrap.addressSearchMode,
   };
 
   return (
@@ -115,14 +93,18 @@ export function HostedFlow({
           this seed every hosted applicant's work was dropped, and a refresh sent
           them back to the first step. */}
       <HostedSessionSync sessionId={bootstrap.sessionId} progress={bootstrap.progress} api={api} />
+      <HostedLifecycle onStart={onStart} onStepChange={onStepChange} />
       <KYCConfigProvider
         apiKey={`${HANDOFF_TOKEN_PREFIX}${token}`}
         apiOverride={api}
         serverConfigOverride={serverConfigOverride}
         hostedMode={!embedded}
         onClose={onClose}
+        onSubmit={onSubmit}
+        onError={onError}
         hostedToken={token}
         subjectType={snap.subjectType as SubjectType | undefined}
+        scope={snap.scope as import('../lib/scope').WorkflowScope | undefined}
         business={snap.business as WorkflowBusinessConfig | undefined}
         applicantWorkflowId={leg.applicantWorkflowId}
         // Business snapshots carry no top-level country — the registry country
@@ -155,6 +137,7 @@ export function HostedFlow({
         phoneVerification={snap.phoneVerification as PhoneVerificationConfig | undefined}
         questionnaire={snap.questionnaire as QuestionnaireConfig | undefined}
         proofOfAddress={snap.proofOfAddress as ProofOfAddressConfig | undefined}
+        addressCollection={snap.addressCollection as AddressCollectionConfig | undefined}
         nfc={leg.nfc as NfcConfig | undefined}
         userData={snap.userData}
         businessPrefill={snap.businessPrefill}

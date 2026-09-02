@@ -44,16 +44,13 @@ export const MYAZA_QR_LOGO = `data:image/svg+xml,${encodeURIComponent(
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40">` +
     // The ring: separates the tile from the surrounding dots at any scale.
     `<rect width="40" height="40" rx="12" fill="#FFFFFF"/>` +
-    `<rect x="2.5" y="2.5" width="35" height="35" rx="10" fill="url(#g)"/>` +
-    `<defs><linearGradient id="g" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse">` +
-    `<stop stop-color="#7B6EF7"/><stop offset="1" stop-color="#5645F5"/></linearGradient></defs>` +
-    // The mark sits on the gradient, so its own indigo body is swapped for white
-    // and the accent keeps the gold-free brand purple. Reversing it this way is
-    // what keeps it legible at 40px on a saturated ground.
-    // Scaled to fill the tile — at QR size the mark is ~40px across, and its
-    // native size left it reading as a speck. The faint outer blob is dropped
-    // on purpose: at this scale it muddied the glyph instead of framing it, so
-    // what is left is a crisp white mark on the brand gradient.
+    `<rect x="2.5" y="2.5" width="35" height="35" rx="10" fill="#5645F5"/>` +
+    // The mark sits on solid brand purple (flat, no gradients in the flow),
+    // so its own indigo body is swapped for white and the accent keeps the
+    // gold-free brand purple — what keeps it legible at 40px on a saturated
+    // ground. Scaled to fill the tile: at QR size the mark is ~40px across,
+    // and its native size left it reading as a speck. The faint outer blob is
+    // dropped on purpose — at this scale it muddied the glyph.
     `<g transform="translate(6.5 6) scale(1.12)">` +
     `<path d="${MARK_PATHS[1].d}" fill="#FFFFFF"/>` +
     `<path d="${MARK_PATHS[2].d}" fill="#C9C2FB"/>` +

@@ -116,7 +116,7 @@ function paintGrid(
   ctx.restore();
 }
 
-/** Scan line with a gradient trail, ping-ponging so it never jumps. */
+/** Scan line with a soft trailing band, ping-ponging so it never jumps. */
 function paintSweep(
   ctx: CanvasRenderingContext2D,
   rect: GuideRect,
@@ -130,20 +130,13 @@ function paintSweep(
   roundRectPath(ctx, rect, R);
   ctx.clip();
 
-  // Soft trailing glow.
-  const band = ctx.createLinearGradient(0, y - 26, 0, y + 26);
-  band.addColorStop(0, withAlpha(accent, 0));
-  band.addColorStop(0.5, withAlpha(accent, 0.22));
-  band.addColorStop(1, withAlpha(accent, 0));
-  ctx.fillStyle = band;
+  // Soft trailing band — flat translucency (no gradients in the flow,
+  // house rule 2026-08-29).
+  ctx.fillStyle = withAlpha(accent, 0.12);
   ctx.fillRect(rect.x, y - 26, rect.width, 52);
 
   // Bright core line.
-  const core = ctx.createLinearGradient(rect.x, 0, rect.x + rect.width, 0);
-  core.addColorStop(0, withAlpha(accent, 0));
-  core.addColorStop(0.5, withAlpha(accent, 0.95));
-  core.addColorStop(1, withAlpha(accent, 0));
-  ctx.fillStyle = core;
+  ctx.fillStyle = withAlpha(accent, 0.9);
   ctx.fillRect(rect.x, y - 1.5, rect.width, 3);
   ctx.restore();
 }

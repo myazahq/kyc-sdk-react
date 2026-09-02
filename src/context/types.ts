@@ -182,6 +182,7 @@ export interface MediaIds {
   documentBackVideo?: string;
   livenessVideo?: string;
   proofOfAddress?: string;
+  addressPhoto?: string;
 }
 
 export interface KYCState {
@@ -199,6 +200,10 @@ export interface KYCState {
 
   // Step 1b – country selection (multi-region flows; null = use config default)
   selectedCountry: AnyCountry | null;
+  /** True while the declared country is a GUESS (geo/locale default, or the
+   *  pin's reverse-geocoded place) — an explicit pick clears it, and only a
+   *  guess may be silently replaced by a better one. */
+  countryAutoPicked: boolean;
 
   // Step 2 – ID type selection
   selectedIdType: AnyIdType | null;
@@ -280,6 +285,69 @@ export interface KYCState {
   poaDocumentType: PoaDocumentType | null;
   poaFileName: string | null;
 
+  // Step 4d — Address Intelligence (smart-address capture). The photo's
+  // mediaId lives in mediaIds.addressPhoto; the pin + directions + the
+  // one-shot device fix (attestPresence) live here and ride the verify body.
+  address: {
+    lat: number;
+    lng: number;
+    accuracy: number | null;
+    directions: string;
+    propertyName: string;
+    propertyNumber: string;
+    /** A street the applicant TYPED. Prefilled from the map's answer in the
+     *  edit-details sheet; stored only once the applicant edits it, so an
+     *  untouched prefill is never submitted as their claim. */
+    street?: string;
+    /** The rest of the OkHi-style edit-details form (user decision
+     *  2026-08-31): unit, plus area/region corrections. All applicant claims,
+     *  stored only when typed; the server never feeds them into
+     *  corroboration. */
+    unit?: string;
+    neighbourhood?: string;
+    city?: string;
+    state?: string;
+    postcode?: string;
+    /** The pin's human-readable line ("11 Bassey Street, Calabar") — from the
+     *  search pick or a reverse geocode. Shown in the flow AND sent with the
+     *  submission as the applicant-confirmed line: the server prefers it for
+     *  the composed address over its own reverse geocode, whose OSM coverage
+     *  drops whole streets in our markets. */
+    label?: string;
+    /** Where the label was PICKED for (a search selection's own coordinates).
+     *  Presence means the label is human-confirmed: it survives pin nudges
+     *  within the keep radius instead of being re-derived on every drag.
+     *  Absent = the label came from a reverse geocode. Never on the wire. */
+    pickedAt?: { lat: number; lng: number };
+    /** The applicant explicitly chose to KEEP the picked label after moving
+     *  the pin. Reset when the pin crosses the credibility radius, so the
+     *  question is asked again exactly once out there. Never on the wire. */
+    labelKept?: boolean;
+    /** The label broken down (street/area/city/state/postcode) — what the
+     *  details sheet shows as structured rows. Display only, like label. */
+    parts?: {
+      street?: string | null;
+      area?: string | null;
+      city?: string | null;
+      state?: string | null;
+      postcode?: string | null;
+      /** ISO-2 of the pin's own place, from the reverse geocode. */
+      country?: string | null;
+    };
+    /** Street View entrance frame — coordinates only; the server fetches the
+     *  image with its own key. */
+    streetView?: { panoId: string; heading: number; pitch: number; fov: number };
+    deviceLat?: number;
+    deviceLng?: number;
+    deviceAccuracy?: number;
+    capturedAt?: string;
+  } | null;
+  /** Local preview (object URL) of the uploaded entrance photo, so the review
+   *  step can show it on the map. Display artefact — never serialised. */
+  addressPhotoPreview: string | null;
+  /** The presence "how it works" primer was acknowledged this session. */
+  addressIntroSeen: boolean;
+
   // Step 5 – Submission result
   verificationId: string | null;
   /**
@@ -309,6 +377,7 @@ export type KYCAction =
   | { type: 'CLOSE_MODAL' }
   | { type: 'SET_STEP'; payload: KYCStep }
   | { type: 'SET_COUNTRY'; payload: AnyCountry }
+  | { type: 'SET_COUNTRY_AUTO'; payload: AnyCountry }
   | { type: 'SELECT_ID_TYPE'; payload: AnyIdType }
   // Multi-ID: commit the current slot's evidence (ID type + number/documents)
   // and move to nextStep — the next slot's picker, or liveness after the last.
@@ -330,7 +399,7 @@ export type KYCAction =
   | { type: 'CLEAR_DOCUMENT_BACK' }
   | { type: 'CLEAR_DOCUMENT_ALL' }
   // Media IDs (set after each upload completes)
-  | { type: 'SET_MEDIA_ID'; payload: { mediaType: keyof MediaIds; mediaId: string } }
+  | { type: 'SET_MEDIA_ID'; payload: { mediaType: keyof MediaIds; mediaId: string | undefined } }
   | { type: 'CLEAR_MEDIA_IDS' }
   // Selfie
   | { type: 'SET_SELFIE_IMAGE'; payload: string }
@@ -350,6 +419,10 @@ export type KYCAction =
   // Proof of Address
   | { type: 'SET_POA_DOCUMENT'; payload: { documentType: PoaDocumentType; fileName: string } }
   | { type: 'CLEAR_POA_DOCUMENT' }
+  | { type: 'SET_ADDRESS'; payload: NonNullable<KYCState['address']> }
+  | { type: 'SET_ADDRESS_PHOTO_PREVIEW'; payload: string | null }
+  | { type: 'SET_ADDRESS_INTRO_SEEN' }
+  | { type: 'CLEAR_ADDRESS' }
   // Submission
   | { type: 'SUBMIT_VERIFICATION' }
   | { type: 'SUBMISSION_SUCCESS'; payload: string }

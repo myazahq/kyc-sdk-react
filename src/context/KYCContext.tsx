@@ -16,6 +16,7 @@ export const initialKYCState: KYCState = {
   isOpen: false,
   sessionId: null,
   selectedCountry: null,
+  countryAutoPicked: false,
   selectedIdType: null,
   multiIdSlotIndex: 0,
   multiIdSlots: [],
@@ -28,6 +29,8 @@ export const initialKYCState: KYCState = {
   businessCheck: { status: 'idle', company: null, keyPeople: [], checkedNumber: null, prefilled: [] },
   businessApplication: { keyPeople: [], documents: [], applicantRole: null, applicantName: '', applicantKeyPersonIndex: null, uboUnidentifiable: false },
   selfieImage: null,
+  addressPhotoPreview: null,
+  addressIntroSeen: false,
   documentFrontVideoBlob: null,
   documentBackVideoBlob: null,
   livenessVideoBlob: null,
@@ -35,6 +38,7 @@ export const initialKYCState: KYCState = {
   questionnaireAnswers: {},
   poaDocumentType: null,
   poaFileName: null,
+  address: null,
   verificationId: null,
   error: null,
 };
@@ -96,6 +100,86 @@ export function kycReducer(state: KYCState, action: KYCAction): KYCState {
             }
           : {}),
         ...(d.contact ? { contact: { ...state.contact, ...d.contact } } : {}),
+        // Address pin: coerce every field back to its declared type (the
+        // snapshot may be from an older build). Degrade to no restore.
+        ...(d.address &&
+        typeof (d.address as { lat?: unknown }).lat === 'number' &&
+        typeof (d.address as { lng?: unknown }).lng === 'number'
+          ? {
+              address: {
+                lat: (d.address as { lat: number }).lat,
+                lng: (d.address as { lng: number }).lng,
+                accuracy:
+                  typeof (d.address as { accuracy?: unknown }).accuracy === 'number'
+                    ? ((d.address as { accuracy: number }).accuracy)
+                    : null,
+                directions:
+                  typeof (d.address as { directions?: unknown }).directions === 'string'
+                    ? ((d.address as { directions: string }).directions)
+                    : '',
+                propertyName:
+                  typeof (d.address as { propertyName?: unknown }).propertyName === 'string'
+                    ? ((d.address as { propertyName: string }).propertyName)
+                    : '',
+                propertyNumber:
+                  typeof (d.address as { propertyNumber?: unknown }).propertyNumber === 'string'
+                    ? ((d.address as { propertyNumber: string }).propertyNumber)
+                    : '',
+                // The resolved line + its breakdown survive a refresh too —
+                // dropping them here is why a reload showed raw coordinates
+                // where the picked address had been.
+                ...(typeof (d.address as { label?: unknown }).label === 'string'
+                  ? { label: (d.address as { label: string }).label }
+                  : {}),
+                ...(() => {
+                  const pa = (d.address as { pickedAt?: Record<string, unknown> }).pickedAt;
+                  return pa && typeof pa.lat === 'number' && typeof pa.lng === 'number'
+                    ? { pickedAt: { lat: pa.lat, lng: pa.lng } }
+                    : {};
+                })(),
+                ...((d.address as { labelKept?: unknown }).labelKept === true
+                  ? { labelKept: true }
+                  : {}),
+                ...(typeof (d.address as { street?: unknown }).street === 'string'
+                  ? { street: (d.address as { street: string }).street }
+                  : {}),
+                // The edit-details claims survive a refresh like every other
+                // typed field.
+                ...(() => {
+                  const out: Record<string, string> = {};
+                  for (const key of ['unit', 'neighbourhood', 'city', 'state', 'postcode'] as const) {
+                    const v = (d.address as Record<string, unknown>)[key];
+                    if (typeof v === 'string' && v.trim()) out[key] = v;
+                  }
+                  return out;
+                })(),
+                ...(() => {
+                  const parts = (d.address as { parts?: Record<string, unknown> }).parts;
+                  if (!parts || typeof parts !== 'object') return {};
+                  const t = (v: unknown) => (typeof v === 'string' ? v : null);
+                  return {
+                    parts: {
+                      street: t(parts.street),
+                      area: t(parts.area),
+                      city: t(parts.city),
+                      state: t(parts.state),
+                      postcode: t(parts.postcode),
+                    },
+                  };
+                })(),
+                ...(() => {
+                  const sv = (d.address as { streetView?: Record<string, unknown> }).streetView;
+                  return sv &&
+                    typeof sv.panoId === 'string' &&
+                    typeof sv.heading === 'number' &&
+                    typeof sv.pitch === 'number' &&
+                    typeof sv.fov === 'number'
+                    ? { streetView: { panoId: sv.panoId, heading: sv.heading, pitch: sv.pitch, fov: sv.fov } }
+                    : {};
+                })(),
+              },
+            }
+          : {}),
         ...(d.questionnaireAnswers
           ? { questionnaireAnswers: { ...state.questionnaireAnswers, ...d.questionnaireAnswers } }
           : {}),
@@ -108,7 +192,8 @@ export function kycReducer(state: KYCState, action: KYCAction): KYCState {
     case 'SET_STEP':
       return { ...state, currentStep: action.payload, error: null };
 
-    case 'SET_COUNTRY': {
+    case 'SET_COUNTRY':
+    case 'SET_COUNTRY_AUTO': {
       // Switching country invalidates any prior ID-type choice (ID types are
       // country-specific) — INCLUDING a multi-ID run already part-walked. Those
       // committed slots hold the previous country's IDs, which its registers
@@ -117,6 +202,7 @@ export function kycReducer(state: KYCState, action: KYCAction): KYCState {
       return {
         ...state,
         selectedCountry: action.payload,
+        countryAutoPicked: action.type === 'SET_COUNTRY_AUTO',
         selectedIdType: changed ? null : state.selectedIdType,
         ...(changed && state.multiIdSlots.length > 0
           ? { multiIdSlots: [], multiIdSlotIndex: 0, idNumber: '' }
@@ -265,6 +351,12 @@ export function kycReducer(state: KYCState, action: KYCAction): KYCState {
 
     // ── Selfie / liveness ───────────────────────────────────────────────────
 
+    case 'SET_ADDRESS_PHOTO_PREVIEW':
+      return { ...state, addressPhotoPreview: action.payload };
+
+    case 'SET_ADDRESS_INTRO_SEEN':
+      return { ...state, addressIntroSeen: true };
+
     case 'SET_SELFIE_IMAGE':
       return { ...state, selfieImage: action.payload };
 
@@ -342,6 +434,15 @@ export function kycReducer(state: KYCState, action: KYCAction): KYCState {
         poaFileName: action.payload.fileName,
       };
 
+    case 'SET_ADDRESS':
+      return { ...state, address: action.payload };
+    case 'CLEAR_ADDRESS':
+      return {
+        ...state,
+        address: null,
+        mediaIds: { ...state.mediaIds, addressPhoto: undefined },
+        addressPhotoPreview: null,
+      };
     case 'CLEAR_POA_DOCUMENT':
       return {
         ...state,
@@ -378,6 +479,7 @@ export function kycReducer(state: KYCState, action: KYCAction): KYCState {
         livenessVideoBlob: null,
         mediaIds: {},
         selfieImage: null,
+        addressPhotoPreview: null,
         verificationId: null,
         error: null,
       };

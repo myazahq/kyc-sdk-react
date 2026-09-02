@@ -1,0 +1,139 @@
+'use client';
+
+import React from 'react';
+import { BellRing, MapPin, MapPinHouse, Radar } from 'lucide-react';
+import { Button } from '../../components/ui/button';
+import { IntroDisclosures } from './IntroDisclosures';
+import { cn } from '../../lib/utils';
+import { useKYCContext } from '../../context/KYCContext';
+import { useKYCConfig } from '../../context/KYCConfigContext';
+import type { KYCStep } from '../../types/config';
+
+/**
+ * The presence "how it works" screen — drawn in the SUCCESS CARD's language
+ * (user decision 2026-08-29: the eyebrow badge, the milestone track with
+ * stage labels, the header band), so the promise made here and the "address
+ * check active" card at the end read as two frames of one story. The three
+ * plain-language disclosures (the OkHi-patterned consent copy) sit under it
+ * as a smoothly animated accordion.
+ */
+const MILESTONES: Array<{
+  Icon: typeof MapPin;
+  stage: string;
+  title: string;
+  caption: string;
+  state: 'active' | 'ahead';
+}> = [
+  {
+    Icon: MapPinHouse,
+    stage: 'Your part',
+    title: 'Pin your address',
+    caption: 'Put the pin right on your building. Takes a minute.',
+    state: 'active',
+  },
+  {
+    Icon: Radar,
+    stage: 'After that',
+    title: 'Quiet check-ins',
+    caption: 'Keep location on; your phone confirms it over the coming days.',
+    state: 'ahead',
+  },
+  {
+    Icon: BellRing,
+    stage: 'Then',
+    title: 'Confirmed',
+    caption: "You'll be notified. That is it.",
+    state: 'ahead',
+  },
+];
+
+export function useAddressIntroGate(step: KYCStep, firstStep: KYCStep): React.ReactElement | null {
+  const { state, dispatch } = useKYCContext();
+  const config = useKYCConfig();
+  const presence = config.addressCollection?.presence?.enabled === true;
+  if (step !== firstStep || !presence || state.addressIntroSeen) return null;
+
+  return (
+    <div className="space-y-4 animate-slide-up">
+      {/* The success card's exact shape: header band + milestone track. */}
+      <div className="overflow-hidden rounded-2xl border border-primary/15">
+        <div className="space-y-1 bg-primary/[0.06] px-4 pb-3 pt-4">
+          <span className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider text-primary">
+            <MapPin className="h-3 w-3" />
+            Address verification
+          </span>
+          <p className="text-base font-semibold">Let&apos;s confirm your address</p>
+          <p className="text-xs text-muted-foreground">
+            This address will be verified over the coming days. Your part takes a minute; the rest
+            happens on its own.
+          </p>
+        </div>
+
+        <div className="grid gap-0 px-4 py-5 sm:grid-cols-3 sm:gap-4">
+          {MILESTONES.map(({ Icon, stage, title, caption, state: nodeState }, i) => (
+            <div
+              key={title}
+              className="relative flex gap-3.5 pb-5 last:pb-0 sm:flex-col sm:items-center sm:gap-2.5 sm:pb-0 sm:text-center"
+            >
+              {i < MILESTONES.length - 1 && (
+                <>
+                  <span className="absolute bottom-0 left-[19px] top-11 w-px bg-primary/15 sm:hidden" aria-hidden />
+                  <span
+                    className="absolute left-[calc(50%+1.75rem)] right-[calc(-50%+1.75rem)] top-5 hidden h-px border-t-2 border-dotted border-primary/25 sm:block"
+                    aria-hidden
+                  />
+                </>
+              )}
+              {/* Numbered medallion: the sequence is the point, so each node
+                  wears its step number. Upcoming nodes are TINTED, not greyed
+                  out — they are the plan, not disabled controls. */}
+              <span className="relative z-10 shrink-0">
+                <span
+                  className={cn(
+                    'flex h-10 w-10 items-center justify-center rounded-full',
+                    nodeState === 'active'
+                      ? 'bg-primary text-primary-foreground shadow-[0_0_0_5px] shadow-primary/15'
+                      : 'bg-primary/10 text-primary ring-1 ring-primary/20',
+                  )}
+                >
+                  <Icon className="h-[18px] w-[18px]" />
+                </span>
+                <span
+                  className={cn(
+                    'absolute -right-1 -top-1 flex h-4.5 w-4.5 items-center justify-center rounded-full border text-[9px] font-bold',
+                    nodeState === 'active'
+                      ? 'border-primary bg-background text-primary'
+                      : 'border-border bg-background text-muted-foreground',
+                  )}
+                >
+                  {i + 1}
+                </span>
+              </span>
+              <span className="min-w-0 pt-1 sm:pt-0">
+                <span
+                  className={cn(
+                    'block text-[10px] font-semibold uppercase tracking-wider',
+                    nodeState === 'active' ? 'text-primary' : 'text-muted-foreground',
+                  )}
+                >
+                  {stage}
+                </span>
+                <span className="mt-0.5 block text-sm font-semibold leading-tight">{title}</span>
+                <span className="mt-1 block text-xs leading-snug text-muted-foreground">{caption}</span>
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <IntroDisclosures />
+
+      <Button
+        onClick={() => dispatch({ type: 'SET_ADDRESS_INTRO_SEEN' })}
+        className="h-12 w-full rounded-xl text-base font-medium"
+      >
+        Got it, let&apos;s go
+      </Button>
+    </div>
+  );
+}

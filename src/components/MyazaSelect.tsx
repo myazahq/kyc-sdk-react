@@ -6,6 +6,7 @@ import { Check, ChevronsUpDown, Search } from 'lucide-react';
 
 import { cn } from '../lib/utils';
 import { useDropdownAnchor } from '../lib/use-dropdown-anchor';
+import { eventPathIncludes } from '../lib/event-path';
 import { DropdownSurface } from './DropdownSurface';
 
 // A plain single-choice select — the web counterpart of the RN and Flutter
@@ -79,9 +80,10 @@ export function MyazaSelect<T extends string>({
   useEffect(() => {
     if (!open) return undefined;
     const onPointerDown = (e: PointerEvent) => {
-      const t = e.target as Node;
-      // The menu is portaled out of rootRef, so it needs its own test.
-      if (rootRef.current?.contains(t) || menuRef.current?.contains(t)) return;
+      // composedPath, not e.target: the SDK renders in a shadow frame and a
+      // document listener sees retargeted events (see lib/event-path.ts). The
+      // menu is portaled out of rootRef, so it needs its own test.
+      if (eventPathIncludes(e, rootRef.current, menuRef.current)) return;
       setOpen(false);
     };
     const onKeyDown = (e: KeyboardEvent) => {

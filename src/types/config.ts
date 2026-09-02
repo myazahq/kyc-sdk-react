@@ -100,6 +100,14 @@ export type KYCStep =
   | 'applicant-role'
   | 'liveness'
   | 'proof-of-address'
+  // Address Intelligence, as real steps (progress bar advances through them).
+  // 'address-collection' is the PIN step and keeps the original wire name for
+  // session-progress and step-log compatibility; search/entrance/review exist
+  // only on individual flows (KYB keeps the single premises step).
+  | 'address-search'
+  | 'address-collection'
+  | 'address-entrance'
+  | 'address-review'
   | 'questionnaire'
   | 'submitted';
 
@@ -115,12 +123,62 @@ export type PoaDocumentType = 'utility_bill' | 'bank_statement' | 'tenancy_agree
 export interface ProofOfAddressConfig {
   /** Adds the Proof of Address step (after capture, before the questionnaire). */
   enabled?: boolean;
+  /** Countries the org accepts addresses from — what the address scope's
+   *  declared-country picker offers (absent/empty = every country). */
+  countries?: string[];
   /** Accepted document kinds (absent = all). */
   documentTypes?: PoaDocumentType[];
+  /** Per-country narrowing of the accepted kinds (ISO-2 key). A present entry
+   *  REPLACES `documentTypes` for that country; absent = the global set. */
+  countryDocuments?: Record<string, PoaDocumentType[]>;
   /** Custom label shown for the 'other' document kind (absent = "Other document"). */
   otherLabel?: string;
   /** Recency window the server checks the document date against (default 90). */
   maxAgeDays?: number;
+}
+
+// ---------------------------------------------------------------------------
+// Address Intelligence (smart-address capture + corroboration)
+// ---------------------------------------------------------------------------
+
+export interface AddressCollectionConfig {
+  /** Adds the address-collection step (after Proof of Address, before the questionnaire). */
+  enabled?: boolean;
+  /** Block Continue without a confirmed pin (the server 422s without one too). */
+  requirePin?: boolean;
+  /** Whether the door-photo input is offered/required (default optional). */
+  photo?: 'off' | 'optional' | 'required';
+  /** Whether the directions field is offered/required (default optional). */
+  directions?: 'off' | 'optional' | 'required';
+  /**
+   * The typed property fields — "Building or compound name" + "House or flat
+   * number" (default 'optional': shown, skippable). The only honest source of
+   * a plot number; no 'required' mode by design, because an applicant in an
+   * unnumbered compound cannot answer one.
+   */
+  propertyFields?: 'off' | 'optional';
+  /**
+   * Street View entrance framing (default 'optional' — ON wherever coverage
+   * exists; 'off' opts out): the applicant pans a Google Street View panorama
+   * to frame their entrance and the SERVER fetches the framed image —
+   * provenance-honest, never mixed with the first-party photo, which stays the
+   * fallback. No 'required' mode by design: coverage is not guaranteed
+   * anywhere. Renders only where the page holds the Google browser key
+   * (hosted pages).
+   */
+  streetView?: 'off' | 'optional';
+  /**
+   * Take a one-shot device GPS fix when the pin is confirmed, so the server
+   * can judge "captured at the claimed address" (the `attested` tier). The fix
+   * is a CLAIM the server evaluates, never a verdict.
+   */
+  attestPresence?: boolean;
+  /**
+   * Presence verification (mobile SDKs report; the web SDK reads this only to
+   * set expectations: the consent notice on the step and the success-screen
+   * bullets saying the address will be confirmed over the coming days).
+   */
+  presence?: { enabled?: boolean };
 }
 
 // ---------------------------------------------------------------------------
@@ -247,6 +305,8 @@ export interface KYCAppearance {
   surfaceColor?: string;
   /** Border + input outline color (`--border` + `--input`). */
   borderColor?: string;
+  /** The dimmed backdrop behind the modal (any CSS colour, alpha included). */
+  overlayColor?: string;
   /** Primary text color (`--foreground`). */
   textColor?: string;
   companyName?: string;
@@ -294,6 +354,7 @@ export interface KYCAppearance {
     | 'backgroundColor'
     | 'surfaceColor'
     | 'borderColor'
+    | 'overlayColor'
     | 'textColor'
   >;
   /** Initial mode. 'system' follows the device's prefers-color-scheme (live);
@@ -440,6 +501,17 @@ export interface MyazaKYCConfig<C extends AnyCountry = AnyCountry> {
    * submissions are mocked.
    */
   subjectType?: import('./business').SubjectType;
+
+  /**
+   * Workflow SCOPE — what this flow verifies about the subject (absent = the
+   * full verification): 'address' (the smart-address capture is the whole
+   * flow), 'biometric-authentication' / 'biometric-enrollment' (a liveness
+   * selfie against / into the biometric template), 'questionnaire'
+   * (declarations only) or 'contact' (email/phone possession checks only).
+   * Normally rides a resolved workflow config; the server requires a
+   * published workflow of the matching scope for the submission.
+   */
+  scope?: import('../lib/scope').WorkflowScope;
 
   /**
    * Business (KYB) subject configuration — the registry country, offered
@@ -697,6 +769,16 @@ export interface MyazaKYCConfig<C extends AnyCountry = AnyCountry> {
    * verification's own status. Usually configured in the workflow builder.
    */
   proofOfAddress?: ProofOfAddressConfig;
+
+  /**
+   * Address Intelligence: collect the user's smart address (a map pin,
+   * optional door photo and directions). The server corroborates the pin
+   * against the government record, the PoA document and the submission IP and
+   * delivers the result in `data.addressIntel` on verification webhooks — it
+   * never changes the verification's own status. Usually configured in the
+   * workflow builder (rides `workflowId`).
+   */
+  addressCollection?: AddressCollectionConfig;
 
   /**
    * NFC Chip Verification: read the ID's eMRTD chip (e-passports & chip eIDs)

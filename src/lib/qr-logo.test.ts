@@ -23,7 +23,8 @@ describe('MYAZA_QR_LOGO', () => {
   it('reverses the mark for a saturated ground', () => {
     // The mark's own indigo body is illegible on the brand gradient at 40px.
     const s = svg();
-    expect(s).toContain('linearGradient');
+    expect(s).toContain('#5645F5');
+    expect(s).not.toContain('linearGradient');
     expect(s).not.toContain('#19156F');
   });
 

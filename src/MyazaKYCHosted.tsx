@@ -8,26 +8,9 @@ import { HostedCompleted } from './hosted/HostedCompleted';
 import { HostedFlow } from './hosted/HostedFlow';
 import { HANDOFF_TOKEN_PREFIX } from './hosted/token';
 import { SdkFrame } from './lib/sdk-frame';
+import type { MyazaKYCHostedProps } from './hosted/hosted-props';
 
-export interface MyazaKYCHostedProps {
-  /**
-   * The raw handoff session token from the hosted-page URL
-   * (`/verify/<token>`). The SDK presents it as a `hs_<token>` bearer.
-   */
-  token: string;
-  /**
-   * Mount INSIDE a host application rather than on the hosted page. Implies
-   * shadow-DOM style isolation (the SDK carries its own stylesheet; no global
-   * `styles.css` import, and the host app's CSS cannot reach in), swaps the
-   * full-page loading/terminal chrome for compact blocks that sit in a panel,
-   * and makes the modal closable — the success screen's action becomes a real
-   * Done button wired to {@link onClose}. The hosted page passes nothing and
-   * keeps its full-page, light-DOM behaviour exactly as before.
-   */
-  embedded?: boolean;
-  /** Embedded mounts: the modal was closed or the flow's Done was pressed. */
-  onClose?: () => void;
-}
+export type { MyazaKYCHostedProps, MyazaKYCHostedReadyInfo } from './hosted/hosted-props';
 
 /**
  * Hosted "continue on your phone" entry point. Rendered by the Myaza-hosted
@@ -36,7 +19,17 @@ export interface MyazaKYCHostedProps {
  * authenticating every upload/verify with the session token (relative base URL,
  * so requests go through the hosting origin's API proxy).
  */
-export function MyazaKYCHosted({ token, embedded = false, onClose }: MyazaKYCHostedProps) {
+export function MyazaKYCHosted({
+  token,
+  embedded = false,
+  onClose,
+  onReady,
+  onStart,
+  onStepChange,
+  onSubmit,
+  onError,
+  onCompleted,
+}: MyazaKYCHostedProps) {
   // Relative base ('') → requests hit the hosting origin and its /api proxy.
   const [api] = useState<KYCApi>(() => createKYCApi('', `${HANDOFF_TOKEN_PREFIX}${token}`));
   const [phase, setPhase] = useState<'loading' | 'ready' | 'completed' | 'error'>('loading');
@@ -52,6 +45,12 @@ export function MyazaKYCHosted({ token, embedded = false, onClose }: MyazaKYCHos
         if (cancelled) return;
         setBootstrap(data);
         setPhase('ready');
+        onReady?.({
+          sessionId: data.sessionId,
+          environment: data.environment,
+          subjectType: data.configSnapshot.subjectType,
+          scope: data.configSnapshot.scope,
+        });
       })
       .catch((err: unknown) => {
         if (cancelled) return;
@@ -71,11 +70,14 @@ export function MyazaKYCHosted({ token, embedded = false, onClose }: MyazaKYCHos
               if (cancelled) return;
               setSummary(data);
               setPhase('completed');
+              onCompleted?.(data);
             })
             .catch(() => {
               // The summary is an enrichment, not the message. Falling back to
               // the plain confirmation still tells them the true thing.
-              if (!cancelled) setPhase('completed');
+              if (cancelled) return;
+              setPhase('completed');
+              onCompleted?.(null);
             });
           return;
         }
@@ -85,6 +87,9 @@ export function MyazaKYCHosted({ token, embedded = false, onClose }: MyazaKYCHos
     return () => {
       cancelled = true;
     };
+    // Callbacks are read once, at bootstrap: a host re-rendering with a fresh
+    // function must not re-run the bootstrap.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [api, token]);
 
   const frame = (body: React.ReactNode) => <SdkFrame isolate={embedded}>{body}</SdkFrame>;
@@ -138,7 +143,19 @@ export function MyazaKYCHosted({ token, embedded = false, onClose }: MyazaKYCHos
     );
   }
 
-  return frame(<HostedFlow token={token} api={api} bootstrap={bootstrap} embedded={embedded} onClose={onClose} />);
+  return frame(
+    <HostedFlow
+      token={token}
+      api={api}
+      bootstrap={bootstrap}
+      embedded={embedded}
+      onClose={onClose}
+      onStart={onStart}
+      onStepChange={onStepChange}
+      onSubmit={onSubmit}
+      onError={onError}
+    />,
+  );
 }
 
 function CenteredScreen({ children, compact }: { children: React.ReactNode; compact?: boolean }) {

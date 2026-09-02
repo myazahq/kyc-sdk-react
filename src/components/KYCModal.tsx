@@ -1,7 +1,8 @@
 'use client';
 
+import { configScope } from '../lib/scope';
 import React, { useEffect, useState } from 'react';
-import { buildThemeVars } from '../lib/theme';
+import { buildThemeVars, resolveOverlayColor } from '../lib/theme';
 import { applyConfiguredTheme } from '../lib/apply-theme';
 import { ThemeVarsContext } from '../lib/theme-context';
 import { useIsDark } from '../lib/use-is-dark';
@@ -23,13 +24,18 @@ import { cn } from '../lib/utils';
 import { useKYCContext } from '../context/KYCContext';
 import { useKYCConfig } from '../context/KYCConfigContext';
 import { hasActiveQuestionnaire } from '../lib/questionnaire';
-import { hasProofOfAddressStep } from '../lib/post-capture';
+import { hasProofOfAddressStep, hasAddressCollectionStep, poaCountryAccepted } from '../lib/post-capture';
 import { hasEmailVerificationStep, hasPhoneVerificationStep } from '../lib/contact-steps';
 import { isBusinessFlow } from '../lib/business';
 import { multiIdPlan } from '../lib/multi-id';
 import { MultiIdProgress } from './MultiIdProgress';
 import { getStepPosition, resolveNarrowedStep } from '../lib/step-order';
 import { ProofOfAddressStep } from '../steps/ProofOfAddressStep';
+import { AddressCollectionStep } from '../steps/AddressCollectionStep';
+import { AddressSearchStep } from '../steps/address/AddressSearchStep';
+import { AddressEntranceStep } from '../steps/address/AddressEntranceStep';
+import { AddressReviewStep } from '../steps/address/AddressReviewStep';
+import { addressFlowOptions } from '../steps/address/flow-steps';
 import type { KYCStep } from '../types/config';
 import { PoweredBy } from './PoweredBy';
 import { VisuallyHidden } from './VisuallyHidden';
@@ -146,6 +152,14 @@ function CurrentStep({ plan }: { plan: ReturnType<typeof multiIdPlan> }) {
       return config.previewMode ? <PreviewCapturePlaceholder kind="liveness" /> : <LivenessStep />;
     case 'proof-of-address':
       return <ProofOfAddressStep />;
+    case 'address-search':
+      return <AddressSearchStep />;
+    case 'address-collection':
+      return <AddressCollectionStep />;
+    case 'address-entrance':
+      return <AddressEntranceStep />;
+    case 'address-review':
+      return <AddressReviewStep />;
     case 'questionnaire':
       return <QuestionnaireStep />;
     case 'submitted':
@@ -190,7 +204,14 @@ export function KYCModal({ open, onClose, showThemeToggle, disableClose, fullScr
     config.enableSelfie !== false &&
     (livenessFeatures ? livenessFeatures.livenessCheck : config.enableLiveness !== false);
   const hasQuestionnaire = hasActiveQuestionnaire(config.questionnaire);
-  const hasPoa = hasProofOfAddressStep(config.proofOfAddress);
+  // On full flows the accepted-country list gates the whole step (recomputed
+  // as the effective country changes on multi-region flows). The address
+  // scope keeps the step regardless: it hosts the declared-country picker,
+  // which itself offers only the accepted list.
+  const hasPoa =
+    hasProofOfAddressStep(config.proofOfAddress) &&
+    (configScope(config) === 'address' || poaCountryAccepted(config.proofOfAddress, config.country));
+  const hasAddressCollection = hasAddressCollectionStep(config.addressCollection);
   const hasEmailVerification = hasEmailVerificationStep(config.emailVerification);
   const hasPhoneVerification = hasPhoneVerificationStep(config.phoneVerification);
   const [expanded, setExpanded] = useState(false);
@@ -199,6 +220,7 @@ export function KYCModal({ open, onClose, showThemeToggle, disableClose, fullScr
   const fullscreen = fullScreen === true || expanded;
   const isDarkTheme = useIsDark();
   const themeVars = buildThemeVars(config.appearance, isDarkTheme);
+  const overlayColor = resolveOverlayColor(config.appearance, isDarkTheme);
   useBrandFonts(config.appearance);
   // A fatal config-load failure (e.g. wrong API key) blocks the whole flow.
   const configError =
@@ -223,6 +245,7 @@ export function KYCModal({ open, onClose, showThemeToggle, disableClose, fullScr
   // be partway through.
   const stepOptions = {
     isBusiness,
+    scope: configScope(config),
     business: config.business,
     hasDocCapture,
     hasLiveness,
@@ -230,6 +253,18 @@ export function KYCModal({ open, onClose, showThemeToggle, disableClose, fullScr
     hasEmailVerification,
     hasPhoneVerification,
     hasPoa,
+    hasAddressCollection,
+    addressFlow: (() => {
+      if (!hasAddressCollection || isBusiness) return undefined;
+      const flow = addressFlowOptions({
+        photo: config.addressCollection?.photo,
+        streetView: config.addressCollection?.streetView,
+        serverSearch: Boolean(config.serverConfig?.addressSearch),
+        previewMode: Boolean(config.previewMode),
+        hasGoogleKey: Boolean(config.serverConfig?.googleMapsBrowserKey),
+      });
+      return { search: flow.searchAvailable, entrance: flow.photoMode !== 'off' || flow.streetViewOffered };
+    })(),
     hasQuestionnaire,
     // Present only on a session a reviewer sent back. Narrows the order to the
     // steps they ticked, so somebody fixing one blurry photo is not walked
@@ -283,6 +318,7 @@ export function KYCModal({ open, onClose, showThemeToggle, disableClose, fullScr
       <DialogContent
         fullscreen={fullscreen}
         overlayClassName={litForCapture ? 'bg-white' : undefined}
+        overlayStyle={!litForCapture && overlayColor ? { backgroundColor: overlayColor } : undefined}
         // The DIALOG must not be the scroll container.
         //
         // DialogContent carries overflow-y-auto for consumers that put plain

@@ -40,6 +40,7 @@ describe('isUntouchedProgress', () => {
       hasEmailVerification: false,
       hasPhoneVerification: false,
       hasPoa: false,
+      hasAddressCollection: false,
       hasQuestionnaire: false,
     };
     expect(buildStepOrder({ ...opts, isBusiness: false })[0]).toBe('consent');

@@ -27,16 +27,28 @@ const DialogContent = React.forwardRef<
 	React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
 		fullscreen?: boolean;
 		overlayClassName?: string;
+		overlayStyle?: React.CSSProperties;
 	}
->(({ className, children, fullscreen, overlayClassName, ...props }, ref) => {
+>(({ className, children, fullscreen, overlayClassName, overlayStyle, ...props }, ref) => {
 	// Inside an isolated (SdkFrame) mount the dialog portals into the SDK's
 	// body-level shadow frame — styled by the SDK's own sheet and free of
 	// transformed host-app ancestors. Null = no boundary (hosted page):
 	// Radix's document.body default, as before.
+	//
+	// It is also why @radix-ui/react-dialog is floored at ^1.1.23. Older
+	// versions checked for the DialogTitle with `document.getElementById`,
+	// which cannot see into a shadow root, so they console.error'd
+	// "`DialogContent` requires a `DialogTitle`" on every open even though the
+	// title below is right there, in production as well as dev.
+	//
+	// Note the floor here only governs what OUR installs resolve: tsup leaves
+	// `dependencies` external, so a consumer app supplies its own copy of this
+	// package at runtime. Fixing it for an integrator means their range, not
+	// ours. See ./dialog-a11y-warning.test.ts.
 	const portalHost = usePortalHost();
 	return (
 	<DialogPortal container={portalHost ?? undefined}>
-		<DialogOverlay className={cn("bg-black/60", overlayClassName)} />
+		<DialogOverlay className={cn("bg-black/60", overlayClassName)} style={overlayStyle} />
 		<DialogPrimitive.Content
 			ref={ref}
 			className={cn(

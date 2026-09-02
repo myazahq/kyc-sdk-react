@@ -9,6 +9,7 @@ import { CountryFlag } from './CountryFlag';
 import { cn } from '../lib/utils';
 import { formatNationalNumber } from '../lib/phone-format';
 import { useDropdownAnchor } from '../lib/use-dropdown-anchor';
+import { eventPathIncludes } from '../lib/event-path';
 import { DropdownSurface } from './DropdownSurface';
 
 // Phone input with a searchable dial-code country picker + as-you-type
@@ -128,10 +129,11 @@ export function PhoneNumberInput({ value, defaultCountry, geoCountry, disabled, 
     if (!open) return;
     searchRef.current?.focus();
     const onPointerDown = (e: PointerEvent) => {
-      const t = e.target as Node;
-      // The menu is portaled out of rootRef, so it has to be tested separately —
+      // composedPath, not e.target: the SDK renders in a shadow frame and a
+      // document listener sees retargeted events (see lib/event-path.ts). The
+      // menu is portaled out of rootRef, so it has to be tested separately —
       // otherwise picking a country counts as clicking outside.
-      if (rootRef.current?.contains(t) || menuRef.current?.contains(t)) return;
+      if (eventPathIncludes(e, rootRef.current, menuRef.current)) return;
       setOpen(false);
       setQuery('');
     };

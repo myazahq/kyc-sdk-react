@@ -83,6 +83,16 @@ export interface UseLivenessReturn {
   /** A flash SEQUENCE is running (true across the gaps between colours). */
   flashing: boolean;
   retry: () => void;
+  /**
+   * How far through the WHOLE test the user is, 0..1: positioning, each
+   * challenge, the capture, in equal segments, each measured by what actually
+   * gates it. Reaches 1 at the shutter. Drawn by CaptureRing.
+   *
+   * A ref rather than state on purpose: it moves every frame of the detector
+   * loop, and the phase is set only on transitions precisely so that loop does
+   * not re-render the step. Read it in an animation frame; never in render.
+   */
+  livenessProgressRef: React.MutableRefObject<number>;
 }
 
 // ---------------------------------------------------------------------------
@@ -106,6 +116,26 @@ export interface UseLivenessOptions {
 // ---------------------------------------------------------------------------
 // Hook
 // ---------------------------------------------------------------------------
+
+/**
+ * Frames of a steady, well-lit face before the shutter fires (~0.5s at 30fps).
+ *
+ * Named because it is no longer only a threshold: the capture ring divides by
+ * it, so the arc a user watches fill IS this counter. Change it and the ring
+ * follows.
+ */
+const CAPTURE_STABLE_FRAMES = 15;
+
+/** Frames of a centred, well-placed face before the first challenge starts (~0.8s). */
+const POSITION_STABLE_FRAMES = 25;
+
+/**
+ * How far into its segment the ring may grow on a challenge's clock alone.
+ * A gesture either lands or it does not, so the only honest continuous
+ * measure of a challenge is time; but time running out is not progress, so the
+ * clock never fills the segment — the gesture landing does that.
+ */
+const CHALLENGE_SEGMENT_CAP = 0.85;
 
 export function useLiveness({
   videoRef,
@@ -134,6 +164,13 @@ export function useLiveness({
   const nodHistoryRef = useRef<number[]>([]);
   const blinkStateRef = useRef<BlinkState>(createBlinkState());
   const positionStableRef = useRef<number>(0);
+  // 0..1 across the WHOLE test, read by the ring on the frame. A REF so the
+  // detector loop can update it every frame without re-rendering the step (the
+  // phase itself is set only on transitions, deliberately, for the same reason).
+  const livenessProgressRef = useRef<number>(0);
+  // When the running challenge's clock started, and how long it has. The
+  // challenge segment of the ring grows on this clock.
+  const challengeClockRef = useRef<{ startedAt: number; seconds: number } | null>(null);
   // Last guidance shown during the capturing phase — so we only re-render when
   // it actually changes (the phase runs every frame).
   const capturingGuidanceRef = useRef<string | null>(null);
@@ -255,6 +292,7 @@ export function useLiveness({
     const picked = pickChallenges(config);
     const tracker = new ChallengeTracker(picked);
     trackerRef.current = tracker;
+    livenessProgressRef.current = 0;
     setChallenges([...tracker.all]);
     return tracker;
   }, [config]);
@@ -318,6 +356,7 @@ export function useLiveness({
   const startChallengeTimer = useCallback(
     (seconds: number) => {
       clearChallengeTimer();
+      challengeClockRef.current = { startedAt: performance.now(), seconds };
       challengeTimerRef.current = setTimeout(() => {
         if (!mountedRef.current) return;
         stopRecording();
@@ -332,6 +371,11 @@ export function useLiveness({
   // -----------------------------------------------------------------------
 
   const doCapture = useCallback(async () => {
+    // Close the ring. The counter reaches the shutter and the phase changes in
+    // the same frame, so without this the arc is simply removed from the screen
+    // at wherever it had got to — the user watches it build and never once sees
+    // it finish, which is the whole point of a ring.
+    livenessProgressRef.current = 1;
     stopRecording();
 
     // Capture from the exact frame FaceMesh confirmed a centered face on
@@ -465,8 +509,51 @@ export function useLiveness({
       });
   };
 
+  // -----------------------------------------------------------------------
+  // Progress across the WHOLE test, for the ring on the frame
+  // -----------------------------------------------------------------------
+  //
+  // Equal segments: positioning, each challenge, the capture. Each is measured
+  // by the thing actually gating it — steady frames toward the positioning
+  // threshold, the challenge's clock, steady frames toward the shutter — so the
+  // line moves at the pace the test is really moving at, and a gesture landing
+  // is a visible jump to the start of the next segment. `complete` is 1.
+  //
+  // Computed BEFORE the no-face early return below: a challenge's clock keeps
+  // running while the face is briefly lost, so its segment should too.
+  const updateLivenessProgress = () => {
+    const tracker = trackerRef.current;
+    const challengeCount = tracker?.totalCount ?? config?.challengeCount ?? 2;
+    const seg = 1 / (challengeCount + 2);
+    let value = 0;
+    switch (phaseRef.current) {
+      case 'positioning':
+        value = seg * Math.min(1, positionStableRef.current / POSITION_STABLE_FRAMES);
+        break;
+      case 'challenge': {
+        const clock = challengeClockRef.current;
+        const onClock = clock ? (performance.now() - clock.startedAt) / 1000 / clock.seconds : 0;
+        value = seg * (1 + (tracker?.currentIndex ?? 0) + Math.min(CHALLENGE_SEGMENT_CAP, onClock));
+        break;
+      }
+      case 'challenge_passed':
+        value = seg * (2 + (tracker?.currentIndex ?? 0));
+        break;
+      case 'capturing':
+        value =
+          seg *
+          (1 + challengeCount + Math.min(1, positionStableRef.current / CAPTURE_STABLE_FRAMES));
+        break;
+      case 'complete':
+        value = 1;
+        break;
+    }
+    livenessProgressRef.current = value;
+  };
+
   processLandmarksRef.current = (landmarks: NormalizedLandmark[] | null, faceCount: number) => {
     if (!mountedRef.current) return;
+    updateLivenessProgress();
 
     const tracker = trackerRef.current;
     const phase = phaseRef.current;
@@ -551,8 +638,7 @@ export function useLiveness({
 
       if (pos.isCentered && pos.isCorrectDistance) {
         positionStableRef.current++;
-        // Need ~25 stable frames (~0.8s at 30fps)
-        if (positionStableRef.current > 25 && tracker) {
+        if (positionStableRef.current > POSITION_STABLE_FRAMES && tracker) {
           const current = tracker.current;
           if (current) {
             // Start recording when first challenge begins
@@ -713,7 +799,7 @@ export function useLiveness({
       if (pos.isCentered && pos.isCorrectDistance) {
         positionStableRef.current++;
         // Need ~15 stable frames (~0.5s) for a clear photo
-        if (positionStableRef.current > 15) {
+        if (positionStableRef.current > CAPTURE_STABLE_FRAMES) {
           doCapture();
         } else if (capturingGuidanceRef.current) {
           // Was showing "move closer" etc.; face is good now → back to hold-still.
@@ -878,5 +964,6 @@ export function useLiveness({
     flashColor,
     flashing,
     retry,
+    livenessProgressRef,
   };
 }

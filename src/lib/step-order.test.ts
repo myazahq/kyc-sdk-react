@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildStepOrder, getStepPosition, type StepOrderOptions } from './step-order';
-import { stepAfterCapture } from './post-capture';
+import { stepAfterCapture, stepAfterProofOfAddress } from './post-capture';
+import { stepBeforeLiveness } from './contact-steps';
 
 const individual = (over: Partial<StepOrderOptions> = {}): StepOrderOptions => ({
   isBusiness: false,
@@ -10,6 +11,7 @@ const individual = (over: Partial<StepOrderOptions> = {}): StepOrderOptions => (
   hasEmailVerification: false,
   hasPhoneVerification: false,
   hasPoa: false,
+  hasAddressCollection: false,
   hasQuestionnaire: false,
   ...over,
 });
@@ -118,5 +120,186 @@ describe('stepAfterCapture in a business flow', () => {
         questionnaire: { fields: [{ key: 'a', label: 'A', type: 'text' }] },
       }),
     ).toBe('submitted');
+  });
+});
+
+
+describe('address-collection step', () => {
+  it('expands to pin + review after Proof of Address, before the questionnaire', () => {
+    const order = buildStepOrder(
+      individual({ hasPoa: true, hasAddressCollection: true, hasQuestionnaire: true }),
+    );
+    const poa = order.indexOf('proof-of-address');
+    const address = order.indexOf('address-collection');
+    const review = order.indexOf('address-review');
+    const questionnaire = order.indexOf('questionnaire');
+    expect(address).toBe(poa + 1);
+    expect(review).toBe(address + 1);
+    expect(questionnaire).toBe(review + 1);
+  });
+
+  it('adds the search and entrance steps when the flow offers them', () => {
+    const order = buildStepOrder(
+      individual({
+        hasAddressCollection: true,
+        addressFlow: { search: true, entrance: true },
+      }),
+    );
+    expect(order.indexOf('address-search')).toBe(order.indexOf('address-collection') - 1);
+    expect(order.indexOf('address-entrance')).toBe(order.indexOf('address-collection') + 1);
+    expect(order.indexOf('address-review')).toBe(order.indexOf('address-entrance') + 1);
+  });
+
+  it('runs without PoA and is absent when disabled', () => {
+    expect(buildStepOrder(individual({ hasAddressCollection: true }))).toContain('address-collection');
+    expect(buildStepOrder(individual())).not.toContain('address-collection');
+  });
+
+  it('is reachable through the post-capture chain', () => {
+    expect(stepAfterCapture({ addressCollection: { enabled: true } })).toBe('address-collection');
+    // With a search backend on, entering the flow lands on SEARCH — routing
+    // straight to the pin step skipped it entirely, which shipped.
+    expect(
+      stepAfterCapture({
+        addressCollection: { enabled: true },
+        serverConfig: { addressSearch: true },
+      }),
+    ).toBe('address-search');
+    expect(
+      stepAfterCapture({ proofOfAddress: { enabled: true }, addressCollection: { enabled: true } }),
+    ).toBe('proof-of-address');
+    expect(stepAfterProofOfAddress({ addressCollection: { enabled: true } })).toBe('address-collection');
+    expect(stepAfterProofOfAddress({})).toBe('submitted');
+  });
+});
+
+describe('scoped flows', () => {
+  it('has no identity steps at all', () => {
+    const order = buildStepOrder(
+      individual({
+        scope: 'address',
+        hasAddressCollection: true,
+        addressFlow: { search: true, entrance: true },
+      }),
+    );
+    expect(order).toEqual([
+      'consent',
+      'address-search',
+      'address-collection',
+      'address-entrance',
+      'address-review',
+      'submitted',
+    ]);
+  });
+
+  it('keeps the identity-free companions in their usual order', () => {
+    const order = buildStepOrder(
+      individual({
+        scope: 'address',
+        hasAddressCollection: true,
+        hasEmailVerification: true,
+        hasPhoneVerification: true,
+        hasPoa: true,
+        hasQuestionnaire: true,
+      }),
+    );
+    expect(order).toEqual([
+      'consent',
+      'email-verification',
+      'phone-verification',
+      'proof-of-address',
+      'address-collection',
+      'address-review',
+      'questionnaire',
+      'submitted',
+    ]);
+    // Nothing about identity survives the branch.
+    for (const step of ['id-type', 'id-input', 'document-capture', 'liveness', 'country-select']) {
+      expect(order).not.toContain(step);
+    }
+  });
+});
+
+describe('the other scopes', () => {
+  it('biometric scopes run only the liveness capture (plus companions)', () => {
+    for (const scope of ['biometric-authentication', 'biometric-enrollment'] as const) {
+      const order = buildStepOrder(individual({ scope, hasEmailVerification: true, hasQuestionnaire: true }));
+      expect(order).toEqual(['consent', 'email-verification', 'liveness', 'questionnaire', 'submitted']);
+    }
+  });
+
+  it('questionnaire scope is the questionnaire alone', () => {
+    expect(buildStepOrder(individual({ scope: 'questionnaire', hasQuestionnaire: true }))).toEqual([
+      'consent',
+      'questionnaire',
+      'submitted',
+    ]);
+  });
+
+  it('contact scope is the codes alone', () => {
+    expect(
+      buildStepOrder(individual({ scope: 'contact', hasEmailVerification: true, hasPhoneVerification: true })),
+    ).toEqual(['consent', 'email-verification', 'phone-verification', 'submitted']);
+  });
+});
+
+// Back from liveness must land on whatever the flow actually put before it.
+// The step used to hard-code the evidence step, which is right for a full flow
+// and wrong for every face-scoped one: a biometric re-authentication went back
+// to "Enter your ID Number", a screen its workflow does not contain.
+describe('stepBeforeLiveness', () => {
+  const base: StepOrderOptions = {
+    isBusiness: false,
+    hasDocCapture: false,
+    hasLiveness: true,
+    hasCountrySelect: false,
+    hasEmailVerification: false,
+    hasPhoneVerification: false,
+    hasPoa: false,
+    hasAddressCollection: false,
+    hasQuestionnaire: false,
+  };
+  const before = (steps: readonly string[]) => steps[steps.indexOf('liveness') - 1];
+  const on = { enabled: true } as never;
+
+  for (const scope of ['biometric-authentication', 'biometric-enrollment'] as const) {
+    it(`${scope}: agrees with the built order, with and without contact codes`, () => {
+      expect(stepBeforeLiveness({ scope }, 'id-input')).toBe('consent');
+      expect(before(buildStepOrder({ ...base, scope }))).toBe('consent');
+
+      expect(stepBeforeLiveness({ scope, emailVerification: on }, 'id-input')).toBe(
+        'email-verification',
+      );
+      expect(before(buildStepOrder({ ...base, scope, hasEmailVerification: true }))).toBe(
+        'email-verification',
+      );
+
+      expect(
+        stepBeforeLiveness({ scope, emailVerification: on, phoneVerification: on }, 'id-input'),
+      ).toBe('phone-verification');
+      expect(
+        before(
+          buildStepOrder({ ...base, scope, hasEmailVerification: true, hasPhoneVerification: true }),
+        ),
+      ).toBe('phone-verification');
+    });
+
+    it(`${scope}: never lands on an identity step`, () => {
+      expect(stepBeforeLiveness({ scope }, 'document-capture')).not.toBe('document-capture');
+      expect(stepBeforeLiveness({ scope }, 'id-input')).not.toBe('id-input');
+    });
+  }
+
+  it('a full flow goes back to the evidence step it just walked', () => {
+    expect(stepBeforeLiveness({}, 'id-input')).toBe('id-input');
+    expect(stepBeforeLiveness({}, 'document-capture')).toBe('document-capture');
+    expect(before(buildStepOrder(base))).toBe('id-input');
+    expect(before(buildStepOrder({ ...base, hasDocCapture: true }))).toBe('document-capture');
+  });
+
+  it('ignores contact codes on a full flow — the evidence step sits between them and liveness', () => {
+    expect(stepBeforeLiveness({ emailVerification: on, phoneVerification: on }, 'id-input')).toBe(
+      'id-input',
+    );
   });
 });

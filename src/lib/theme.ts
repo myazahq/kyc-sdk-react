@@ -62,3 +62,14 @@ export function buildThemeVars(appearance?: KYCAppearance, isDark = false): CSSP
 
   return vars as CSSProperties;
 }
+
+/**
+ * The modal backdrop colour for the ACTIVE theme (dark block overrides, same
+ * merge as the vars). Returned as a value, not a CSS var: the overlay is a
+ * portal sibling of the themed content, so inline vars never reach it.
+ */
+export function resolveOverlayColor(appearance?: KYCAppearance, isDark = false): string | undefined {
+  if (!appearance) return undefined;
+  const merged = isDark && appearance.dark ? { ...appearance, ...appearance.dark } : appearance;
+  return merged.overlayColor || undefined;
+}

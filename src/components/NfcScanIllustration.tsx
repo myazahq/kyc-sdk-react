@@ -80,20 +80,6 @@ export function NfcScanIllustration() {
         // this is, so a screen reader gains nothing from a description of it.
         aria-hidden
       >
-        <defs>
-          {/* The field falls off with distance, which is the whole reason the
-              document has to be held CLOSE. A gradient says that without a
-              caption. */}
-          <radialGradient id="kyc-nfc-field" cx="0" cy="0" r="1"
-            gradientUnits="userSpaceOnUse"
-            gradientTransform={`translate(${COUPLING.x} ${COUPLING.y}) scale(90)`}
-          >
-            <stop stopColor="currentColor" stopOpacity="0.18" />
-            <stop offset="0.55" stopColor="currentColor" stopOpacity="0.06" />
-            <stop offset="1" stopColor="currentColor" stopOpacity="0" />
-          </radialGradient>
-        </defs>
-
         {/* ── The document, tucked BEHIND the phone ─────────────────────────
             THREE elements and nothing else: a portrait (this document is about
             a PERSON), the chip (the thing being read), and the MRZ (which
@@ -188,7 +174,12 @@ export function NfcScanIllustration() {
             decal on either one. The glow washing onto the screen's edge is the
             phone "sensing" it. */}
         <g className="text-primary">
-          <circle cx={COUPLING.x} cy={COUPLING.y} r="90" fill="url(#kyc-nfc-field)" />
+          {/* The field falls off with distance — the reason the document has
+              to be held CLOSE. Said as flat concentric steps (no gradients in
+              the flow, house rule 2026-08-29). */}
+          <circle cx={COUPLING.x} cy={COUPLING.y} r="90" fill="currentColor" fillOpacity="0.04" />
+          <circle cx={COUPLING.x} cy={COUPLING.y} r="56" fill="currentColor" fillOpacity="0.07" />
+          <circle cx={COUPLING.x} cy={COUPLING.y} r="28" fill="currentColor" fillOpacity="0.12" />
           <g stroke="currentColor" strokeWidth="3.25" strokeLinecap="round" fill="none">
             <circle cx={COUPLING.x} cy={COUPLING.y} r="4.5" fill="currentColor" stroke="none" />
             {WAVES.map((w) => (

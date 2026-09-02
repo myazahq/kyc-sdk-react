@@ -13,6 +13,9 @@ import { applyResubmitSteps, type ResubmitConfig } from './resubmit';
 
 export interface StepOrderOptions {
   isBusiness: boolean;
+  /** Scoped flows: no identity section — each scope's headline step is the
+   *  flow (see lib/scope.ts). */
+  scope?: import('./scope').WorkflowScope | null;
   /** Business (KYB) configuration — drives the application-section steps. */
   business?: WorkflowBusinessConfig;
   hasDocCapture: boolean;
@@ -21,6 +24,14 @@ export interface StepOrderOptions {
   hasEmailVerification: boolean;
   hasPhoneVerification: boolean;
   hasPoa: boolean;
+  hasAddressCollection: boolean;
+  /**
+   * Which of the address flow's optional steps exist on THIS mount (individual
+   * flows only; KYB keeps the single premises step). Absent = pin + review.
+   * Search depends on the server config, entrance on capture modes + the
+   * in-document Google key — both known at mount, both stable within it.
+   */
+  addressFlow?: { search: boolean; entrance: boolean };
   hasQuestionnaire: boolean;
   /**
    * A reviewer sent this back to redo specific steps.
@@ -97,7 +108,7 @@ function fullStepOrder(o: StepOrderOptions): KYCStep[] {
     const steps: KYCStep[] = [
       'consent',
       ...contactSteps(o),
-      ...businessSectionSteps(o.business, o.hasQuestionnaire),
+      ...businessSectionSteps(o.business, o.hasQuestionnaire, o.hasAddressCollection),
     ];
     if (hasApplicantVerification(o.business)) {
       steps.push('id-type', o.hasDocCapture ? 'document-capture' : 'id-input');
@@ -106,9 +117,39 @@ function fullStepOrder(o: StepOrderOptions): KYCStep[] {
     steps.push('submitted');
     return steps;
   }
+  // Scoped flows: the scope's headline section IS the flow.
+  if (o.scope === 'address') {
+    const steps: KYCStep[] = ['consent', ...contactSteps(o)];
+    if (o.hasPoa) steps.push('proof-of-address');
+    if (o.addressFlow?.search) steps.push('address-search');
+    steps.push('address-collection');
+    if (o.addressFlow?.entrance) steps.push('address-entrance');
+    steps.push('address-review');
+    if (o.hasQuestionnaire) steps.push('questionnaire');
+    steps.push('submitted');
+    return steps;
+  }
+  if (o.scope === 'biometric-authentication' || o.scope === 'biometric-enrollment') {
+    const steps: KYCStep[] = ['consent', ...contactSteps(o), 'liveness'];
+    if (o.hasQuestionnaire) steps.push('questionnaire');
+    steps.push('submitted');
+    return steps;
+  }
+  if (o.scope === 'questionnaire') {
+    return ['consent', ...contactSteps(o), 'questionnaire', 'submitted'];
+  }
+  if (o.scope === 'contact') {
+    return ['consent', ...contactSteps(o), 'submitted'];
+  }
   const middle: KYCStep[] = [o.hasDocCapture ? 'document-capture' : 'id-input'];
   if (o.hasLiveness) middle.push('liveness');
   if (o.hasPoa) middle.push('proof-of-address');
+  if (o.hasAddressCollection) {
+    if (o.addressFlow?.search) middle.push('address-search');
+    middle.push('address-collection');
+    if (o.addressFlow?.entrance) middle.push('address-entrance');
+    middle.push('address-review');
+  }
   if (o.hasQuestionnaire) middle.push('questionnaire');
   return [
     'consent',

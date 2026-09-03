@@ -262,6 +262,7 @@ export function KYCModal({ open, onClose, showThemeToggle, disableClose, fullScr
         serverSearch: Boolean(config.serverConfig?.addressSearch),
         previewMode: Boolean(config.previewMode),
         hasGoogleKey: Boolean(config.serverConfig?.googleMapsBrowserKey),
+        hasStreetViewFrame: Boolean(config.serverConfig?.mapsFrameUrl),
       });
       return { search: flow.searchAvailable, entrance: flow.photoMode !== 'off' || flow.streetViewOffered };
     })(),

@@ -1,9 +1,13 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Loader2, MapPin, Search } from 'lucide-react';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
+import { DropdownSurface } from './DropdownSurface';
+import { eventPathIncludes } from '../lib/event-path';
+import { useDropdownAnchor } from '../lib/use-dropdown-anchor';
 import { useKYCConfig } from '../context/KYCConfigContext';
 import type { AddressSearchHit } from '../services/api';
 
@@ -14,6 +18,10 @@ import type { AddressSearchHit } from '../services/api';
 // autocomplete, and the CAC rule applies: spend the request on the query the
 // person meant. Dragging the pin always works; this is a shortcut, never a
 // gate, so every failure degrades to "place the pin by hand".
+//
+// The results panel rides the house dropdown mechanics (MyazaSelect's):
+// portaled out of the dialog, fixed to viewport coordinates, so it floats
+// over everything instead of being clipped by the step body's overflow.
 
 export function AddressSearchBox({
   country,
@@ -26,6 +34,28 @@ export function AddressSearchBox({
   const [query, setQuery] = useState('');
   const [searching, setSearching] = useState(false);
   const [results, setResults] = useState<AddressSearchHit[] | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const anchor = useDropdownAnchor(results != null, rootRef, { width: 'trigger', menuRef });
+
+  // A floating panel needs real dismissal: outside click (composedPath-based,
+  // the shadow-frame rule; the portaled menu needs its own test) or Escape.
+  useEffect(() => {
+    if (!results) return;
+    const onPointer = (e: Event) => {
+      if (eventPathIncludes(e, rootRef.current, menuRef.current)) return;
+      setResults(null);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setResults(null);
+    };
+    document.addEventListener('pointerdown', onPointer);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onPointer);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [results != null]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const search = async () => {
     const q = query.trim();
@@ -42,7 +72,7 @@ export function AddressSearchBox({
   };
 
   return (
-    <div className="space-y-2">
+    <div ref={rootRef} className="relative space-y-2">
       <div className="flex gap-2">
         <Input
           value={query}
@@ -68,30 +98,38 @@ export function AddressSearchBox({
         </Button>
       </div>
 
-      {results && (
-        <div className="overflow-hidden rounded-xl border border-border">
-          {results.length === 0 ? (
-            <p className="px-3 py-2.5 text-sm text-muted-foreground">
-              No matches. Drag the map to place the pin instead.
-            </p>
-          ) : (
-            results.map((hit, i) => (
-              <button
-                key={`${hit.lat},${hit.lng},${i}`}
-                type="button"
-                onClick={() => {
-                  setResults(null);
-                  setQuery('');
-                  onPick(hit);
-                }}
-                className="flex w-full items-start gap-2 border-b border-border/60 px-3 py-2.5 text-left transition-colors last:border-b-0 hover:bg-muted/50"
-              >
-                <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                <span className="text-sm leading-snug">{hit.label}</span>
-              </button>
-            ))
-          )}
-        </div>
+      {results && anchor.host && createPortal(
+        <DropdownSurface menuRef={menuRef}>
+          <div
+            style={anchor.style}
+            className="z-50 overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-lg animate-slide-up"
+          >
+            <div className="overflow-y-auto overscroll-contain" style={{ maxHeight: anchor.maxHeight }}>
+              {results.length === 0 ? (
+                <p className="px-3 py-2.5 text-sm text-muted-foreground">
+                  No matches. Drag the map to place the pin instead.
+                </p>
+              ) : (
+                results.map((hit, i) => (
+                  <button
+                    key={`${hit.lat},${hit.lng},${i}`}
+                    type="button"
+                    onClick={() => {
+                      setResults(null);
+                      setQuery('');
+                      onPick(hit);
+                    }}
+                    className="flex w-full items-start gap-2 border-b border-border/60 px-3 py-2.5 text-left transition-colors last:border-b-0 hover:bg-muted/50"
+                  >
+                    <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                    <span className="text-sm leading-snug">{hit.label}</span>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        </DropdownSurface>,
+        anchor.host,
       )}
     </div>
   );

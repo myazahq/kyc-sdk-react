@@ -10,11 +10,20 @@ import { cn } from '../../lib/utils';
  * single-open accordion — the grid-rows technique, since native <details>
  * cannot animate height. Split from AddressIntroGate per the 200-line rule.
  */
-const DISCLOSURES: Array<{ Icon: typeof HelpCircle; title: string; body: string }> = [
+const HOW_IT_WORKS = {
+  foreground:
+    'After you finish, your device periodically confirms it is at this address over the coming days. Only day-level summaries ever leave your phone, never your movements.',
+  background:
+    'After you finish, your phone confirms it is at this address over the coming days, even when the app is closed. Only day-level summaries ever leave your phone, never your movements.',
+} as const;
+
+const disclosuresFor = (
+  background: boolean,
+): Array<{ Icon: typeof HelpCircle; title: string; body: string }> => [
   {
     Icon: HelpCircle,
     title: 'How it works',
-    body: 'After you finish, your device periodically confirms it is at this address over the coming days. Only day-level summaries ever leave your phone, never your movements.',
+    body: background ? HOW_IT_WORKS.background : HOW_IT_WORKS.foreground,
   },
   {
     Icon: SlidersHorizontal,
@@ -28,8 +37,14 @@ const DISCLOSURES: Array<{ Icon: typeof HelpCircle; title: string; body: string 
   },
 ];
 
-export function IntroDisclosures() {
+export function IntroDisclosures({
+  background = false,
+}: {
+  /** The workflow opts into OS geofencing: the copy says the app can be closed. */
+  background?: boolean;
+}) {
   const [openIdx, setOpenIdx] = useState<number | null>(null);
+  const DISCLOSURES = disclosuresFor(background);
   return (
     <div className="overflow-hidden rounded-xl border border-border/60">
       {DISCLOSURES.map(({ Icon, title, body }, i) => {

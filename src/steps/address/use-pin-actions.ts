@@ -7,6 +7,8 @@ import type { KYCConfigValue } from '../../context/KYCConfigContext';
 import { pickedAddressState } from '../address-helpers';
 import { KEEP_PICKED_LABEL_RADIUS_M, metersBetween } from './flow-steps';
 import { currentFix, locating, prefetchCurrentFix, type CurrentFix } from './current-location';
+import { configScope } from '../../lib/scope';
+import type { AddressParts } from '../../services/api';
 
 // The pin's mechanics — labelling, the shared current-location fix, and every
 // way the pin can move — extracted from use-address-flow.ts (200-line rule).
@@ -55,25 +57,44 @@ export function usePinActions({ config, state, dispatch, setError }: PinActionDe
               ...(r.parts?.street ? { street: undefined } : {}),
             },
           });
-          // The pin's own country outranks a locale/IP GUESS: on a local dev
-          // box the geo default falls back to the browser locale (en-US ->
-          // US) while the pin sits in Nigeria, and the declaration drives the
-          // search filter, the PoA market and the submission's country. An
-          // explicit pick is never overridden, and the org's accepted list
-          // still gates it like the geo default.
-          const pinCountry = r.parts?.country?.toUpperCase();
-          if (
-            pinCountry &&
-            stateRef.current.countryAutoPicked &&
-            pinCountry !== stateRef.current.selectedCountry &&
-            (!config.proofOfAddress?.countries?.length ||
-              config.proofOfAddress.countries.some((c) => c.toUpperCase() === pinCountry))
-          ) {
-            dispatch({ type: 'SET_COUNTRY_AUTO', payload: pinCountry as never });
-          }
+          adoptGeocodedCountry(r.parts);
         })
         .catch(() => undefined);
     }, delay);
+  };
+
+  // GEOCODED EVIDENCE outranks every GUESS about the declared country: a
+  // reverse-geocoded pin or current-location fix says where the person
+  // actually is, while the defaults (IP geo, or nothing — leaving the
+  // workflow's configured market) are inferences. The rule that bit: on a
+  // local dev box the declaration once fell back to the browser LOCALE
+  // (en-US -> US) while the device sat in Calabar, and the search returned
+  // California — so the fix's own geocode now corrects the guess the moment
+  // it resolves. An explicit pick is never overridden; the org's accepted
+  // list still gates like the geo default; and outside the address scope a
+  // bare (never-guessed) country is left alone — there `selectedCountry` is
+  // the ID-verification country choice, not an address declaration.
+  const adoptGeocodedCountry = (
+    parts: AddressParts | null | undefined,
+    opts?: {
+      /**
+       * The country came from an address the applicant PICKED — their own
+       * act, not a geocoder's opinion — so it replaces even an explicit
+       * dropdown choice (the address is the newer, more specific statement)
+       * and is recorded as an explicit pick, which later reverse-geocode
+       * guesses then respect.
+       */
+      explicit?: boolean;
+    },
+  ) => {
+    const c = parts?.country?.toUpperCase();
+    if (!c || !/^[A-Z]{2}$/.test(c)) return;
+    const s = stateRef.current;
+    const guessed = s.countryAutoPicked || (!s.selectedCountry && configScope(config) === 'address');
+    if (!(opts?.explicit || guessed) || c === s.selectedCountry) return;
+    const accepted = config.proofOfAddress?.countries;
+    if (accepted?.length && !accepted.some((x) => x.toUpperCase() === c)) return;
+    dispatch({ type: opts?.explicit ? 'SET_COUNTRY' : 'SET_COUNTRY_AUTO', payload: c as never });
   };
   useEffect(() => () => {
     if (reverseTimer.current) window.clearTimeout(reverseTimer.current);
@@ -89,8 +110,16 @@ export function usePinActions({ config, state, dispatch, setError }: PinActionDe
     void prefetchCurrentFix(config.api, config.previewMode).then((f) => {
       setFix(f);
       setFixPending(false);
+      adoptGeocodedCountry(f?.parts);
     });
   };
+  // The fix may have resolved on an earlier step (it is module-level) — a
+  // guessed declaration is corrected on this mount too, not only when the
+  // prefetch happens to finish here.
+  useEffect(() => {
+    adoptGeocodedCountry(currentFix()?.parts);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /** Land the pin on the current fix — instant when the prefetch already
    *  resolved; otherwise awaits it (starting it if needed). */
@@ -212,6 +241,7 @@ export function usePinActions({ config, state, dispatch, setError }: PinActionDe
   };
 
   return {
+    adoptGeocodedCountry,
     currentFix: fix,
     locating: fixPending,
     startPrefetch,

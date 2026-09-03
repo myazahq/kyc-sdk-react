@@ -1,6 +1,7 @@
 'use client';
 
 import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Loader2 } from 'lucide-react';
 import { KYCProvider, useKYCContext } from './context/KYCContext';
 
 // Bearer prefix a hosted mount authenticates with (mirrors kyc-core's
@@ -544,9 +545,19 @@ function WorkflowGate(props: KYCInnerProps) {
     // Keep the trigger visible (disabled) while the flow loads so the page
     // doesn't jump; auto-open surfaces render nothing until ready.
     if (defaultOpen) return null;
-    const { children, style } = props;
+    // `className` has to come along, or the placeholder is not the same button:
+    // a consumer's `w-full` (or any sizing) is dropped and it collapses to its
+    // content width, then snaps back to full width once the flow resolves —
+    // the exact jump this branch exists to prevent.
+    const { children, className, style } = props;
     return (
-      <Button disabled style={{ ...buildThemeVars(appearance), ...style }}>
+      <Button
+        disabled
+        aria-busy
+        className={className}
+        style={{ ...buildThemeVars(appearance), ...style }}
+      >
+        <Loader2 className="mr-2 h-4 w-4 shrink-0 animate-spin" aria-hidden />
         {children ?? (appearance?.companyName ? `Verify with ${appearance.companyName}` : 'Verify Identity')}
       </Button>
     );
@@ -578,6 +589,10 @@ function WorkflowGate(props: KYCInnerProps) {
         idTypes: state.flow.idTypes,
         environment: state.flow.environment,
         branding: state.flow.branding,
+        geoCountry: state.flow.geoCountry,
+        addressSearch: state.flow.addressSearch,
+        addressSearchMode: state.flow.addressSearchMode,
+        mapsFrameUrl: state.flow.mapsFrameUrl,
       }}
     />
   );

@@ -77,3 +77,68 @@ export function parseMapFrameMessage(data: unknown): MapFrameMessage | null {
 export function centerMessage(pin: LatLng): Record<string, unknown> {
   return { source: MAP_PARENT_SOURCE, type: 'center', lat: pin.lat, lng: pin.lng, zoom: 16 };
 }
+
+// ── The framed STREET VIEW page (embeds' entrance framing) ──────────────────
+//
+// Same origin, same grant, sibling page: /embed/street-view lives beside
+// /embed/map and the grant unlocks the key for either, so the SDK DERIVES its
+// URL from the server-minted mapsFrameUrl by swapping the path — the two
+// pages ship together with this SDK, and the coupling is recorded on both
+// sides. The page is deliberately dumb: it renders the panorama and streams
+// the current view (`sv-pov`); the framing chrome, the frame-subtended fov
+// maths and the capture decision all stay in the SDK.
+//
+//   page -> parent: { source: 'myaza-map', type: 'sv-ready' | 'sv-unavailable' }
+//                   { source: 'myaza-map', type: 'sv-pov', panoId, heading, pitch, viewFov }
+
+/** The street-view page's URL derived from the map frame's, or null when the
+ *  frame URL is not the page family this SDK knows. */
+export function streetViewFrameUrlOf(mapsFrameUrl: string): string | null {
+  try {
+    const url = new URL(mapsFrameUrl);
+    if (!url.pathname.endsWith('/embed/map')) return null;
+    url.pathname = url.pathname.replace(/\/embed\/map$/, '/embed/street-view');
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+/** The full iframe src: derived page URL (carrying the signed grant) plus the
+ *  render-time parameters — the pin the panorama should look from. */
+export function buildStreetViewFrameSrc(
+  frameUrl: string,
+  opts: { parentOrigin: string; pin: LatLng; theme?: 'light' | 'dark' },
+): string {
+  const url = new URL(frameUrl);
+  url.searchParams.set('origin', opts.parentOrigin);
+  url.searchParams.set('lat', String(opts.pin.lat));
+  url.searchParams.set('lng', String(opts.pin.lng));
+  if (opts.theme) url.searchParams.set('theme', opts.theme);
+  return url.toString();
+}
+
+export type StreetViewFrameMessage =
+  | { type: 'sv-ready' }
+  | { type: 'sv-unavailable' }
+  | { type: 'sv-pov'; panoId: string; heading: number; pitch: number; viewFov: number };
+
+/** Validate-and-drop for the street-view page's messages. */
+export function parseStreetViewFrameMessage(data: unknown): StreetViewFrameMessage | null {
+  if (!data || typeof data !== 'object') return null;
+  const msg = data as Record<string, unknown>;
+  if (msg.source !== MAP_FRAME_SOURCE) return null;
+  if (msg.type === 'sv-ready') return { type: 'sv-ready' };
+  if (msg.type === 'sv-unavailable') return { type: 'sv-unavailable' };
+  if (
+    msg.type === 'sv-pov' &&
+    typeof msg.panoId === 'string' &&
+    msg.panoId.length > 0 &&
+    finite(msg.heading) &&
+    finite(msg.pitch) &&
+    finite(msg.viewFov)
+  ) {
+    return { type: 'sv-pov', panoId: msg.panoId, heading: msg.heading, pitch: msg.pitch, viewFov: msg.viewFov };
+  }
+  return null;
+}

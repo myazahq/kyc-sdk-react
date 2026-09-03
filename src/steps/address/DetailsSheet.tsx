@@ -6,7 +6,9 @@ import { Drawer, DrawerContent, DrawerTitle } from '../../components/ui/drawer';
 import { Button } from '../../components/ui/button';
 import { cn } from '../../lib/utils';
 import { AddressDirectionsField } from '../../components/AddressPropertyFields';
-import { CountryRow, Field, SectionHeading, type DetailPatch, type DetailValues } from './DetailsSheetFields';
+import { AreaFields, Field, SectionHeading, type DetailPatch, type DetailValues } from './DetailsSheetFields';
+import { addressFieldModes, type AddressFieldKey, type AddressFieldMode } from './address-field-modes';
+import type { AddressCollectionConfig } from '../../types/config';
 import type { KYCState } from '../../context/types';
 
 /**
@@ -26,6 +28,7 @@ export function DetailsSheet({
   parts,
   country,
   directionsRequired,
+  addressConfig,
   values,
   disabled,
   onChange,
@@ -38,6 +41,9 @@ export function DetailsSheet({
   /** The flow's ISO-2 country (read-only: a verification fact, not a field). */
   country: string | null;
   directionsRequired: boolean;
+  /** The workflow's address block — per-field modes ('off' hides a field,
+   *  'required' marks it and holds the pin step's Continue). */
+  addressConfig?: AddressCollectionConfig;
   values: DetailValues;
   disabled?: boolean;
   onChange: (patch: DetailPatch) => void;
@@ -49,6 +55,11 @@ export function DetailsSheet({
       : 'bottom',
   );
   if (!open) return null;
+
+  const modes = addressFieldModes(addressConfig);
+  const on = (key: AddressFieldKey) => modes[key] !== 'off';
+  const req = (key: AddressFieldKey) => modes[key] === 'required';
+  const anyRequired = Object.values(modes).some((m: AddressFieldMode) => m === 'required');
 
   // Typed wins (a cleared field STAYS cleared); the map's answer fills the
   // gap only while the applicant has never touched the field.
@@ -71,8 +82,9 @@ export function DetailsSheet({
             </button>
           </div>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Correct anything the map got wrong. Every field is optional, and it all helps
-            someone find the door.
+            {anyRequired
+              ? 'Correct anything the map got wrong. Fields marked * are required.'
+              : 'Correct anything the map got wrong. Every field is optional, and it all helps someone find the door.'}
           </p>
         </div>
 
@@ -85,44 +97,56 @@ export function DetailsSheet({
           <div className="space-y-3">
             <SectionHeading>Street and building</SectionHeading>
             <div className="grid grid-cols-2 gap-3">
-              <Field
-                id="address-house-no"
-                label="Number"
-                value={values.propertyNumber}
-                placeholder="e.g. 11"
-                maxLength={20}
-                disabled={disabled}
-                onChange={(v) => onChange({ propertyNumber: v })}
-              />
-              <Field
-                id="address-street"
-                label="Street name"
-                value={shown(values.street, parts?.street)}
-                placeholder="e.g. Awolowo Road"
-                maxLength={120}
-                disabled={disabled}
-                onChange={(v) => onChange({ street: v })}
-              />
+              {on('propertyNumber') && (
+                <Field
+                  id="address-house-no"
+                  label="Number"
+                  value={values.propertyNumber}
+                  placeholder="e.g. 11"
+                  maxLength={20}
+                  disabled={disabled}
+                  required={req('propertyNumber')}
+                  onChange={(v) => onChange({ propertyNumber: v })}
+                />
+              )}
+              {on('street') && (
+                <Field
+                  id="address-street"
+                  label="Street name"
+                  value={shown(values.street, parts?.street)}
+                  placeholder="e.g. Awolowo Road"
+                  maxLength={120}
+                  disabled={disabled}
+                  required={req('street')}
+                  onChange={(v) => onChange({ street: v })}
+                />
+              )}
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <Field
-                id="address-unit"
-                label="Unit"
-                value={values.unit ?? ''}
-                placeholder="e.g. Flat 4"
-                maxLength={30}
-                disabled={disabled}
-                onChange={(v) => onChange({ unit: v })}
-              />
-              <Field
-                id="address-building"
-                label="Building name"
-                value={values.propertyName}
-                placeholder="e.g. Sunrise Villa"
-                maxLength={80}
-                disabled={disabled}
-                onChange={(v) => onChange({ propertyName: v })}
-              />
+              {on('unit') && (
+                <Field
+                  id="address-unit"
+                  label="Unit"
+                  value={values.unit ?? ''}
+                  placeholder="e.g. Flat 4"
+                  maxLength={30}
+                  disabled={disabled}
+                  required={req('unit')}
+                  onChange={(v) => onChange({ unit: v })}
+                />
+              )}
+              {on('propertyName') && (
+                <Field
+                  id="address-building"
+                  label="Building name"
+                  value={values.propertyName}
+                  placeholder="e.g. Sunrise Villa"
+                  maxLength={80}
+                  disabled={disabled}
+                  required={req('propertyName')}
+                  onChange={(v) => onChange({ propertyName: v })}
+                />
+              )}
             </div>
             <AddressDirectionsField
               isBusiness={isBusiness}
@@ -133,50 +157,15 @@ export function DetailsSheet({
             />
           </div>
 
-          <div className="space-y-3">
-            <SectionHeading>Area and region</SectionHeading>
-            <Field
-              id="address-neighbourhood"
-              label="Neighbourhood"
-              value={shown(values.neighbourhood, parts?.area)}
-              placeholder="e.g. Idim Ita"
-              maxLength={80}
-              disabled={disabled}
-              onChange={(v) => onChange({ neighbourhood: v })}
-            />
-            <div className="grid grid-cols-2 gap-3">
-              <Field
-                id="address-city"
-                label="City"
-                value={shown(values.city, parts?.city)}
-                placeholder="e.g. Calabar"
-                maxLength={80}
-                disabled={disabled}
-                onChange={(v) => onChange({ city: v })}
-              />
-              <Field
-                id="address-state"
-                label="State"
-                value={shown(values.state, parts?.state)}
-                placeholder="e.g. Cross River"
-                maxLength={80}
-                disabled={disabled}
-                onChange={(v) => onChange({ state: v })}
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <Field
-                id="address-postcode"
-                label="Area code"
-                value={shown(values.postcode, parts?.postcode)}
-                placeholder="e.g. 540281"
-                maxLength={12}
-                disabled={disabled}
-                onChange={(v) => onChange({ postcode: v })}
-              />
-              <CountryRow country={country} />
-            </div>
-          </div>
+          <AreaFields
+            modes={modes}
+            values={values}
+            parts={parts}
+            shown={shown}
+            country={country}
+            disabled={disabled}
+            onChange={onChange}
+          />
         </div>
 
         <div className="px-4 pb-6 pt-2 sm:px-6">

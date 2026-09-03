@@ -12,6 +12,7 @@ import { DetailsSheet } from './address/DetailsSheet';
 import { CurrentLocationRow, LocateFab } from './address/CurrentLocationRow';
 import { LabelDecisionRow } from './address/LabelDecisionRow';
 import { displayAddressLine, shouldAskLabelDecision } from './address/flow-steps';
+import { ADDRESS_FIELD_LABELS, missingRequiredAddressFields } from './address/address-field-modes';
 
 /**
  * The PIN step of the address flow (wire name 'address-collection'): a big
@@ -72,7 +73,17 @@ export function AddressCollectionStep() {
   ].filter((v) => v?.trim()).length;
   const lastInFlow = flow.isBusiness;
 
+  // Workflow-required details hold Continue until they are filled — and open
+  // the sheet on the missing fields rather than pointing at a closed drawer.
+  const missingRequired = missingRequiredAddressFields(flow.address, state.address ?? null);
+  const [missingNudge, setMissingNudge] = useState(false);
+
   const handleContinue = () => {
+    if (missingRequired.length > 0) {
+      setMissingNudge(true);
+      setSheetOpen(true);
+      return;
+    }
     if (lastInFlow) void flow.confirm();
     else flow.goNext('address-collection');
   };
@@ -129,6 +140,11 @@ export function AddressCollectionStep() {
       )}
 
       {flow.error && <p className="text-sm text-destructive">{flow.error}</p>}
+      {missingNudge && missingRequired.length > 0 && (
+        <p className="text-sm text-destructive">
+          This flow needs: {missingRequired.map((k) => ADDRESS_FIELD_LABELS[k].toLowerCase()).join(', ')}.
+        </p>
+      )}
 
       <Button
         onClick={handleContinue}
@@ -154,6 +170,7 @@ export function AddressCollectionStep() {
         parts={state.address?.parts ?? null}
         country={flow.country ?? null}
         directionsRequired={flow.address?.directions === 'required'}
+        addressConfig={flow.address}
         values={{
           propertyNumber: state.address?.propertyNumber ?? '',
           street: state.address?.street,

@@ -7,17 +7,30 @@ import { AddressPhotoUpload } from '../../components/AddressPhotoUpload';
 import { useKYCContext } from '../../context/KYCContext';
 import { useAddressFlow } from './use-address-flow';
 import { StreetViewFramer } from './StreetViewFramer';
+import { FramedStreetView } from './FramedStreetView';
+import { streetViewFrameUrlOf } from '../../lib/map-frame';
+import { Landmark } from 'lucide-react';
 
 /**
  * The entrance step: Street View FIRST — it opens automatically wherever
  * Google has photographed the street, because framing beats fumbling for a
  * camera — and the applicant's own photo is the fallback (no coverage, or
- * they skip). Capturing a frame advances straight to review.
+ * they skip). Capturing a frame advances straight to review. Hosted pages
+ * hold the browser key and render the panorama in-document; embedded mounts
+ * ride the framed /embed/street-view page (same chrome, same capture).
  */
 export function AddressEntranceStep() {
   const { state, dispatch } = useKYCContext();
   const flow = useAddressFlow();
-  const streetView = flow.streetViewOffered && Boolean(flow.googleKey) && Boolean(flow.pin);
+  const svFrameUrl = !flow.googleKey && flow.mapsFrameUrl ? streetViewFrameUrlOf(flow.mapsFrameUrl) : null;
+  const svRequired = flow.address?.streetView === 'required';
+  // The builder preview keeps the step real users get, on a static stand-in
+  // (the camera steps' placeholder rule): no Google loads from the builder.
+  const preview = flow.previewMode;
+  const streetView =
+    flow.streetViewOffered &&
+    Boolean(flow.pin) &&
+    (preview || Boolean(flow.googleKey) || Boolean(svFrameUrl));
   const [mode, setMode] = useState<'framing' | 'photo'>(() => (streetView ? 'framing' : 'photo'));
   const [skipped, setSkipped] = useState(false);
   const photoUploaded = Boolean(state.mediaIds.addressPhoto);
@@ -45,22 +58,69 @@ export function AddressEntranceStep() {
         onBack={() => flow.goBack('address-entrance')}
       />
 
-      {mode === 'framing' && flow.googleKey && flow.pin ? (
-        <StreetViewFramer
-          apiKey={flow.googleKey}
-          pin={flow.pin}
-          onCaptured={(frame) => {
-            if (state.address) {
-              dispatch({ type: 'SET_ADDRESS', payload: { ...state.address, streetView: frame } });
-            }
-            flow.goNext('address-entrance');
-          }}
-          onSkip={() => {
-            setSkipped(true);
-            setMode('photo');
-          }}
-          onUnavailable={() => setMode('photo')}
-        />
+      {mode === 'framing' && streetView && flow.pin ? (
+        preview ? (
+          <div className="space-y-3">
+            <div className="flex h-[52vh] min-h-[300px] w-full flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-border bg-muted/40 sm:h-[420px]">
+              <Landmark className="h-8 w-8 text-muted-foreground/60" />
+              <p className="max-w-[18rem] px-6 text-center text-xs text-muted-foreground">
+                Street View preview — applicants pan real street imagery to frame their entrance
+                here. It only loads for real users.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              {!svRequired && (
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setSkipped(true);
+                    setMode('photo');
+                  }}
+                  className="h-11 flex-1 rounded-xl"
+                >
+                  Skip
+                </Button>
+              )}
+              <Button onClick={() => flow.goNext('address-entrance')} className="h-11 flex-1 rounded-xl">
+                Use this view
+              </Button>
+            </div>
+          </div>
+        ) : flow.googleKey ? (
+          <StreetViewFramer
+            apiKey={flow.googleKey}
+            pin={flow.pin}
+            onCaptured={(frame) => {
+              if (state.address) {
+                dispatch({ type: 'SET_ADDRESS', payload: { ...state.address, streetView: frame } });
+              }
+              flow.goNext('address-entrance');
+            }}
+            onSkip={() => {
+              setSkipped(true);
+              setMode('photo');
+            }}
+            hideSkip={svRequired}
+            onUnavailable={() => setMode('photo')}
+          />
+        ) : (
+          <FramedStreetView
+            frameUrl={svFrameUrl!}
+            pin={flow.pin}
+            onCaptured={(frame) => {
+              if (state.address) {
+                dispatch({ type: 'SET_ADDRESS', payload: { ...state.address, streetView: frame } });
+              }
+              flow.goNext('address-entrance');
+            }}
+            onSkip={() => {
+              setSkipped(true);
+              setMode('photo');
+            }}
+            hideSkip={svRequired}
+            onUnavailable={() => setMode('photo')}
+          />
+        )
       ) : (
         <>
           {skipped && (

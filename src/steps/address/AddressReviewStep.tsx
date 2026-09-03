@@ -1,14 +1,16 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Camera, MapPin } from 'lucide-react';
 import { AddressMap } from '../../components/AddressMap';
 import { StepHeader } from '../../components/StepHeader';
 import { Button } from '../../components/ui/button';
 import { cn } from '../../lib/utils';
 import { useKYCContext } from '../../context/KYCContext';
+import { useKYCConfig } from '../../context/KYCConfigContext';
 import { useAddressFlow } from './use-address-flow';
 import { displayAddressLine } from './flow-steps';
+import { ADDRESS_FIELD_LABELS, missingRequiredAddressFields } from './address-field-modes';
 
 /**
  * The commit point, as ONE composed card: a clean summary map (no POI clutter,
@@ -19,6 +21,7 @@ import { displayAddressLine } from './flow-steps';
  */
 export function AddressReviewStep() {
   const { state, dispatch } = useKYCContext();
+  const config = useKYCConfig();
   const flow = useAddressFlow();
   const { pin } = flow;
 
@@ -33,12 +36,36 @@ export function AddressReviewStep() {
   const photoUploaded = Boolean(state.mediaIds.addressPhoto);
   const frame = state.address?.streetView ?? null;
 
+  // EMBEDDED mounts hold no browser key, so the thumbnail is fetched through
+  // the server (which holds one) and shown from an object URL — otherwise a
+  // frame captured via the framed page reviewed as nothing at all.
+  const [proxyThumb, setProxyThumb] = useState<string | null>(null);
+  useEffect(() => {
+    if (!frame || flow.googleKey || config.previewMode) {
+      setProxyThumb(null);
+      return;
+    }
+    let alive = true;
+    let url: string | null = null;
+    void config.api.addressStreetViewPreview(frame).then((blob) => {
+      if (!alive || !blob) return;
+      url = URL.createObjectURL(blob);
+      setProxyThumb(url);
+    });
+    return () => {
+      alive = false;
+      if (url) URL.revokeObjectURL(url);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [frame?.panoId, frame?.heading, frame?.pitch, frame?.fov, flow.googleKey]);
+
   // The framed entrance AS AN IMAGE: the browser key renders the exact framed
-  // Street View client-side (the server stores its own copy at processing).
+  // Street View client-side (the server stores its own copy at processing);
+  // keyless mounts use the server-fetched copy above.
   const frameThumb =
     frame && flow.googleKey
       ? `https://maps.googleapis.com/maps/api/streetview?size=240x240&pano=${encodeURIComponent(frame.panoId)}&heading=${frame.heading}&pitch=${frame.pitch}&fov=${frame.fov}&key=${encodeURIComponent(flow.googleKey)}`
-      : null;
+      : proxyThumb;
   const hero = photoPreview
     ? { src: photoPreview, alt: 'Entrance photo' }
     : frameThumb
@@ -48,6 +75,11 @@ export function AddressReviewStep() {
 
   const edit = (step: 'address-collection' | 'address-entrance') =>
     dispatch({ type: 'SET_STEP', payload: step });
+
+  // Backstop for a restored session landing straight here: required details
+  // must be filled before the address can be confirmed (the pin step is the
+  // primary gate).
+  const missingRequired = missingRequiredAddressFields(flow.address, state.address ?? null);
 
   return (
     <div className="space-y-4 animate-slide-up">
@@ -124,10 +156,18 @@ export function AddressReviewStep() {
       </div>
 
       {flow.error && <p className="text-sm text-destructive">{flow.error}</p>}
+      {missingRequired.length > 0 && (
+        <p className="text-sm text-destructive">
+          This flow needs: {missingRequired.map((k) => ADDRESS_FIELD_LABELS[k].toLowerCase()).join(', ')}.{' '}
+          <button type="button" className="underline underline-offset-2" onClick={() => edit('address-collection')}>
+            Add them
+          </button>
+        </p>
+      )}
 
       <Button
         onClick={() => void flow.confirm()}
-        disabled={!pin || flow.confirming}
+        disabled={!pin || flow.confirming || missingRequired.length > 0}
         className="h-12 w-full rounded-xl text-base font-medium"
       >
         {flow.confirming ? 'Confirming…' : 'Confirm address'}

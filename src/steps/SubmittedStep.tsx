@@ -19,6 +19,7 @@ import { useAwaitingPeople } from "./use-awaiting-people";
 import { successAction, successDescription, successTitle } from "./success-copy";
 import { PresenceExpectations } from "./presence-expectations";
 import { SubmittingScreen, SubmitErrorScreen, SubmitSuccessScreen } from "./SubmittedScreens";
+import { requiredPrefillSubmission } from './address/address-field-modes';
 
 export function SubmittedStep() {
 	const { state, dispatch } = useKYCContext();
@@ -200,7 +201,13 @@ export function SubmittedStep() {
 									...(state.address.postcode?.trim()
 										? { postcode: state.address.postcode.trim() }
 										: {}),
-									...(state.address.streetView ? { streetView: state.address.streetView } : {}),
+									// Workflow-REQUIRED fields the applicant left untouched
+										// ride their displayed map prefill: they saw it filled and
+										// confirmed by continuing, and the server 422s a required
+										// field that never arrives. Typed values are absent from
+										// this helper, so nothing above is overridden.
+										...requiredPrefillSubmission(config.addressCollection, state.address),
+										...(state.address.streetView ? { streetView: state.address.streetView } : {}),
 									...(state.address.deviceLat != null && state.address.deviceLng != null
 										? {
 												deviceLat: state.address.deviceLat,

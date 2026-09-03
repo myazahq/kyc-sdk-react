@@ -18,11 +18,8 @@ import { loadGoogleMaps, type GoogleMapInstance } from '../lib/google-loader';
 
 interface GoogleMapPickerProps {
   /**
-   * False = a read-only SUMMARY map (the review step): no zoom UI, no
-   * gestures, and a clean styled roadmap with POI/transit pins hidden —
-   * Google's styled maps do not apply to satellite, and the default POI
-   * clutter (restaurants, pharmacies, bus stops) buries the one pin that
-   * matters on a confirmation screen.
+   * False = a read-only SUMMARY map (the review step): no zoom UI and no
+   * gestures — the imagery itself is the same satellite view the picker uses.
    */
   interactive?: boolean;
   apiKey: string;
@@ -62,22 +59,16 @@ export function GoogleMapPicker({
           zoom: value ? 17 : defaultZoom,
           disableDefaultUI: true,
           zoomControl: interactive,
-          // Satellite with labels: "find your roof" is answerable in a
-          // Calabar compound where "find your street on a road map" is not —
-          // the confirmation OkHi runs on satellite imagery for the same
-          // reason. OSM fallback stays road view (it has no satellite).
-          mapTypeId: interactive ? 'hybrid' : 'roadmap',
+          // SATELLITE with labels ('hybrid') — user decision 2026-09-03,
+          // restored over the one-day styled-roadmap experiment: the step asks
+          // "is the pin on YOUR building?", and only imagery shows buildings
+          // to put it on. The Bolt-proportioned pin stays; JSON styles cannot
+          // apply to satellite, so there is no theme to pick. OSM fallback
+          // stays its own road tiles (raster; no imagery available).
+          mapTypeId: 'hybrid',
           clickableIcons: false,
           gestureHandling: interactive ? 'greedy' : 'none',
           keyboardShortcuts: false,
-          ...(interactive
-            ? {}
-            : {
-                styles: [
-                  { featureType: 'poi', stylers: [{ visibility: 'off' }] },
-                  { featureType: 'transit', stylers: [{ visibility: 'off' }] },
-                ],
-              }),
         });
         map.addListener('dragstart', () => setLifted(true));
         map.addListener('idle', () => {
@@ -107,8 +98,8 @@ export function GoogleMapPicker({
     if (last && Math.abs(last.lat - value.lat) < 1e-7 && Math.abs(last.lng - value.lng) < 1e-7) return;
     lastEmitted.current = value;
     mapRef.current.setCenter({ lat: value.lat, lng: value.lng });
-    // 18 on satellite shows individual roofs — the zoom at which "is the pin
-    // on YOUR building?" is actually answerable without pinching first.
+    // 18 resolves individual plots — the zoom at which "is the pin on YOUR
+    // building?" is actually answerable without pinching first.
     mapRef.current.setZoom(18);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value?.lat, value?.lng]);

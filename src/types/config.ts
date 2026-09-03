@@ -152,21 +152,43 @@ export interface AddressCollectionConfig {
   directions?: 'off' | 'optional' | 'required';
   /**
    * The typed property fields — "Building or compound name" + "House or flat
-   * number" (default 'optional': shown, skippable). The only honest source of
-   * a plot number; no 'required' mode by design, because an applicant in an
-   * unnumbered compound cannot answer one.
+   * number" (default 'optional': shown, skippable). 'required' (user decision
+   * 2026-09-03) = the house/flat NUMBER must be given; the building name
+   * stays optional within the pair.
    */
-  propertyFields?: 'off' | 'optional';
+  propertyFields?: 'off' | 'optional' | 'required';
+  /**
+   * Per-field modes for the typed details-sheet fields (the KYB companyInfo
+   * model). Absent field = the propertyFields group default. Server mirror:
+   * kyc-core lib/workflows/address-fields.ts — keep in lockstep. For a
+   * required field the applicant left untouched, the SDK submits the
+   * DISPLAYED map prefill (they saw and confirmed it by continuing).
+   */
+  fields?: Partial<
+    Record<
+      | 'propertyName'
+      | 'propertyNumber'
+      | 'street'
+      | 'unit'
+      | 'neighbourhood'
+      | 'city'
+      | 'state'
+      | 'postcode',
+      'off' | 'optional' | 'required'
+    >
+  >;
   /**
    * Street View entrance framing (default 'optional' — ON wherever coverage
    * exists; 'off' opts out): the applicant pans a Google Street View panorama
    * to frame their entrance and the SERVER fetches the framed image —
    * provenance-honest, never mixed with the first-party photo, which stays the
-   * fallback. No 'required' mode by design: coverage is not guaranteed
-   * anywhere. Renders only where the page holds the Google browser key
-   * (hosted pages).
+   * fallback. 'required' (user decision 2026-09-03) removes the skip
+   * affordance while coverage exists — a CLIENT-UX gate only, because
+   * coverage is not guaranteed anywhere and no-coverage still falls back to
+   * the photo. Renders on hosted pages (in-document key) and embedded mounts
+   * (the framed /embed/street-view page).
    */
-  streetView?: 'off' | 'optional';
+  streetView?: 'off' | 'optional' | 'required';
   /**
    * Take a one-shot device GPS fix when the pin is confirmed, so the server
    * can judge "captured at the claimed address" (the `attested` tier). The fix
@@ -178,7 +200,16 @@ export interface AddressCollectionConfig {
    * set expectations: the consent notice on the step and the success-screen
    * bullets saying the address will be confirmed over the coming days).
    */
-  presence?: { enabled?: boolean };
+  presence?: {
+    enabled?: boolean;
+    /**
+     * The org opts into OS geofencing on the mobile SDKs. The web SDK runs no
+     * background tier itself; the flag reaches it so the intro screen (also
+     * the builder preview's stand-in for the mobile one) can say, once and up
+     * front, that an "allow all the time" prompt is coming.
+     */
+    background?: boolean;
+  };
 }
 
 // ---------------------------------------------------------------------------

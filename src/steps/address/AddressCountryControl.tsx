@@ -41,7 +41,13 @@ export function AddressCountryControl() {
   const anchor = useDropdownAnchor(open, triggerRef, { width: 'trigger', menuRef });
 
   const scoped = configScope(config) === 'address';
-  const value = state.selectedCountry ?? config.country ?? null;
+  // The address scope has NO seeded country: the control reads "Select
+  // country" until IP, GPS, or a picked address supplies one. Showing the
+  // workflow's configured country would present a value nobody inferred or
+  // chose as though it were the applicant's market.
+  const value = scoped
+    ? (state.selectedCountry ?? null)
+    : (state.selectedCountry ?? config.country ?? null);
   const geo = inferredCountry(config.serverConfig?.geoCountry);
 
   // What the picker offers: the org's accepted list (proofOfAddress.countries,

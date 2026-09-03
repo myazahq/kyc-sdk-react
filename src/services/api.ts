@@ -340,6 +340,9 @@ export interface ResolvedPlace {
   city?: string | null;
   state?: string | null;
   postcode?: string | null;
+  /** ISO-2 of the picked address's own country — the declaration derives
+   *  from the address, never from a configured seed. */
+  country?: string | null;
 }
 
 /** The pin's address broken down — what the details sheet displays as rows. */
@@ -513,6 +516,13 @@ export interface WorkflowResolutionResponse {
   /** Org allowlist + per-ID feature flags (same shape as /config). */
   idTypes: SdkConfigIdType[];
   branding?: SdkConfigBranding;
+  /** The address-capability fields /config carries — mirrored here because a
+   *  workflowId mount skips /config, and without them a workflow embed lost
+   *  the framed Google map, the address search box, and the geo default. */
+  geoCountry?: string | null;
+  addressSearch?: boolean;
+  addressSearchMode?: 'autocomplete' | 'basic';
+  mapsFrameUrl?: string | null;
   /** KYB only: the mapped applicant workflow, when configured and resolvable. */
   applicantWorkflow?: ApplicantWorkflowPayload | null;
 }
@@ -1012,15 +1022,47 @@ export function createKYCApi(baseUrl: string, apiKey: string) {
       );
     },
 
+    /**
+     * The exact framed Street View image for the review thumbnail, fetched
+     * through the server (which holds the key) — the embedded-mount fallback
+     * for what hosted pages render client-side. Null on any failure: the
+     * review page simply shows no thumbnail, never an error.
+     */
+    async addressStreetViewPreview(frame: {
+      panoId: string;
+      heading: number;
+      pitch: number;
+      fov: number;
+    }): Promise<Blob | null> {
+      try {
+        const params = new URLSearchParams({
+          panoId: frame.panoId,
+          heading: String(frame.heading),
+          pitch: String(frame.pitch),
+          fov: String(frame.fov),
+        });
+        const res = await fetch(`${base}/address/street-view-preview?${params}`, { headers });
+        return res.ok ? await res.blob() : null;
+      } catch {
+        return null;
+      }
+    },
+
     /** Places-backed as-you-type suggestions (debounce client-side; one
      *  session token per typing session — it is the billing unit). */
     async addressAutocomplete(
       query: string,
       session: string,
       country?: string | null,
+      near?: { lat: number; lng: number } | null,
     ): Promise<{ suggestions: PlaceSuggestion[] }> {
       const params = new URLSearchParams({ q: query, session });
       if (country) params.set('country', country);
+      // The device fix — a ranking bias so nearby streets come first.
+      if (near) {
+        params.set('lat', String(near.lat));
+        params.set('lng', String(near.lng));
+      }
       return request<{ suggestions: PlaceSuggestion[] }>(`/address/autocomplete?${params}`);
     },
 

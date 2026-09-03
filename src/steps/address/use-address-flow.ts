@@ -5,7 +5,6 @@ import { useKYCConfig } from '../../context/KYCConfigContext';
 import { useKYCContext } from '../../context/KYCContext';
 import { configScope } from '../../lib/scope';
 import { isBusinessFlow } from '../../lib/business';
-import { inferredCountry } from '../../lib/inferred-country';
 import { defaultMapView } from '../../lib/map-tiles';
 import { addressBackStep, addressNextStep } from '../../lib/address-step-nav';
 import { deviceFixFields, uploadAddressPhoto } from '../address-helpers';
@@ -30,6 +29,7 @@ export function useAddressFlow() {
   const isBusiness = isBusinessFlow(config);
   const pin = state.address ? { lat: state.address.lat, lng: state.address.lng } : null;
   const googleKey = config.serverConfig?.googleMapsBrowserKey ?? null;
+  const mapsFrameUrl = config.serverConfig?.mapsFrameUrl ?? null;
   // KYB: the single premises step — its pin + directions ARE the capture, so
   // the flow options collapse to none of the optional steps.
   const flow = isBusiness
@@ -40,24 +40,40 @@ export function useAddressFlow() {
         serverSearch: Boolean(config.serverConfig?.addressSearch),
         previewMode: Boolean(config.previewMode),
         hasGoogleKey: Boolean(googleKey),
+        hasStreetViewFrame: Boolean(mapsFrameUrl),
       });
   const { photoMode, streetViewOffered, searchAvailable } = flow;
   const steps = isBusiness ? (['address-collection'] as KYCStep[]) : addressFlowSteps(flow);
 
+  // ADDRESS SCOPE: NO seeded country, ever (user decision 2026-09-03). The
+  // flow's country exists only once EVIDENCE supplies it — the IP geo
+  // default below, a GPS/pin reverse-geocode, or a picked address — so until
+  // then the map opens on the world view and the search runs unbiased. The
+  // workflow's configured `country` is deliberately not consulted here; it
+  // survives only as the wire-level fallback at submit (the verify schema
+  // requires an ISO-2), for the case where no geocode ever answered.
+  const isAddressScope = configScope(config) === 'address';
   const country = isBusiness
     ? (state.business.country ?? undefined)
-    : (state.selectedCountry ?? config.country);
+    : isAddressScope
+      ? (state.selectedCountry ?? undefined)
+      : (state.selectedCountry ?? config.country);
   const view = defaultMapView(country);
 
-  // ADDRESS SCOPE: default the declared country to the visitor's inferred one
-  // (IP-derived geoCountry, else the browser locale's region — guesses and
-  // only ever defaults) so one link works worldwide: the search filters to and
-  // the map opens on where they actually are, not the workflow's configured
-  // market. Runs once (a set selectedCountry never re-defaults); the
-  // AddressCountryControl on the PoA step is where the applicant corrects a
-  // wrong guess. Preview mode stays deterministic on the configured country.
-  const isAddressScope = configScope(config) === 'address';
-  const geoCountry = inferredCountry(config.serverConfig?.geoCountry);
+  // Default the declared country to the visitor's IP-derived geoCountry (a
+  // guess and only ever a default) so one link works worldwide: the search
+  // biases to and the map opens on where they actually are. DELIBERATELY the
+  // IP tier alone — the browser locale's region is how a browser is
+  // configured, not where a person is, and on a dev box (loopback IP -> no
+  // geo) an en-US locale in Calabar once declared US and the address search
+  // returned California. When the IP answers nothing the country simply
+  // stays unset until a GPS/pin reverse-geocode or a picked address supplies
+  // it (see adoptGeocodedCountry in use-pin-actions.ts). Runs once (a set
+  // selectedCountry never re-defaults); the AddressCountryControl on the PoA
+  // step is where the applicant corrects it by hand. Preview mode stays
+  // deterministic (no dispatch).
+  const geoRaw = config.serverConfig?.geoCountry?.trim().toUpperCase();
+  const geoCountry = geoRaw && /^[A-Z]{2}$/.test(geoRaw) ? geoRaw : null;
   // The org's accepted-country list (proofOfAddress.countries): a guess the
   // submission gate would refuse must never become the default.
   const acceptedList = config.proofOfAddress?.countries;
@@ -65,8 +81,10 @@ export function useAddressFlow() {
     !acceptedList?.length || (geoCountry != null && acceptedList.some((c) => c.toUpperCase() === geoCountry));
   useEffect(() => {
     if (!isAddressScope || config.previewMode || state.selectedCountry) return;
-    if (geoCountry && geoAccepted && geoCountry !== config.country) {
-      dispatch({ type: 'SET_COUNTRY_AUTO', payload: geoCountry });
+    // No comparison against config.country here: the address scope has no
+    // seeded country, so an IP answer is adopted whatever the workflow says.
+    if (geoCountry && geoAccepted) {
+      dispatch({ type: 'SET_COUNTRY_AUTO', payload: geoCountry as never });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAddressScope, geoCountry, geoAccepted]);
@@ -139,6 +157,7 @@ export function useAddressFlow() {
     country,
     photoMode,
     googleKey,
+    mapsFrameUrl,
     streetViewOffered,
     steps,
     uploading,

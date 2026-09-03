@@ -36,6 +36,7 @@ export function Field({
   placeholder,
   maxLength,
   disabled,
+  required,
   helper,
   onChange,
 }: {
@@ -45,16 +46,20 @@ export function Field({
   placeholder?: string;
   maxLength: number;
   disabled?: boolean;
+  /** Workflow-required (addressCollection.fields) — marked, and the pin
+   *  step's Continue holds until it is filled. */
+  required?: boolean;
   helper?: string;
   onChange: (value: string) => void;
 }) {
-  // No per-field "(optional)": every field on this form is optional, the
-  // subtitle says so once, and nine suffixes were wrapping the two-column
-  // labels out of alignment.
+  // No per-field "(optional)": optional is the default, the subtitle says so
+  // once, and nine suffixes were wrapping the two-column labels out of
+  // alignment. Required fields alone carry a mark.
   return (
     <div className="space-y-1.5">
       <Label htmlFor={id} className="text-sm font-medium leading-tight">
         {label}
+        {required && <span className="ml-0.5 text-destructive">*</span>}
       </Label>
       <Input
         id={id}
@@ -98,6 +103,88 @@ export function CountryRow({ country }: { country: string | null }) {
         <span className="truncate text-sm font-medium">{name}</span>
       </div>
       <p className="text-xs text-muted-foreground">From your verification</p>
+    </div>
+  );
+}
+
+/** The "Area and region" section (split from DetailsSheet, 200-line rule).
+ *  Each field honours its workflow mode: 'off' hides it, 'required' marks it. */
+export function AreaFields({
+  modes,
+  values,
+  parts,
+  shown,
+  country,
+  disabled,
+  onChange,
+}: {
+  modes: Record<'neighbourhood' | 'city' | 'state' | 'postcode', 'off' | 'optional' | 'required'>;
+  values: DetailValues;
+  /** The map's answer — the prefill each area field shows while untouched. */
+  parts: { area?: string | null; city?: string | null; state?: string | null; postcode?: string | null } | null;
+  shown: (typed: string | undefined, part: string | null | undefined) => string;
+  country: string | null;
+  disabled?: boolean;
+  onChange: (patch: DetailPatch) => void;
+}) {
+  const all = [modes.neighbourhood, modes.city, modes.state, modes.postcode];
+  if (all.every((m) => m === 'off')) return null;
+  return (
+    <div className="space-y-3">
+      <SectionHeading>Area and region</SectionHeading>
+      {modes.neighbourhood !== 'off' && (
+        <Field
+          id="address-neighbourhood"
+          label="Neighbourhood"
+          value={shown(values.neighbourhood, parts?.area)}
+          placeholder="e.g. Idim Ita"
+          maxLength={80}
+          disabled={disabled}
+          required={modes.neighbourhood === 'required'}
+          onChange={(v) => onChange({ neighbourhood: v })}
+        />
+      )}
+      <div className="grid grid-cols-2 gap-3">
+        {modes.city !== 'off' && (
+          <Field
+            id="address-city"
+            label="City"
+            value={shown(values.city, parts?.city)}
+            placeholder="e.g. Calabar"
+            maxLength={80}
+            disabled={disabled}
+            required={modes.city === 'required'}
+            onChange={(v) => onChange({ city: v })}
+          />
+        )}
+        {modes.state !== 'off' && (
+          <Field
+            id="address-state"
+            label="State"
+            value={shown(values.state, parts?.state)}
+            placeholder="e.g. Cross River"
+            maxLength={80}
+            disabled={disabled}
+            required={modes.state === 'required'}
+            onChange={(v) => onChange({ state: v })}
+          />
+        )}
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        {modes.postcode !== 'off' && (
+          <Field
+            id="address-postcode"
+            label="Area code"
+            value={shown(values.postcode, parts?.postcode)}
+            placeholder="e.g. 540281"
+            maxLength={12}
+            disabled={disabled}
+            required={modes.postcode === 'required'}
+            onChange={(v) => onChange({ postcode: v })}
+          />
+        )}
+        <CountryRow country={country} />
+      </div>
     </div>
   );
 }

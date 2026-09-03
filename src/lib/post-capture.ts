@@ -8,7 +8,11 @@ import { addressFlowOptions, addressFlowSteps } from '../steps/address/flow-step
  *  whole config context, so these ride along for free. */
 interface AddressFlowFacts {
   addressCollection?: AddressCollectionConfig;
-  serverConfig?: { addressSearch?: boolean; googleMapsBrowserKey?: string | null } | null;
+  serverConfig?: {
+    addressSearch?: boolean;
+    googleMapsBrowserKey?: string | null;
+    mapsFrameUrl?: string | null;
+  } | null;
   previewMode?: boolean;
   subjectType?: SubjectType;
   business?: WorkflowBusinessConfig;
@@ -24,6 +28,7 @@ function flowStepsFor(config: AddressFlowFacts): KYCStep[] {
       serverSearch: Boolean(config.serverConfig?.addressSearch),
       previewMode: Boolean(config.previewMode),
       hasGoogleKey: Boolean(config.serverConfig?.googleMapsBrowserKey),
+      hasStreetViewFrame: Boolean(config.serverConfig?.mapsFrameUrl),
     }),
   );
 }

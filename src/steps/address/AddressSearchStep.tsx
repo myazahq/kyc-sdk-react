@@ -39,6 +39,10 @@ export function AddressSearchStep() {
       <SearchScreen
         country={flow.country}
         onResolved={(hit) => {
+          // The picked address's own country IS the declaration (a pick is
+          // the applicant saying "this is my address") — guarded by the same
+          // guess-only/accepted-list rules as every geocode adoption.
+          flow.adoptGeocodedCountry({ country: hit.country ?? null }, { explicit: true });
           dispatch({
             type: 'SET_ADDRESS',
             payload: {
@@ -60,6 +64,7 @@ export function AddressSearchStep() {
                       city: hit.city ?? null,
                       state: hit.state ?? null,
                       postcode: hit.postcode ?? null,
+                      country: hit.country ?? null,
                     },
                   }
                 : {}),
@@ -68,6 +73,7 @@ export function AddressSearchStep() {
           toPin();
         }}
         locationHint={flow.currentFix?.label ?? null}
+        near={flow.currentFix ? { lat: flow.currentFix.lat, lng: flow.currentFix.lng } : null}
         locating={flow.locating}
         onUseMyLocation={() => void flow.applyCurrentFix(toPin)}
         onPinInstead={toPin}

@@ -17,13 +17,25 @@ import type { KYCStep } from '../../types/config';
  * plain-language disclosures (the OkHi-patterned consent copy) sit under it
  * as a smoothly animated accordion.
  */
-const MILESTONES: Array<{
+// The second milestone's caption depends on which tier the org runs. With
+// background geofencing on, the "allow all the time" prompt is coming, and
+// OkHi's integration guidance is to say so ONCE, up front, beside the
+// education — not to surprise the person with it after capture.
+const CHECK_IN_CAPTION = {
+  foreground: 'Keep location on; your phone confirms it over the coming days.',
+  background:
+    'Allow location all the time when asked. Your phone then confirms it on its own, even with the app closed.',
+} as const;
+
+const milestonesFor = (
+  background: boolean,
+): Array<{
   Icon: typeof MapPin;
   stage: string;
   title: string;
   caption: string;
   state: 'active' | 'ahead';
-}> = [
+}> => [
   {
     Icon: MapPinHouse,
     stage: 'Your part',
@@ -35,7 +47,7 @@ const MILESTONES: Array<{
     Icon: Radar,
     stage: 'After that',
     title: 'Quiet check-ins',
-    caption: 'Keep location on; your phone confirms it over the coming days.',
+    caption: background ? CHECK_IN_CAPTION.background : CHECK_IN_CAPTION.foreground,
     state: 'ahead',
   },
   {
@@ -51,7 +63,9 @@ export function useAddressIntroGate(step: KYCStep, firstStep: KYCStep): React.Re
   const { state, dispatch } = useKYCContext();
   const config = useKYCConfig();
   const presence = config.addressCollection?.presence?.enabled === true;
+  const background = config.addressCollection?.presence?.background === true;
   if (step !== firstStep || !presence || state.addressIntroSeen) return null;
+  const MILESTONES = milestonesFor(background);
 
   return (
     <div className="space-y-4 animate-slide-up">
@@ -126,7 +140,7 @@ export function useAddressIntroGate(step: KYCStep, firstStep: KYCStep): React.Re
         </div>
       </div>
 
-      <IntroDisclosures />
+      <IntroDisclosures background={background} />
 
       <Button
         onClick={() => dispatch({ type: 'SET_ADDRESS_INTRO_SEEN' })}

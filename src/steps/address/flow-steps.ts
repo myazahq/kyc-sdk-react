@@ -45,18 +45,26 @@ export function prevAddressStep(steps: KYCStep[], current: KYCStep): KYCStep | n
  *  step hook AND the modal's step-order options so they can never disagree. */
 export function addressFlowOptions(facts: {
   photo?: 'off' | 'optional' | 'required';
-  streetView?: 'off' | 'optional';
+  streetView?: 'off' | 'optional' | 'required';
   serverSearch: boolean;
   previewMode: boolean;
   hasGoogleKey: boolean;
+  /** An embedded mount holding a maps frame URL — the framed
+   *  /embed/street-view page carries the panorama for it. */
+  hasStreetViewFrame: boolean;
 }): AddressFlowOptions {
   const photoMode = facts.photo ?? 'optional';
   return {
     searchAvailable: facts.serverSearch && !facts.previewMode,
     photoMode,
     // ON by default (2026-08-29): offered unless the workflow opted out, and
-    // only where the page holds the Google browser key (hosted pages).
-    streetViewOffered: facts.streetView !== 'off' && facts.hasGoogleKey,
+    // wherever a Google surface exists — the key in-document (hosted pages)
+    // or the framed street-view page (embedded mounts, 2026-09-03). The
+    // builder preview KEEPS the step (it must show the flow real users get)
+    // but renders a static placeholder instead of loading any vendor — see
+    // AddressEntranceStep's preview branch.
+    streetViewOffered:
+      facts.streetView !== 'off' && (facts.hasGoogleKey || facts.hasStreetViewFrame),
   };
 }
 

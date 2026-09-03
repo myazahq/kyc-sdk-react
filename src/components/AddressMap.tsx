@@ -1,25 +1,29 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect } from 'react';
+import { MapPin } from 'lucide-react';
 import { GoogleMapPicker } from './GoogleMapPicker';
 import { FramedMapPicker } from './FramedMapPicker';
 import { MapPinPicker } from './MapPinPicker';
 import { useKYCConfig } from '../context/KYCConfigContext';
+import { cn } from '../lib/utils';
 import type { LatLng } from '../lib/map-tiles';
 
 // Which map the address step renders, in one place (split from
 // AddressCollectionStep per the 200-line rule). Strongest surface first:
 //
+//  0. The BUILDER PREVIEW renders a static placeholder, never a map (user
+//     decision 2026-09-03, reversing 2026-08-27's real-map preview): the
+//     camera steps' PreviewCapturePlaceholder rule — no vendor loads, no
+//     quota spent from the builder — with the flow kept walkable by landing
+//     the pin where the real map's first idle would have landed it.
 //  1. HOSTED pages hold Myaza's Google key directly (the session bootstrap
 //     ships it — the page already runs on the hosted origin).
 //  2. EMBEDDED mounts get Google via OUR framed /embed/map page when /config
 //     minted a frame URL (see lib/map-frame.ts); the frame falls back to OSM
 //     on any failure.
 //  3. Everything else — no key configured, or a frame that fails — is the
-//     dependency-free OSM picker. The builder preview renders the REAL map,
-//     Google included (user decision 2026-08-27): an author previewing the
-//     address step sees exactly what applicants get, and the frame's own
-//     grant/fallback chain still guards the failure modes.
+//     dependency-free OSM picker.
 
 interface AddressMapProps {
   value: LatLng | null;
@@ -42,6 +46,16 @@ export function AddressMap({ value, onChange, defaultCenter, defaultZoom, classN
   const preview = config.previewMode;
   const theme = config.appearance?.theme === 'dark' ? ('dark' as const) : ('light' as const);
   const primaryColor = config.appearance?.primaryColor;
+  if (preview) {
+    return (
+      <MapPreviewPlaceholder
+        value={value}
+        onChange={onChange}
+        defaultCenter={defaultCenter}
+        className={className}
+      />
+    );
+  }
   if (googleKey) {
     return (
       <GoogleMapPicker
@@ -78,5 +92,42 @@ export function AddressMap({ value, onChange, defaultCenter, defaultZoom, classN
       className={className}
       interactive={interactive}
     />
+  );
+}
+
+// The builder-preview stand-in — the map surface's PreviewCapturePlaceholder.
+// No tiles, no Google loader, no frame grant; the pin lands on the default
+// centre once (what the real map's first idle emits) so Continue stays
+// reachable and the author walks the whole flow.
+function MapPreviewPlaceholder({
+  value,
+  onChange,
+  defaultCenter,
+  className,
+}: {
+  value: LatLng | null;
+  onChange: (pin: LatLng) => void;
+  defaultCenter: LatLng;
+  className?: string;
+}) {
+  const hasPin = value != null;
+  useEffect(() => {
+    if (!hasPin) onChange(defaultCenter);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasPin]);
+
+  return (
+    <div
+      className={cn(
+        'flex h-64 w-full flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-border bg-muted/40',
+        className,
+      )}
+      aria-hidden="true"
+    >
+      <MapPin className="h-8 w-8 text-muted-foreground/60" />
+      <p className="max-w-[16rem] px-6 text-center text-xs text-muted-foreground">
+        Map preview — applicants place their pin on a live map here. The map only loads for real users.
+      </p>
+    </div>
   );
 }

@@ -1,5 +1,5 @@
 import { BRAND_FONT_STACK, PRODUCT_URL, brandMarkColor } from '../lib/brand';
-import { useKYCConfig } from '../context/KYCConfigContext';
+import { useOptionalKYCConfig } from '../context/KYCConfigContext';
 import { MyazaWordmark } from './MyazaWordmark';
 import { useIsDark } from '../lib/use-is-dark';
 
@@ -31,7 +31,9 @@ import { useIsDark } from '../lib/use-is-dark';
  * biometrics are captured would disappear exactly where it matters most.
  */
 export function PoweredBy() {
-  const config = useKYCConfig();
+  // Optional on purpose: the biometric re-auth modal renders this footer with
+  // no KYCConfigProvider above it, and attribution must not require one.
+  const config = useOptionalKYCConfig();
   const isDark = useIsDark();
 
   // The background the mark will ACTUALLY sit on — which is not simply
@@ -45,7 +47,7 @@ export function PoweredBy() {
   //
   // Not read from CSS because contrast cannot be computed in a stylesheet, and
   // this has to hold for an arbitrary org background, not just light vs dark.
-  const appearance = config.appearance;
+  const appearance = config?.appearance;
   const background = isDark
     ? (appearance?.dark?.backgroundColor ?? appearance?.backgroundColor ?? '#040218')
     : (appearance?.backgroundColor ?? '#FFFFFF');

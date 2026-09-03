@@ -41,6 +41,7 @@ export function StreetViewFramer({
   pin,
   onCaptured,
   onSkip,
+  hideSkip,
   onUnavailable,
 }: {
   apiKey: string;
@@ -48,6 +49,9 @@ export function StreetViewFramer({
   onCaptured: (frame: StreetViewFrame) => void;
   /** The applicant would rather add their own photo. */
   onSkip: () => void;
+  /** streetView 'required': the skip affordance is removed while coverage
+   *  exists (no-coverage still falls back — the client-UX gate only). */
+  hideSkip?: boolean;
   /** Street View has not photographed this spot — fall back to the photo. */
   onUnavailable: () => void;
 }) {
@@ -158,9 +162,11 @@ export function StreetViewFramer({
         </p>
       )}
       <div className="flex gap-2">
-        <Button variant="outline" onClick={onSkip} className="h-11 flex-1 rounded-xl">
-          Skip
-        </Button>
+        {!hideSkip && (
+          <Button variant="outline" onClick={onSkip} className="h-11 flex-1 rounded-xl">
+            Skip
+          </Button>
+        )}
         <Button onClick={capture} disabled={status !== 'ready'} className="h-11 flex-1 rounded-xl">
           Use this view
         </Button>

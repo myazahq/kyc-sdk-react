@@ -78,7 +78,7 @@ export function PreviewCapturePlaceholder({ kind }: { kind: 'document' | 'livene
         <div className="mx-auto flex aspect-[1.586] w-full max-w-sm flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-border bg-muted/40">
           <Camera className="h-8 w-8 text-muted-foreground/60" />
           <p className="px-6 text-center text-xs text-muted-foreground">
-            Camera preview — Document Intelligence captures and reads the ID here
+            Document Intelligence captures and reads the ID here. The camera opens only for real users.
           </p>
         </div>
       ) : (
@@ -86,7 +86,7 @@ export function PreviewCapturePlaceholder({ kind }: { kind: 'document' | 'livene
         <div className="mx-auto flex h-64 w-64 flex-col items-center justify-center gap-3 rounded-full border-2 border-dashed border-border bg-muted/40 sm:h-72 sm:w-72">
           <ScanFace className="h-9 w-9 text-muted-foreground/60" />
           <p className="max-w-[12rem] text-center text-xs text-muted-foreground">
-            Camera preview — Presence Intelligence gesture challenges run here
+            Presence Intelligence gesture challenges run here. The camera opens only for real users.
           </p>
         </div>
       )}

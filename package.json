@@ -1,6 +1,6 @@
 {
   "name": "@myazahq/kyc-sdk-react",
-  "version": "2.14.0",
+  "version": "2.14.1",
   "description": "Myaza KYC SDK for React — drop-in identity verification: ID capture, document scan, and active liveness detection",
   "license": "MIT",
   "author": "Flitstack Technologies Inc.",

@@ -30,6 +30,7 @@ export const initialKYCState: KYCState = {
   businessApplication: { keyPeople: [], documents: [], applicantRole: null, applicantName: '', applicantKeyPersonIndex: null, uboUnidentifiable: false },
   selfieImage: null,
   addressPhotoPreview: null,
+  addressSandboxOutcome: null,
   addressIntroSeen: false,
   documentFrontVideoBlob: null,
   documentBackVideoBlob: null,
@@ -436,12 +437,15 @@ export function kycReducer(state: KYCState, action: KYCAction): KYCState {
 
     case 'SET_ADDRESS':
       return { ...state, address: action.payload };
+    case 'SET_ADDRESS_SANDBOX_OUTCOME':
+      return { ...state, addressSandboxOutcome: action.payload };
     case 'CLEAR_ADDRESS':
       return {
         ...state,
         address: null,
         mediaIds: { ...state.mediaIds, addressPhoto: undefined },
         addressPhotoPreview: null,
+        addressSandboxOutcome: null,
       };
     case 'CLEAR_POA_DOCUMENT':
       return {
@@ -480,6 +484,7 @@ export function kycReducer(state: KYCState, action: KYCAction): KYCState {
         mediaIds: {},
         selfieImage: null,
         addressPhotoPreview: null,
+  addressSandboxOutcome: null,
         verificationId: null,
         error: null,
       };

@@ -5,7 +5,12 @@ import type { Dispatch } from 'react';
 import type { KYCAction, KYCState } from '../../context/types';
 import type { KYCConfigValue } from '../../context/KYCConfigContext';
 import { pickedAddressState } from '../address-helpers';
-import { KEEP_PICKED_LABEL_RADIUS_M, metersBetween } from './flow-steps';
+import {
+  KEEP_PICKED_LABEL_RADIUS_M,
+  SAMPLE_ADDRESS_LINE,
+  addressVendorsStubbed,
+  metersBetween,
+} from './flow-steps';
 import { currentFix, locating, prefetchCurrentFix, type CurrentFix } from './current-location';
 import { configScope } from '../../lib/scope';
 import type { AddressParts } from '../../services/api';
@@ -38,6 +43,22 @@ export function usePinActions({ config, state, dispatch, setError }: PinActionDe
   const reverseTimer = useRef<number | null>(null);
   const labelPin = (lat: number, lng: number, delay = REVERSE_DEBOUNCE_MS) => {
     if (reverseTimer.current) window.clearTimeout(reverseTimer.current);
+    // The builder preview never reverse-geocodes: its pin is the country's
+    // map centre, not an address, and labelling it with the real place there
+    // (Nigeria's centroid reads "Wamba, Nasarawa") presented a fake pin as
+    // data while spending real geocoder quota per preview render. A sample
+    // line demonstrates the summary card with no network call.
+    if (addressVendorsStubbed({ previewMode: config.previewMode, environment: config.serverConfig?.environment })) {
+      reverseTimer.current = window.setTimeout(() => {
+        const current = addressRef.current;
+        if (!current || current.lat !== lat || current.lng !== lng || current.label) return;
+        dispatch({
+          type: 'SET_ADDRESS',
+          payload: { ...current, label: SAMPLE_ADDRESS_LINE },
+        });
+      }, 0);
+      return;
+    }
     reverseTimer.current = window.setTimeout(() => {
       config.api
         .addressReverse(lat, lng)
@@ -107,7 +128,7 @@ export function usePinActions({ config, state, dispatch, setError }: PinActionDe
   const [fixPending, setFixPending] = useState(locating());
   const startPrefetch = () => {
     setFixPending(true);
-    void prefetchCurrentFix(config.api, config.previewMode).then((f) => {
+    void prefetchCurrentFix(config.api, addressVendorsStubbed({ previewMode: config.previewMode, environment: config.serverConfig?.environment })).then((f) => {
       setFix(f);
       setFixPending(false);
       adoptGeocodedCountry(f?.parts);
@@ -126,7 +147,7 @@ export function usePinActions({ config, state, dispatch, setError }: PinActionDe
   const applyCurrentFix = async (onDone?: () => void, opts?: { silent?: boolean }) => {
     setError(null);
     setFixPending(true);
-    const f = await prefetchCurrentFix(config.api, config.previewMode, {
+    const f = await prefetchCurrentFix(config.api, addressVendorsStubbed({ previewMode: config.previewMode, environment: config.serverConfig?.environment }), {
       // A TAP is allowed to retry a previously failed attempt; the silent
       // auto path never re-prompts.
       retry: !opts?.silent,
@@ -233,7 +254,7 @@ export function usePinActions({ config, state, dispatch, setError }: PinActionDe
   const locateToPin = async () => {
     setError(null);
     setFixPending(true);
-    const f = await prefetchCurrentFix(config.api, config.previewMode, { retry: true });
+    const f = await prefetchCurrentFix(config.api, addressVendorsStubbed({ previewMode: config.previewMode, environment: config.serverConfig?.environment }), { retry: true });
     setFix(f);
     setFixPending(false);
     if (f) setPin({ lat: f.lat, lng: f.lng }, f.accuracy);

@@ -29,6 +29,10 @@ export function AddressCollectionStep() {
   const { state, dispatch } = useKYCContext();
   const flow = useAddressFlow();
   const [sheetOpen, setSheetOpen] = useState(false);
+  // Declared BEFORE the intro-gate early return below: a hook after a
+  // conditional return renders "more hooks than during the previous render"
+  // the moment the gate dismisses (shipped in 2.14.0, fixed in 2.14.1).
+  const [missingNudge, setMissingNudge] = useState(false);
   const gate = useAddressIntroGate('address-collection', flow.steps[0]!);
 
   // Trigger Use-my-location AUTOMATICALLY the first time the pin step opens
@@ -76,7 +80,6 @@ export function AddressCollectionStep() {
   // Workflow-required details hold Continue until they are filled — and open
   // the sheet on the missing fields rather than pointing at a closed drawer.
   const missingRequired = missingRequiredAddressFields(flow.address, state.address ?? null);
-  const [missingNudge, setMissingNudge] = useState(false);
 
   const handleContinue = () => {
     if (missingRequired.length > 0) {

@@ -35,7 +35,7 @@ import { AddressCollectionStep } from '../steps/AddressCollectionStep';
 import { AddressSearchStep } from '../steps/address/AddressSearchStep';
 import { AddressEntranceStep } from '../steps/address/AddressEntranceStep';
 import { AddressReviewStep } from '../steps/address/AddressReviewStep';
-import { addressFlowOptions } from '../steps/address/flow-steps';
+import { addressFlowOptions, addressVendorsStubbed } from '../steps/address/flow-steps';
 import type { KYCStep } from '../types/config';
 import { PoweredBy } from './PoweredBy';
 import { VisuallyHidden } from './VisuallyHidden';
@@ -260,7 +260,10 @@ export function KYCModal({ open, onClose, showThemeToggle, disableClose, fullScr
         photo: config.addressCollection?.photo,
         streetView: config.addressCollection?.streetView,
         serverSearch: Boolean(config.serverConfig?.addressSearch),
-        previewMode: Boolean(config.previewMode),
+        previewMode: addressVendorsStubbed({
+          previewMode: config.previewMode,
+          environment: config.serverConfig?.environment,
+        }),
         hasGoogleKey: Boolean(config.serverConfig?.googleMapsBrowserKey),
         hasStreetViewFrame: Boolean(config.serverConfig?.mapsFrameUrl),
       });

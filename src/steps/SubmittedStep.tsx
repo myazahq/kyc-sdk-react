@@ -248,7 +248,14 @@ export function SubmittedStep() {
 						addressPhoto: state.mediaIds.addressPhoto,
 						...videoIds,
 					},
-					metadata: buildSubmitMetadata(config.metadata, requestId, config.deviceIntelligence !== false),
+					metadata: {
+						...buildSubmitMetadata(config.metadata, requestId, config.deviceIntelligence !== false),
+						// Ignored by production, so it is safe to send whenever it is set
+						// (the business flow's sandboxOutcome contract).
+						...(state.addressSandboxOutcome
+							? { sandboxOutcome: state.addressSandboxOutcome }
+							: {}),
+					},
 				}),
 			{ onRetry },
 		);

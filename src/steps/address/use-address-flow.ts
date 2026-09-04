@@ -8,7 +8,7 @@ import { isBusinessFlow } from '../../lib/business';
 import { defaultMapView } from '../../lib/map-tiles';
 import { addressBackStep, addressNextStep } from '../../lib/address-step-nav';
 import { deviceFixFields, uploadAddressPhoto } from '../address-helpers';
-import { addressFlowOptions, addressFlowSteps, nextAddressStep, prevAddressStep } from './flow-steps';
+import { addressFlowOptions, addressFlowSteps, addressVendorsStubbed, nextAddressStep, prevAddressStep } from './flow-steps';
 import { usePinActions } from './use-pin-actions';
 import type { KYCStep } from '../../types/config';
 
@@ -38,7 +38,10 @@ export function useAddressFlow() {
         photo: address?.photo,
         streetView: address?.streetView,
         serverSearch: Boolean(config.serverConfig?.addressSearch),
-        previewMode: Boolean(config.previewMode),
+        previewMode: addressVendorsStubbed({
+          previewMode: config.previewMode,
+          environment: config.serverConfig?.environment,
+        }),
         hasGoogleKey: Boolean(googleKey),
         hasStreetViewFrame: Boolean(mapsFrameUrl),
       });
@@ -151,6 +154,11 @@ export function useAddressFlow() {
     address,
     isBusiness,
     previewMode: Boolean(config.previewMode),
+    /** Preview OR non-production: the vendor surfaces are stubbed. */
+    vendorsStubbed: addressVendorsStubbed({
+      previewMode: config.previewMode,
+      environment: config.serverConfig?.environment,
+    }),
     ...pinActions,
     pin,
     view,

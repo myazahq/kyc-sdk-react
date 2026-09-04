@@ -347,6 +347,16 @@ export interface KYCState {
   addressPhotoPreview: string | null;
   /** The presence "how it works" primer was acknowledged this session. */
   addressIntroSeen: boolean;
+  /** Dev/sandbox only: the pinned address RESULT outcome (the business
+   *  flow's sandboxOutcome, for the address check). Null = the server's
+   *  default (attested with a location fix, else corroborated). Rides
+   *  metadata.sandboxOutcome at submit; production ignores it. */
+  addressSandboxOutcome:
+    | 'address_attested'
+    | 'address_corroborated'
+    | 'address_collected'
+    | 'address_mismatch'
+    | null;
 
   // Step 5 – Submission result
   verificationId: string | null;
@@ -422,6 +432,7 @@ export type KYCAction =
   | { type: 'SET_ADDRESS'; payload: NonNullable<KYCState['address']> }
   | { type: 'SET_ADDRESS_PHOTO_PREVIEW'; payload: string | null }
   | { type: 'SET_ADDRESS_INTRO_SEEN' }
+  | { type: 'SET_ADDRESS_SANDBOX_OUTCOME'; payload: KYCState['addressSandboxOutcome'] }
   | { type: 'CLEAR_ADDRESS' }
   // Submission
   | { type: 'SUBMIT_VERIFICATION' }

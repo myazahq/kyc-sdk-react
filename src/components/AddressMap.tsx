@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useEffect } from 'react';
-import { MapPin } from 'lucide-react';
+import { MapPinHouse } from 'lucide-react';
+import { addressVendorsStubbed } from '../steps/address/flow-steps';
 import { GoogleMapPicker } from './GoogleMapPicker';
 import { FramedMapPicker } from './FramedMapPicker';
 import { MapPinPicker } from './MapPinPicker';
@@ -43,7 +44,13 @@ export function AddressMap({ value, onChange, defaultCenter, defaultZoom, classN
   const config = useKYCConfig();
   const googleKey = config.serverConfig?.googleMapsBrowserKey;
   const frameUrl = config.serverConfig?.mapsFrameUrl;
-  const preview = config.previewMode;
+  // Preview AND sandbox render the static stand-in (user decision
+  // 2026-09-03): sandbox verdicts are canned, so a live map there only spends
+  // quota. DEVELOPMENT and production get the real surface.
+  const preview = addressVendorsStubbed({
+    previewMode: config.previewMode,
+    environment: config.serverConfig?.environment,
+  });
   const theme = config.appearance?.theme === 'dark' ? ('dark' as const) : ('light' as const);
   const primaryColor = config.appearance?.primaryColor;
   if (preview) {
@@ -124,9 +131,9 @@ function MapPreviewPlaceholder({
       )}
       aria-hidden="true"
     >
-      <MapPin className="h-8 w-8 text-muted-foreground/60" />
+      <MapPinHouse className="h-8 w-8 text-muted-foreground/60" />
       <p className="max-w-[16rem] px-6 text-center text-xs text-muted-foreground">
-        Map preview — applicants place their pin on a live map here. The map only loads for real users.
+        Applicants place their pin on a live map here. The map loads only for real users.
       </p>
     </div>
   );

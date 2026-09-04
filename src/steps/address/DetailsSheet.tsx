@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import { Drawer, DrawerContent, DrawerTitle } from '../../components/ui/drawer';
 import { Button } from '../../components/ui/button';
@@ -49,11 +49,22 @@ export function DetailsSheet({
   onChange: (patch: DetailPatch) => void;
   onClose: () => void;
 }) {
-  const [direction] = useState<'bottom' | 'right'>(() =>
-    typeof window !== 'undefined' && window.matchMedia('(min-width: 640px)').matches
-      ? 'right'
-      : 'bottom',
+  // The right-side sheet is a DESKTOP shape: width alone misjudges wide
+  // phones (landscape) and emulated viewports, so the pointer must be fine
+  // too — a touch device gets the bottom drawer whatever its width. Live,
+  // not a mount-time snapshot: a resize or rotation re-decides.
+  const DESKTOP_MQ = '(min-width: 640px) and (hover: hover) and (pointer: fine)';
+  const [direction, setDirection] = useState<'bottom' | 'right'>(() =>
+    typeof window !== 'undefined' && window.matchMedia(DESKTOP_MQ).matches ? 'right' : 'bottom',
   );
+  useEffect(() => {
+    const mq = window.matchMedia(DESKTOP_MQ);
+    const apply = () => setDirection(mq.matches ? 'right' : 'bottom');
+    apply();
+    mq.addEventListener('change', apply);
+    return () => mq.removeEventListener('change', apply);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   if (!open) return null;
 
   const modes = addressFieldModes(addressConfig);

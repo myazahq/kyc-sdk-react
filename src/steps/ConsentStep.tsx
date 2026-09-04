@@ -13,7 +13,7 @@ import {
   ScanFace,
   Lock,
   RotateCcw,
-  MapPin,
+  MapPinHouse,
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { useKYCContext } from '../context/KYCContext';
@@ -68,7 +68,7 @@ const SCOPE_DESCRIPTIONS: Record<string, string> = {
 
 const SCOPE_BULLETS: Record<string, ProcessStep[]> = {
   address: [
-    { icon: MapPin, label: 'Pin your home address on a map' },
+    { icon: MapPinHouse, label: 'Pin your home address on a map' },
     { icon: BadgeCheck, label: 'Confirm the details only you can know' },
   ],
   'biometric-authentication': [
@@ -171,7 +171,7 @@ export function ConsentStep() {
     steps.push({ icon: FileText, label: 'Upload a proof of address document' });
   }
   if (scope !== 'address' && hasAddressCollectionStep(config.addressCollection)) {
-    steps.push({ icon: MapPin, label: 'Pin your address on a map' });
+    steps.push({ icon: MapPinHouse, label: 'Pin your address on a map' });
   }
   // The step-order predicate, not a raw fields check: a questionnaire with
   // questions but enabled: false never runs, so it must not be promised.

@@ -11,6 +11,7 @@ import { useKYCConfig } from '../../context/KYCConfigContext';
 import { useAddressFlow } from './use-address-flow';
 import { displayAddressLine } from './flow-steps';
 import { ADDRESS_FIELD_LABELS, missingRequiredAddressFields } from './address-field-modes';
+import { AddressSandboxOutcome } from './AddressSandboxOutcome';
 
 /**
  * The commit point, as ONE composed card: a clean summary map (no POI clutter,
@@ -154,6 +155,8 @@ export function AddressReviewStep() {
           </div>
         </div>
       </div>
+
+      <AddressSandboxOutcome />
 
       {flow.error && <p className="text-sm text-destructive">{flow.error}</p>}
       {missingRequired.length > 0 && (

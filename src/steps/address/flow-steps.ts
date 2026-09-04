@@ -41,6 +41,29 @@ export function prevAddressStep(steps: KYCStep[], current: KYCStep): KYCStep | n
   return i > 0 ? steps[i - 1]! : null;
 }
 
+/**
+ * Whether the address flow's VENDOR surfaces are stubbed: the builder preview
+ * and SANDBOX keys (user decision 2026-09-03 — sandbox mirrors the preview
+ * treatment: placeholder map, canned labels, no search or Street View loads;
+ * its server verdicts are canned anyway, so a live map on test traffic was
+ * theatre that spent real geocoder quota). DEVELOPMENT deliberately keeps the
+ * REAL surfaces — the platform's dev-is-real rule everywhere else (the real
+ * pipeline on staging creds, the real face engine) applies to the maps too.
+ * An unknown environment (config still loading) counts as live, so a real
+ * applicant never flashes a placeholder.
+ */
+export function addressVendorsStubbed(facts: {
+  previewMode?: boolean;
+  environment?: string | null;
+}): boolean {
+  return facts.previewMode === true || facts.environment === 'SANDBOX';
+}
+
+/** The canned pin label every stubbed surface shows — obviously a sample,
+ *  never a real place (the default map centre reverse-geocodes to somewhere
+ *  real, which read as data; that shipped). */
+export const SAMPLE_ADDRESS_LINE = '12 Sample Street, Sample City';
+
 /** Derive the flow options from raw config facts — ONE place, used by the
  *  step hook AND the modal's step-order options so they can never disagree. */
 export function addressFlowOptions(facts: {

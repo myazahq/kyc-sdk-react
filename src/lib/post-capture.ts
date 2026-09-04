@@ -2,7 +2,7 @@ import type { AddressCollectionConfig, KYCStep, PoaDocumentType, ProofOfAddressC
 import type { SubjectType, WorkflowBusinessConfig } from '../types/business';
 import { hasActiveQuestionnaire } from './questionnaire';
 import { isBusinessFlow } from './business';
-import { addressFlowOptions, addressFlowSteps } from '../steps/address/flow-steps';
+import { addressFlowOptions, addressFlowSteps, addressVendorsStubbed } from '../steps/address/flow-steps';
 
 /** The slice the address entry/exit resolution reads — the callers pass the
  *  whole config context, so these ride along for free. */
@@ -12,6 +12,7 @@ interface AddressFlowFacts {
     addressSearch?: boolean;
     googleMapsBrowserKey?: string | null;
     mapsFrameUrl?: string | null;
+    environment?: 'DEVELOPMENT' | 'SANDBOX' | 'PRODUCTION';
   } | null;
   previewMode?: boolean;
   subjectType?: SubjectType;
@@ -26,7 +27,10 @@ function flowStepsFor(config: AddressFlowFacts): KYCStep[] {
       photo: config.addressCollection?.photo,
       streetView: config.addressCollection?.streetView,
       serverSearch: Boolean(config.serverConfig?.addressSearch),
-      previewMode: Boolean(config.previewMode),
+      previewMode: addressVendorsStubbed({
+        previewMode: config.previewMode,
+        environment: config.serverConfig?.environment,
+      }),
       hasGoogleKey: Boolean(config.serverConfig?.googleMapsBrowserKey),
       hasStreetViewFrame: Boolean(config.serverConfig?.mapsFrameUrl),
     }),

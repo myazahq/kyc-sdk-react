@@ -1,4 +1,5 @@
 import { resolveMyLocation } from '../address-helpers';
+import { SAMPLE_ADDRESS_LINE } from './flow-steps';
 import type { AddressParts } from '../../services/api';
 
 // The device's current location, fetched ONCE per page session and shared by
@@ -57,12 +58,19 @@ export function prefetchCurrentFix(
         const fix = await resolveMyLocation(preview);
         let label: string | null = null;
         let parts: AddressParts | null = null;
-        try {
-          const r = await api.addressReverse(fix.lat, fix.lng);
-          label = r.line ?? null;
-          parts = r.parts ?? null;
-        } catch {
-          /* the coordinates alone are still a fix */
+        if (preview) {
+          // The builder preview never reverse-geocodes (the canned fix is not
+          // a place; labelling it with a real address spent geocoder quota
+          // per preview render) — same sample line the pin label uses.
+          label = SAMPLE_ADDRESS_LINE;
+        } else {
+          try {
+            const r = await api.addressReverse(fix.lat, fix.lng);
+            label = r.line ?? null;
+            parts = r.parts ?? null;
+          } catch {
+            /* the coordinates alone are still a fix */
+          }
         }
         resolved = { lat: fix.lat, lng: fix.lng, accuracy: fix.accuracy, label, parts };
         failed = false;

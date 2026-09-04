@@ -24,9 +24,12 @@ export function AddressEntranceStep() {
   const flow = useAddressFlow();
   const svFrameUrl = !flow.googleKey && flow.mapsFrameUrl ? streetViewFrameUrlOf(flow.mapsFrameUrl) : null;
   const svRequired = flow.address?.streetView === 'required';
-  // The builder preview keeps the step real users get, on a static stand-in
-  // (the camera steps' placeholder rule): no Google loads from the builder.
-  const preview = flow.previewMode;
+  // The builder preview AND sandbox keep the step real users get, on a
+  // static stand-in (the camera steps' placeholder rule): no Google loads
+  // from either. The photo path below stays real — uploads work on sandbox,
+  // and the server cans the verdicts regardless. DEVELOPMENT gets the real
+  // framer, per the dev-is-real rule.
+  const preview = flow.vendorsStubbed;
   const streetView =
     flow.streetViewOffered &&
     Boolean(flow.pin) &&
@@ -64,8 +67,8 @@ export function AddressEntranceStep() {
             <div className="flex h-[52vh] min-h-[300px] w-full flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-border bg-muted/40 sm:h-[420px]">
               <Landmark className="h-8 w-8 text-muted-foreground/60" />
               <p className="max-w-[18rem] px-6 text-center text-xs text-muted-foreground">
-                Street View preview — applicants pan real street imagery to frame their entrance
-                here. It only loads for real users.
+                Applicants pan real street imagery to frame their entrance here. It loads only
+                for real users.
               </p>
             </div>
             <div className="flex gap-2">

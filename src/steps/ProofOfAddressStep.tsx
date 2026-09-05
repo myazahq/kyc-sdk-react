@@ -1,9 +1,8 @@
 'use client';
 
 import React, { useRef, useState } from 'react';
-import { CheckCircle2, Loader2, Upload, X } from 'lucide-react';
-import { UploadedFileThumb } from '../components/UploadedFilePreview';
-import { MyazaSelect } from '../components/MyazaSelect';
+import { PoaDocumentTypeList } from './PoaDocumentTypeList';
+import { PoaDropzone, PoaUploadedRow } from './ProofOfAddressParts';
 import { StepHeader } from '../components/StepHeader';
 import { AddressCountryControl } from './address/AddressCountryControl';
 import { Button } from '../components/ui/button';
@@ -11,7 +10,6 @@ import { useKYCContext } from '../context/KYCContext';
 import { useKYCConfig } from '../context/KYCConfigContext';
 import { poaOfferedKinds, stepAfterProofOfAddress } from '../lib/post-capture';
 import { lastContactStep } from '../lib/contact-steps';
-import { cn } from '../lib/utils';
 import type { PoaDocumentType } from '../types/config';
 
 const TYPE_LABELS: Record<PoaDocumentType, string> = {
@@ -51,6 +49,11 @@ export function ProofOfAddressStep() {
       : TYPE_LABELS[type];
   const maxAgeDays = config.proofOfAddress?.maxAgeDays ?? 90;
   const uploaded = Boolean(state.mediaIds.proofOfAddress);
+  // The flag on the attachment area: on the address scope only a country the
+  // applicant picked (the scope has no seeded country to show), else the
+  // flow's effective country.
+  const flagCountry =
+    config.scope === 'address' ? (state.selectedCountry ?? null) : (config.country ?? null);
 
   const handleFile = async (file: File) => {
     setError(null);
@@ -112,16 +115,16 @@ export function ProofOfAddressStep() {
 
       {offeredTypes.length > 1 && (
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="poa-document-type" className="text-sm font-semibold">
+          <span id="poa-document-type-label" className="text-sm font-semibold">
             Document type
-          </label>
-          <MyazaSelect
-            id="poa-document-type"
+          </span>
+          <PoaDocumentTypeList
+            labelledBy="poa-document-type-label"
             value={selectedType}
             options={offeredTypes.map((type) => ({ value: type, label: labelFor(type) }))}
             // Locked once a file is attached: switching the kind afterwards
             // would mislabel the document already uploaded. Same rule as RN.
-            enabled={!uploaded}
+            disabled={uploaded}
             onChange={(type) =>
               dispatch({
                 type: 'SET_POA_DOCUMENT',
@@ -145,45 +148,23 @@ export function ProofOfAddressStep() {
       />
 
       {uploaded ? (
-        <div className="flex items-center gap-3 rounded-xl border border-border bg-muted/30 p-4">
-          {pickedFile ? (
-            <UploadedFileThumb file={pickedFile} label={labelFor(selectedType)} />
-          ) : (
-            <CheckCircle2 className="h-5 w-5 shrink-0 text-[var(--kyc-success,#0DA211)]" />
-          )}
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium">{state.poaFileName || 'Document uploaded'}</p>
-            <p className="text-xs text-muted-foreground">{labelFor(selectedType)}</p>
-          </div>
-          <button
-            type="button"
-            aria-label="Remove document"
-            onClick={() => {
-              setPickedFile(null);
-              dispatch({ type: 'CLEAR_POA_DOCUMENT' });
-            }}
-            className="rounded-full p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
+        <PoaUploadedRow
+          pickedFile={pickedFile}
+          fileName={state.poaFileName}
+          typeLabel={labelFor(selectedType)}
+          country={flagCountry}
+          onRemove={() => {
+            setPickedFile(null);
+            dispatch({ type: 'CLEAR_POA_DOCUMENT' });
+          }}
+        />
       ) : (
-        <button
-          type="button"
-          disabled={uploading}
-          onClick={() => inputRef.current?.click()}
-          className="flex w-full flex-col items-center gap-2 rounded-xl border-2 border-dashed border-border p-8 text-center transition-colors hover:border-primary/50 hover:bg-muted/30"
-        >
-          {uploading ? (
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          ) : (
-            <Upload className="h-8 w-8 text-muted-foreground" />
-          )}
-          <span className="text-sm font-medium">
-            {uploading ? 'Uploading…' : `Upload your ${labelFor(selectedType).toLowerCase()}`}
-          </span>
-          <span className="text-xs text-muted-foreground">Photo or PDF, up to 20MB</span>
-        </button>
+        <PoaDropzone
+          uploading={uploading}
+          typeLabel={labelFor(selectedType)}
+          country={flagCountry}
+          onPress={() => inputRef.current?.click()}
+        />
       )}
 
       {error && <p className="text-sm text-destructive">{error}</p>}

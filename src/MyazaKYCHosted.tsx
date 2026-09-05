@@ -1,14 +1,15 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Check, Loader2 } from 'lucide-react';
-import { buildThemeVars } from './lib/theme';
+import { Check } from 'lucide-react';
 import { createKYCApi, type CompletedSessionSummary, type HandoffBootstrapResponse, type KYCApi } from './services/api';
 import { HostedCompleted } from './hosted/HostedCompleted';
 import { HostedFlow } from './hosted/HostedFlow';
+import { HostedLoadingScreen, HostedScreen } from './hosted/HostedScreen';
 import { HANDOFF_TOKEN_PREFIX } from './hosted/token';
 import { SdkFrame } from './lib/sdk-frame';
 import type { MyazaKYCHostedProps } from './hosted/hosted-props';
+import type { KYCAppearance } from './types/config';
 
 export type { MyazaKYCHostedProps, MyazaKYCHostedReadyInfo } from './hosted/hosted-props';
 
@@ -21,7 +22,9 @@ export type { MyazaKYCHostedProps, MyazaKYCHostedReadyInfo } from './hosted/host
  */
 export function MyazaKYCHosted({
   token,
+  serverUrl = '',
   embedded = false,
+  appearance,
   onClose,
   onReady,
   onStart,
@@ -30,8 +33,9 @@ export function MyazaKYCHosted({
   onError,
   onCompleted,
 }: MyazaKYCHostedProps) {
-  // Relative base ('') → requests hit the hosting origin and its /api proxy.
-  const [api] = useState<KYCApi>(() => createKYCApi('', `${HANDOFF_TOKEN_PREFIX}${token}`));
+  // Direct to the API when the page names it; '' keeps the old same-origin
+  // proxy path (see MyazaKYCHostedProps.serverUrl for why direct is right).
+  const [api] = useState<KYCApi>(() => createKYCApi(serverUrl, `${HANDOFF_TOKEN_PREFIX}${token}`));
   const [phase, setPhase] = useState<'loading' | 'ready' | 'completed' | 'error'>('loading');
   const [bootstrap, setBootstrap] = useState<HandoffBootstrapResponse | null>(null);
   const [summary, setSummary] = useState<CompletedSessionSummary | null>(null);
@@ -93,14 +97,14 @@ export function MyazaKYCHosted({
   }, [api, token]);
 
   const frame = (body: React.ReactNode) => <SdkFrame isolate={embedded}>{body}</SdkFrame>;
+  // The screens around the flow wear the workflow's colours: the page's
+  // server-read appearance before the bootstrap, the snapshot's after (the
+  // same data — see MyazaKYCHostedProps.appearance).
+  const screenAppearance =
+    (bootstrap?.configSnapshot as { appearance?: KYCAppearance } | null)?.appearance ?? appearance;
 
   if (phase === 'loading') {
-    return frame(
-      <CenteredScreen compact={embedded}>
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <p className="text-sm text-muted-foreground">Loading your verification…</p>
-      </CenteredScreen>,
-    );
+    return frame(<HostedLoadingScreen appearance={appearance} compact={embedded} />);
   }
 
   // Somebody returning should land on the screen they left — the real one, with
@@ -120,7 +124,7 @@ export function MyazaKYCHosted({
   // it is the people list that is missing.
   if (phase === 'completed') {
     return frame(
-      <CenteredScreen compact={embedded}>
+      <HostedScreen appearance={screenAppearance} compact={embedded}>
         <span className="flex h-20 w-20 items-center justify-center rounded-full bg-emerald-500/10">
           <Check className="h-10 w-10 text-emerald-500" />
         </span>
@@ -128,18 +132,18 @@ export function MyazaKYCHosted({
         <p className="max-w-xs text-center text-sm text-muted-foreground">
           This has already been sent for review. There is nothing more for you to do{embedded ? '.' : ', and you can close this tab.'}
         </p>
-      </CenteredScreen>,
+      </HostedScreen>,
     );
   }
 
   if (phase === 'error' || !bootstrap) {
     return frame(
-      <CenteredScreen compact={embedded}>
+      <HostedScreen appearance={screenAppearance} compact={embedded}>
         <h1 className="text-lg font-semibold font-heading">Link unavailable</h1>
         <p className="max-w-xs text-center text-sm text-muted-foreground">
           {error ?? 'This verification link has expired or already been used. Return to your computer to start again.'}
         </p>
-      </CenteredScreen>,
+      </HostedScreen>,
     );
   }
 
@@ -155,22 +159,5 @@ export function MyazaKYCHosted({
       onSubmit={onSubmit}
       onError={onError}
     />,
-  );
-}
-
-function CenteredScreen({ children, compact }: { children: React.ReactNode; compact?: boolean }) {
-  // Compact: an embedded mount sits inside a host panel, where a
-  // min-h-screen block would blow the layout open.
-  return (
-    <div
-      className={
-        compact
-          ? 'kyc-root flex flex-col items-center justify-center gap-4 rounded-2xl bg-background px-6 py-12 text-foreground'
-          : 'kyc-root flex min-h-screen flex-col items-center justify-center gap-4 bg-background p-6 text-foreground'
-      }
-      style={buildThemeVars(undefined)}
-    >
-      {children}
-    </div>
   );
 }

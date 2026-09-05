@@ -220,7 +220,7 @@ export function ContactVerificationStep({ channel }: { channel: 'email' | 'phone
         {!required && !alreadyVerified && (
           <button
             type="button"
-            className="w-full text-center text-sm text-muted-foreground hover:text-foreground"
+            className="mx-auto block w-fit text-sm text-muted-foreground hover:text-foreground"
             onClick={advance}
           >
             Skip for now

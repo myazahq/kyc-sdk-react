@@ -35,7 +35,31 @@ declare global {
 
 let loaderPromise: Promise<GoogleMapsApi> | null = null;
 
+// Google validates the key AFTER the script has loaded and a map has been
+// constructed, so by the time it calls gm_authFailure the load promise has
+// long since resolved and rejecting it does nothing. The failure is therefore
+// kept as its own sticky signal: mounts that are already up subscribe to it
+// and swap to the built-in map, and every later load on this page rejects at
+// once instead of injecting Google's own error panel a second time. A key
+// refused for an origin stays refused for the life of the page.
+let authFailed = false;
+const authFailureListeners = new Set<() => void>();
+
+/** Subscribe to the key being refused; fires immediately if it already was. */
+export function onGoogleMapsAuthFailure(listener: () => void): () => void {
+  if (authFailed) listener();
+  authFailureListeners.add(listener);
+  return () => authFailureListeners.delete(listener);
+}
+
+function recordAuthFailure(): void {
+  authFailed = true;
+  loaderPromise = null;
+  for (const l of authFailureListeners) l();
+}
+
 export function loadGoogleMaps(apiKey: string): Promise<GoogleMapsApi> {
+  if (authFailed) return Promise.reject(new Error('maps_auth_failed'));
   if (window.google?.maps?.Map) return Promise.resolve(window.google.maps);
   if (loaderPromise) return loaderPromise;
   loaderPromise = new Promise<GoogleMapsApi>((resolve, reject) => {
@@ -45,6 +69,7 @@ export function loadGoogleMaps(apiKey: string): Promise<GoogleMapsApi> {
           "Add this origin to the key's Website restrictions in the Google console " +
           '(e.g. "http://localhost:3002/*" for local dev). Showing the built-in map instead.',
       );
+      recordAuthFailure();
       reject(new Error('maps_auth_failed'));
     };
     const script = document.createElement('script');

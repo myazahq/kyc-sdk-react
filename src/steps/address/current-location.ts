@@ -27,6 +27,42 @@ let resolved: CurrentFix | null = null;
 let inflight: Promise<CurrentFix | null> | null = null;
 let failed = false;
 
+/**
+ * Why the last attempt failed, so the message can say something true: a
+ * refused permission, a device that cannot place itself (a laptop on a phone
+ * hotspot with no wifi networks around it), and a fix that took longer than
+ * the window are three different problems with three different remedies, and
+ * one line telling everybody to "allow location access" sent people to a
+ * permission that was already granted.
+ */
+export type LocationFailure = 'denied' | 'unavailable' | 'timeout' | 'unsupported';
+let lastFailure: LocationFailure | null = null;
+
+export function currentFixFailure(): LocationFailure | null {
+  return lastFailure;
+}
+
+export function locationFailureMessage(reason: LocationFailure | null): string {
+  switch (reason) {
+    case 'denied':
+      return 'Location access is blocked for this site. Allow it in your browser (on a Mac, also under System Settings, Privacy & Security, Location Services), then try again, or place the pin yourself.';
+    case 'unavailable':
+      return 'Your device could not work out where it is right now. Try again in a moment, or place the pin yourself.';
+    case 'timeout':
+      return 'Finding your location took too long. Try again, or place the pin yourself.';
+    default:
+      return 'This browser cannot share your location. Place the pin yourself.';
+  }
+}
+
+function classify(err: unknown): LocationFailure {
+  const code = (err as { code?: number } | null)?.code;
+  if (code === 1) return 'denied';
+  if (code === 2) return 'unavailable';
+  if (code === 3) return 'timeout';
+  return 'unsupported';
+}
+
 /** The fix, when one has already resolved this session. */
 export function currentFix(): CurrentFix | null {
   return resolved;
@@ -74,10 +110,12 @@ export function prefetchCurrentFix(
         }
         resolved = { lat: fix.lat, lng: fix.lng, accuracy: fix.accuracy, label, parts };
         failed = false;
+        lastFailure = null;
         return resolved;
-      } catch {
+      } catch (err) {
         inflight = null; // an explicit later tap may retry (e.g. permission granted since)
         failed = true;
+        lastFailure = classify(err);
         return null;
       }
     })();

@@ -58,7 +58,7 @@ export function ContactCodePanel({
       {otherChannel && (
         <button
           type="button"
-          className="w-full text-center text-xs text-muted-foreground hover:text-foreground disabled:opacity-50"
+          className="mx-auto block w-fit text-xs text-muted-foreground hover:text-foreground disabled:opacity-50"
           onClick={() => onResend(otherChannel)}
           disabled={disabled}
         >

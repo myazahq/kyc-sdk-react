@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { StepHeader } from '../../components/StepHeader';
 import { Button } from '../../components/ui/button';
+import { StickyActions } from '../../components/StickyActions';
 import { AddressPhotoUpload } from '../../components/AddressPhotoUpload';
 import { useKYCContext } from '../../context/KYCContext';
 import { useAddressFlow } from './use-address-flow';
@@ -64,30 +65,32 @@ export function AddressEntranceStep() {
       {mode === 'framing' && streetView && flow.pin ? (
         preview ? (
           <div className="space-y-3">
-            <div className="flex h-[52vh] min-h-[300px] w-full flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-border bg-muted/40 sm:h-[420px]">
+            <div className="flex h-[40vh] min-h-[240px] max-h-[360px] w-full flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-border bg-muted/40 sm:h-[420px] sm:max-h-none">
               <Landmark className="h-8 w-8 text-muted-foreground/60" />
               <p className="max-w-[18rem] px-6 text-center text-xs text-muted-foreground">
                 Applicants pan real street imagery to frame their entrance here. It loads only
                 for real users.
               </p>
             </div>
-            <div className="flex gap-2">
-              {!svRequired && (
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setSkipped(true);
-                    setMode('photo');
-                  }}
-                  className="h-11 flex-1 rounded-xl"
-                >
-                  Skip
+            <StickyActions>
+              <div className="flex gap-2">
+                {!svRequired && (
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setSkipped(true);
+                      setMode('photo');
+                    }}
+                    className="h-11 flex-1 rounded-xl"
+                  >
+                    Skip
+                  </Button>
+                )}
+                <Button onClick={() => flow.goNext('address-entrance')} className="h-11 flex-1 rounded-xl">
+                  Use this view
                 </Button>
-              )}
-              <Button onClick={() => flow.goNext('address-entrance')} className="h-11 flex-1 rounded-xl">
-                Use this view
-              </Button>
-            </div>
+              </div>
+            </StickyActions>
           </div>
         ) : flow.googleKey ? (
           <StreetViewFramer

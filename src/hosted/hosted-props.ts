@@ -1,5 +1,5 @@
 import type { CompletedSessionSummary, HandoffBootstrapResponse } from '../services/api';
-import type { KYCStep } from '../types/config';
+import type { KYCAppearance, KYCStep } from '../types/config';
 import type { KYCError, KYCSubmission } from '../types/verification';
 
 // The hosted entry point's public props, split out of MyazaKYCHosted.tsx
@@ -20,6 +20,18 @@ export interface MyazaKYCHostedProps {
    */
   token: string;
   /**
+   * The API origin to call DIRECTLY, e.g. `https://trust.myaza.app`. Absent
+   * (the default, `''`), every request goes same-origin through the hosting
+   * page's `/api` proxy — which was how the hosted page always ran, and why
+   * the API saw that page's SERVER as the applicant: Device Intelligence
+   * recorded a US datacentre for everyone, the phone step defaulted every
+   * applicant to the United States, and the country a proof-of-address is
+   * declared for opened blank. A hosted session authenticates with its
+   * bearer and needs no cookie, so it has no reason to be proxied; the hosted
+   * page passes the origin it would have proxied to anyway.
+   */
+  serverUrl?: string;
+  /**
    * Mount INSIDE a host application rather than on the hosted page. Implies
    * shadow-DOM style isolation (the SDK carries its own stylesheet; no global
    * `styles.css` import, and the host app's CSS cannot reach in), swaps the
@@ -29,6 +41,17 @@ export interface MyazaKYCHostedProps {
    * keeps its full-page, light-DOM behaviour exactly as before.
    */
   embedded?: boolean;
+  /**
+   * The workflow's appearance, when the hosting PAGE already knows it. The
+   * hosted pages read it on the server from
+   * `GET /api/kyc/session/by-token/:token/appearance` (or the link's twin) and
+   * pass it here, so the loading and terminal screens paint in the org's
+   * colours from the first frame. Without it those screens wore the SDK
+   * default (Myaza purple) until the bootstrap answered, then repainted: a
+   * brand flash on every hosted open. Once the bootstrap arrives its
+   * snapshot's appearance takes over; the two are the same data.
+   */
+  appearance?: KYCAppearance;
   /** Embedded mounts: the modal was closed or the flow's Done was pressed. */
   onClose?: () => void;
   /**

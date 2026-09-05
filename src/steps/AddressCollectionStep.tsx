@@ -5,6 +5,7 @@ import { PencilLine } from 'lucide-react';
 import { AddressMap } from '../components/AddressMap';
 import { StepHeader } from '../components/StepHeader';
 import { Button } from '../components/ui/button';
+import { StickyActions } from '../components/StickyActions';
 import { useKYCContext } from '../context/KYCContext';
 import { useAddressFlow } from './address/use-address-flow';
 import { useAddressIntroGate } from './address/AddressIntroGate';
@@ -105,7 +106,7 @@ export function AddressCollectionStep() {
           onChange={(next) => flow.setPin(next)}
           defaultCenter={flow.view.center}
           defaultZoom={flow.view.zoom}
-          className="h-[52vh] min-h-[300px] sm:h-[420px]"
+          className="h-[40vh] min-h-[240px] max-h-[360px] sm:h-[420px] sm:max-h-none"
         />
         {pin && <LocateFab locating={flow.locating} onClick={() => void flow.locateToPin()} />}
       </div>
@@ -149,23 +150,25 @@ export function AddressCollectionStep() {
         </p>
       )}
 
-      <Button
-        onClick={handleContinue}
-        disabled={!pin || flow.confirming}
-        className="h-12 w-full rounded-xl text-base font-medium"
-      >
-        {flow.confirming ? 'Confirming…' : 'Continue'}
-      </Button>
-
-      {flow.address?.requirePin !== true && (
-        <button
-          type="button"
-          onClick={flow.exitForward}
-          className="w-full text-center text-sm text-muted-foreground underline-offset-2 hover:underline"
+      <StickyActions className="space-y-3">
+        <Button
+          onClick={handleContinue}
+          disabled={!pin || flow.confirming}
+          className="h-12 w-full rounded-xl text-base font-medium"
         >
-          Skip for now
-        </button>
-      )}
+          {flow.confirming ? 'Confirming…' : 'Continue'}
+        </Button>
+
+        {flow.address?.requirePin !== true && (
+          <button
+            type="button"
+            onClick={flow.exitForward}
+            className="mx-auto block w-fit text-sm text-muted-foreground underline-offset-2 hover:underline"
+          >
+            Skip for now
+          </button>
+        )}
+      </StickyActions>
 
       <DetailsSheet
         open={sheetOpen}

@@ -53,9 +53,18 @@ const DialogContent = React.forwardRef<
 			ref={ref}
 			className={cn(
 				"fixed z-50 bg-background text-foreground shadow-lg animate-slide-up focus:outline-none overflow-y-auto",
+				// `h-dvh` beside `inset-0`: the height comes from the dynamic viewport
+				// unit, not from `bottom: 0`. On iOS Safari a link opened from
+				// another app (WhatsApp, Mail) can lay the page out before the
+				// viewport has its real size, and a fixed box sized by its insets
+				// then keeps that stale height until something forces a relayout:
+				// the sheet rendered content-tall with the dimmed page showing
+				// beneath "Powered by", and a refresh cured it. Viewport units are
+				// re-resolved when the viewport changes; insets were not. Browsers
+				// without dvh ignore the rule and fall back to the insets.
 				fullscreen
-					? "inset-0 rounded-none"
-					: "inset-0 rounded-none xl:inset-auto xl:left-[50%] xl:top-[50%] xl:translate-x-[-50%] xl:translate-y-[-50%] xl:w-[40vw] xl:max-h-[92vh] xl:rounded-2xl",
+					? "inset-0 h-dvh rounded-none"
+					: "inset-0 h-dvh rounded-none xl:inset-auto xl:h-auto xl:left-[50%] xl:top-[50%] xl:translate-x-[-50%] xl:translate-y-[-50%] xl:w-[40vw] xl:max-h-[92vh] xl:rounded-2xl",
 				className,
 			)}
 			{...props}>

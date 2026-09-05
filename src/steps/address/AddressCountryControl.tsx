@@ -26,8 +26,10 @@ import type { AnyCountry } from '../../types/config';
  * The MENU is markup-identical to BusinessCountrySelect's (the house
  * searchable country dropdown — keep the two in lockstep): portaled to the
  * dialog root via the shared anchor, search pinned, region groups, the
- * IP-derived country pinned on top tagged "Your location". Only the TRIGGER
- * differs — the eyebrow card, so the field says what it is.
+ * IP-derived country pinned on top tagged "Your location". The FIELD is the
+ * house shape too — a label above, the h-12 trigger of MyazaSelect — so it
+ * reads as one form beside the Document type field under it (user decision
+ * 2026-09-05: the label sits outside the input, never as an eyebrow inside).
  */
 export function AddressCountryControl() {
   const config = useKYCConfig();
@@ -113,14 +115,12 @@ export function AddressCountryControl() {
   if (offered.length === 1) {
     const only = offered[0]!;
     return (
-      <div className="flex w-full items-center gap-2.5 rounded-xl border border-border/60 bg-muted/20 px-3.5 py-2.5">
-        <CountryFlag code={only} className="h-6 w-6 shrink-0" title={regionCountryName(only)} />
-        <span className="min-w-0 flex-1">
-          <span className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-            Country
-          </span>
-          <span className="block truncate text-sm font-medium leading-tight">{regionCountryName(only)}</span>
-        </span>
+      <div className="flex flex-col gap-1.5">
+        <span className="text-sm font-semibold">Country</span>
+        <div className="flex h-12 w-full items-center gap-2.5 rounded-xl border border-input bg-muted/30 px-3 text-sm">
+          <CountryFlag code={only} className="h-5 w-5 shrink-0" title={regionCountryName(only)} />
+          <span className="truncate">{regionCountryName(only)}</span>
+        </div>
       </div>
     );
   }
@@ -157,29 +157,25 @@ export function AddressCountryControl() {
   };
 
   return (
-    <div ref={rootRef} className="relative">
+    <div ref={rootRef} className="flex flex-col gap-1.5">
+      <label htmlFor="address-country" className="text-sm font-semibold">
+        Country
+      </label>
       <button
         ref={triggerRef}
+        id="address-country"
         type="button"
         role="combobox"
         aria-expanded={open}
-        aria-label="Country"
         onClick={() => setOpen((o) => !o)}
         className={cn(
-          'flex w-full items-center gap-2.5 rounded-xl border px-3.5 py-2.5 text-left transition-colors',
-          'focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-          open ? 'border-primary/50 bg-primary/5' : 'border-border/60 bg-muted/20 hover:border-border',
+          'flex h-12 w-full items-center gap-2.5 rounded-xl border border-input bg-background px-3 text-left text-sm transition-colors',
+          'hover:bg-accent/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+          !value && 'text-muted-foreground',
         )}
       >
-        {value && <CountryFlag code={value} className="h-6 w-6 shrink-0" title={regionCountryName(value)} />}
-        <span className="min-w-0 flex-1">
-          <span className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-            Country
-          </span>
-          <span className="block truncate text-sm font-medium leading-tight">
-            {value ? regionCountryName(value) : 'Select country'}
-          </span>
-        </span>
+        {value && <CountryFlag code={value} className="h-5 w-5 shrink-0" title={regionCountryName(value)} />}
+        <span className="flex-1 truncate">{value ? regionCountryName(value) : 'Select country'}</span>
         <ChevronDown
           className={cn('h-4 w-4 shrink-0 text-muted-foreground transition-transform', open && 'rotate-180')}
         />

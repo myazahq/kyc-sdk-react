@@ -3,7 +3,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { Button } from '../../components/ui/button';
-import { loadGoogleMaps, type PanoramaInstance } from '../../lib/google-loader';
+import { StickyActions } from '../../components/StickyActions';
+import { loadGoogleMaps, onGoogleMapsAuthFailure, type PanoramaInstance } from '../../lib/google-loader';
 import type { LatLng } from '../../lib/map-tiles';
 
 // The OkHi entrance trick, provenance-honest: the applicant pans a Street
@@ -64,6 +65,8 @@ export function StreetViewFramer({
 
   useEffect(() => {
     let cancelled = false;
+    // The key can be refused after the panorama is already up (see the loader).
+    const unsubscribe = onGoogleMapsAuthFailure(() => !cancelled && unavailableRef.current());
     (async () => {
       try {
         const api = await loadGoogleMaps(apiKey);
@@ -96,6 +99,7 @@ export function StreetViewFramer({
     })();
     return () => {
       cancelled = true;
+      unsubscribe();
     };
   }, [apiKey, pin.lat, pin.lng]);
 
@@ -120,7 +124,7 @@ export function StreetViewFramer({
 
   return (
     <div className="space-y-3">
-      <div className="relative h-[52vh] min-h-[300px] w-full overflow-hidden rounded-xl border border-border bg-muted sm:h-[420px]">
+      <div className="relative h-[40vh] min-h-[240px] max-h-[360px] w-full overflow-hidden rounded-xl border border-border bg-muted sm:h-[420px] sm:max-h-none">
         <div ref={holder} className="absolute inset-0" />
         {status === 'loading' && (
           <div className="absolute inset-0 flex items-center justify-center">
@@ -161,16 +165,18 @@ export function StreetViewFramer({
           Drag to look around until your gate or front door sits inside the frame.
         </p>
       )}
-      <div className="flex gap-2">
-        {!hideSkip && (
-          <Button variant="outline" onClick={onSkip} className="h-11 flex-1 rounded-xl">
-            Skip
+      <StickyActions>
+        <div className="flex gap-2">
+          {!hideSkip && (
+            <Button variant="outline" onClick={onSkip} className="h-11 flex-1 rounded-xl">
+              Skip
+            </Button>
+          )}
+          <Button onClick={capture} disabled={status !== 'ready'} className="h-11 flex-1 rounded-xl">
+            Use this view
           </Button>
-        )}
-        <Button onClick={capture} disabled={status !== 'ready'} className="h-11 flex-1 rounded-xl">
-          Use this view
-        </Button>
-      </div>
+        </div>
+      </StickyActions>
     </div>
   );
 }

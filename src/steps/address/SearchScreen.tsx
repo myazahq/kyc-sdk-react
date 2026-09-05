@@ -8,6 +8,7 @@ import { AddressSearchBox } from '../../components/AddressSearchBox';
 import { DropdownSurface } from '../../components/DropdownSurface';
 import { CurrentLocationRow } from './CurrentLocationRow';
 import { eventPathIncludes } from '../../lib/event-path';
+import { randomId } from '../../lib/random-id';
 import { useDropdownAnchor } from '../../lib/use-dropdown-anchor';
 import { useKYCConfig } from '../../context/KYCConfigContext';
 import type { PlaceSuggestion } from '../../services/api';
@@ -58,7 +59,7 @@ export function SearchScreen({
   const [query, setQuery] = useState('');
   const [busy, setBusy] = useState(false);
   const [suggestions, setSuggestions] = useState<PlaceSuggestion[] | null>(null);
-  const session = useRef(crypto.randomUUID());
+  const session = useRef(randomId());
   const debounce = useRef<number | null>(null);
   const searchWrapRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -115,7 +116,7 @@ export function SearchScreen({
     setBusy(true);
     try {
       const { place } = await config.api.addressPlace(s.placeId, session.current);
-      session.current = crypto.randomUUID(); // a details call closes the session
+      session.current = randomId(); // a details call closes the session
       onResolved(place);
     } catch {
       setSuggestions([]);
@@ -185,7 +186,7 @@ export function SearchScreen({
       <button
         type="button"
         onClick={onPinInstead}
-        className="w-full text-center text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+        className="mx-auto block w-fit text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
       >
         Place a pin on the map instead
       </button>

@@ -180,7 +180,7 @@ export function AddressReviewStep() {
         <button
           type="button"
           onClick={flow.exitForward}
-          className="w-full text-center text-sm text-muted-foreground underline-offset-2 hover:underline"
+          className="mx-auto block w-fit text-sm text-muted-foreground underline-offset-2 hover:underline"
         >
           Skip for now
         </button>

@@ -56,8 +56,13 @@ export function PoweredBy() {
   // one lockup.
   const markColor = brandMarkColor(background);
 
+  // Compact on a phone: the footer sat 28px below the lockup on a surface
+  // where every row costs the map or the button above it. The bottom keeps
+  // clear of the home indicator through the safe-area inset, which is zero in
+  // a browser tab (Safari already stops above its own bar) and real in a
+  // standalone or in-app WebView, so neither case pads twice.
   return (
-    <div className="shrink-0 px-6 pt-4 pb-7">
+    <div className="shrink-0 px-6 pt-2.5 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] sm:pt-4 sm:pb-6">
       {/* The ROW is not the link — only the mark is. As a block-level flex child
           the anchor used to span the footer's full width, so the empty space
           either side of the lockup opened myaza.co too. A link's hit area should
@@ -86,14 +91,14 @@ export function PoweredBy() {
           {/* The icon keeps its brand colours; only the wordmark flips, and it
               does so by inheriting this text colour — one render, both themes. */}
           <span className="flex items-center" style={{ color: markColor }}>
-            <MyazaWordmark height={28} />
+            <MyazaWordmark height={24} />
           </span>
 
           {/* The rule is part of the mark too, so it follows the same colour
             rather than the org's border token. */}
         <span
           aria-hidden
-          className="h-6 w-px shrink-0"
+          className="h-5 w-px shrink-0"
           style={{ backgroundColor: markColor, opacity: 0.35 }}
         />
 
@@ -105,7 +110,7 @@ export function PoweredBy() {
               ones an org's typography settings overwrite. */}
           <span
             style={{ fontFamily: BRAND_FONT_STACK, color: markColor }}
-            className="text-sm font-semibold uppercase leading-none tracking-[0.14em]"
+            className="text-xs font-semibold uppercase leading-none tracking-[0.14em]"
           >
             Trust
           </span>

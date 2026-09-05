@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { Button } from '../../components/ui/button';
+import { StickyActions } from '../../components/StickyActions';
 import {
   buildStreetViewFrameSrc,
   frameOriginOf,
@@ -108,7 +109,7 @@ export function FramedStreetView({
     <div className="space-y-3">
       <div
         ref={viewport}
-        className="relative h-[52vh] min-h-[300px] w-full overflow-hidden rounded-xl border border-border bg-muted sm:h-[420px]"
+        className="relative h-[40vh] min-h-[240px] max-h-[360px] w-full overflow-hidden rounded-xl border border-border bg-muted sm:h-[420px] sm:max-h-none"
       >
         <iframe
           ref={iframeRef}
@@ -143,16 +144,18 @@ export function FramedStreetView({
           Drag to look around until your gate or front door sits inside the frame.
         </p>
       )}
-      <div className="flex gap-2">
-        {!hideSkip && (
-          <Button variant="outline" onClick={onSkip} className="h-11 flex-1 rounded-xl">
-            Skip
+      <StickyActions>
+        <div className="flex gap-2">
+          {!hideSkip && (
+            <Button variant="outline" onClick={onSkip} className="h-11 flex-1 rounded-xl">
+              Skip
+            </Button>
+          )}
+          <Button onClick={capture} disabled={status !== 'ready'} className="h-11 flex-1 rounded-xl">
+            Use this view
           </Button>
-        )}
-        <Button onClick={capture} disabled={status !== 'ready'} className="h-11 flex-1 rounded-xl">
-          Use this view
-        </Button>
-      </div>
+        </div>
+      </StickyActions>
     </div>
   );
 }

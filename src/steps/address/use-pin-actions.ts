@@ -11,7 +11,7 @@ import {
   addressVendorsStubbed,
   metersBetween,
 } from './flow-steps';
-import { currentFix, locating, prefetchCurrentFix, type CurrentFix } from './current-location';
+import { currentFix, currentFixFailure, locating, locationFailureMessage, prefetchCurrentFix, type CurrentFix } from './current-location';
 import { configScope } from '../../lib/scope';
 import type { AddressParts } from '../../services/api';
 
@@ -179,7 +179,11 @@ export function usePinActions({ config, state, dispatch, setError }: PinActionDe
         },
       });
     } else if (!opts?.silent) {
-      setError('We could not read your location. Drag the map to place the pin instead.');
+      // Say so and STAY: moving on used to land the person on the pin step
+      // centred on the country with no word about why, which reads as the
+      // feature being broken rather than the browser having refused.
+      setError(locationFailureMessage(currentFixFailure()));
+      return;
     }
     onDone?.();
   };
@@ -258,7 +262,7 @@ export function usePinActions({ config, state, dispatch, setError }: PinActionDe
     setFix(f);
     setFixPending(false);
     if (f) setPin({ lat: f.lat, lng: f.lng }, f.accuracy);
-    else setError('We could not read your location. Drag the map to place the pin instead.');
+    else setError(locationFailureMessage(currentFixFailure()));
   };
 
   return {

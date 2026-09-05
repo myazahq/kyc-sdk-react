@@ -5,7 +5,7 @@ import { MapPinPicker } from './MapPinPicker';
 import { MapPinMarker } from './MapPinMarker';
 import type { LatLng } from '../lib/map-tiles';
 import { cn } from '../lib/utils';
-import { loadGoogleMaps, type GoogleMapInstance } from '../lib/google-loader';
+import { loadGoogleMaps, onGoogleMapsAuthFailure, type GoogleMapInstance } from '../lib/google-loader';
 
 // Google Maps rendering for the address picker — HOSTED pages only (the OkHi
 // model). The hosted-session bootstrap carries Myaza's browser key, which is
@@ -30,6 +30,9 @@ interface GoogleMapPickerProps {
   className?: string;
 }
 
+const finePointer = (): boolean =>
+  typeof window !== 'undefined' && !!window.matchMedia?.('(pointer: fine)').matches;
+
 export function GoogleMapPicker({
   apiKey,
   value,
@@ -50,6 +53,10 @@ export function GoogleMapPicker({
 
   useEffect(() => {
     let alive = true;
+    // A referrer-restricted key is refused only once a map is up, so the load
+    // below cannot report it; this is what does, and the fallback render takes
+    // over from Google's own error panel.
+    const unsubscribe = onGoogleMapsAuthFailure(() => alive && setFailed(true));
     loadGoogleMaps(apiKey)
       .then((api) => {
         if (!alive || !containerRef.current || mapRef.current) return;
@@ -67,7 +74,13 @@ export function GoogleMapPicker({
           // stays its own road tiles (raster; no imagery available).
           mapTypeId: 'hybrid',
           clickableIcons: false,
-          gestureHandling: interactive ? 'greedy' : 'none',
+          // A finger owns the map (greedy: one-finger pan, the pin step's whole
+          // job). A mouse does not: the map fills most of a desktop window, so
+          // a wheel that zooms it instead of scrolling the page leaves the
+          // card and the buttons beneath it unreachable. Cooperative keeps
+          // drag-to-pan and gives the wheel back to the page (Ctrl/Cmd+wheel
+          // still zooms).
+          gestureHandling: !interactive ? 'none' : finePointer() ? 'cooperative' : 'greedy',
           keyboardShortcuts: false,
         });
         map.addListener('dragstart', () => setLifted(true));
@@ -87,6 +100,7 @@ export function GoogleMapPicker({
       .catch(() => alive && setFailed(true));
     return () => {
       alive = false;
+      unsubscribe();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiKey]);

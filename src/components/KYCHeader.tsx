@@ -116,7 +116,7 @@ export function KYCHeader({
         // paddingBottom on the header container. It applies in BAR mode too:
         // the bar is absolutely positioned on the edge, so without this the
         // description would sit right on top of it.
-        'relative shrink-0 bg-muted pb-4 dark:bg-primary/[0.18]',
+        'relative shrink-0 bg-muted pb-3 sm:pb-4 dark:bg-primary/[0.18]',
         // The bar sits ON this edge and paints its own track, so the border
         // would double it.
         !(showProgress && asBar) && 'border-b border-border',
@@ -129,8 +129,10 @@ export function KYCHeader({
           the device's top inset (a notch, or ~24px of status bar), which is
           what gives its brand row room. On desktop web that inset is 0, so
           copying `sm` literally left 8px above the logo against 16px below it.
-          1rem balances the row here and still adds the inset on mobile. */}
-      <div className="relative flex items-center justify-between gap-2 px-6 pt-[calc(env(safe-area-inset-top)+1rem)]">
+          1rem balances the row here and still adds the inset on mobile.
+          Below sm every row is trimmed: on a phone the header, the map and the
+          actions compete for one short column, and air is what gives. */}
+      <div className="relative flex items-center justify-between gap-2 px-6 pt-[calc(env(safe-area-inset-top)+0.625rem)] sm:pt-[calc(env(safe-area-inset-top)+1rem)]">
         <HeaderBrand />
 
         <div className="flex shrink-0 items-center gap-1">
@@ -169,7 +171,7 @@ export function KYCHeader({
       <div
         ref={titleSlotRef}
         className={cn(
-          'px-6 pt-2 empty:hidden',
+          'px-6 pt-1.5 sm:pt-2 empty:hidden',
           fullscreen && 'xl:mx-auto xl:w-full xl:max-w-2xl',
         )}
       />
@@ -178,7 +180,7 @@ export function KYCHeader({
           constrained to the same column as the body, or ten circles would
           strand themselves across a 1400px header. */}
       {showProgress && !asBar ? (
-        <div className={cn('mt-4', fullscreen && 'xl:mx-auto xl:w-full xl:max-w-2xl')}>
+        <div className={cn('mt-3 sm:mt-4', fullscreen && 'xl:mx-auto xl:w-full xl:max-w-2xl')}>
           <StepIndicator progress={stepFraction} stepCount={stepCount} />
         </div>
       ) : null}

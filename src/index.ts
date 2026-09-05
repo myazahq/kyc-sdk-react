@@ -9,6 +9,7 @@ export type { MyazaBiometricAuthProps, MyazaBiometricAuthConfig } from './MyazaB
 // Hosted "continue on your phone" entry — mounted by the Myaza-hosted
 // verification page (`/verify/<token>`), not by integrators directly.
 export { MyazaKYCHosted } from './MyazaKYCHosted';
+export { HostedLoadingScreen } from './hosted/HostedScreen';
 export type { MyazaKYCHostedProps, MyazaKYCHostedReadyInfo } from './MyazaKYCHosted';
 
 // Context (for advanced usage)

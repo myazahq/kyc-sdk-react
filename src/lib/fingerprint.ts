@@ -4,6 +4,8 @@
 // Everything is best-effort and SSR-safe; a component that can't be read is
 // simply omitted.
 
+import { randomId } from './random-id';
+
 const DEVICE_ID_KEY = 'myaza-kyc-did';
 
 export interface FingerprintComponents {
@@ -43,10 +45,7 @@ export function persistentDeviceId(): string | undefined {
   try {
     const existing = localStorage.getItem(DEVICE_ID_KEY);
     if (existing) return existing;
-    const id =
-      typeof crypto !== 'undefined' && 'randomUUID' in crypto
-        ? crypto.randomUUID()
-        : `did_${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
+    const id = randomId();
     localStorage.setItem(DEVICE_ID_KEY, id);
     return id;
   } catch {

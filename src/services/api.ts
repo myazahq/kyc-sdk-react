@@ -144,7 +144,7 @@ export interface VerifyRequest {
   flashSequenceLength?: number;
   deviceIntelligence?: boolean;
   /** What kind of proof-of-address document `mediaIds.proofOfAddress` is. */
-  proofOfAddressType?: 'utility_bill' | 'bank_statement' | 'tenancy_agreement' | 'other';
+  proofOfAddressType?: 'utility_bill' | 'bank_statement' | 'tenancy_agreement' | 'government_document' | 'other';
   /**
    * Smart-address submission (Address Intelligence): the claimed pin plus the
    * optional one-shot device fix taken at confirmation (attestPresence). The
@@ -462,6 +462,10 @@ export interface WorkflowConfigPayload {
   flashSequenceLength?: number;
   /** "Continue on your phone" desktop QR gate. On by default; false disables it. */
   deviceHandoff?: boolean;
+  /** The consent (welcome) screen the flow opens on; false skips it. */
+  consentStep?: boolean;
+  /** The biometric scopes' flow options (review / delivery / Done). */
+  biometric?: import('../lib/biometric-options').BiometricFlowConfig;
   /** Device + IP analysis. On by default; false skips it and its charge. */
   deviceIntelligence?: boolean;
   /** Mobile-only: the flow may not run on a desktop (hardware-confirmed). Off by default. */
@@ -577,6 +581,10 @@ export interface HandoffSessionSnapshot {
   flashSequenceLength?: number;
   /** "Continue on your phone" desktop QR gate. On by default; false disables it. */
   deviceHandoff?: boolean;
+  /** The consent (welcome) screen the flow opens on; false skips it. */
+  consentStep?: boolean;
+  /** The biometric scopes' flow options (review / delivery / Done). */
+  biometric?: import('../lib/biometric-options').BiometricFlowConfig;
   /** Device + IP analysis. On by default; false skips it and its charge. */
   deviceIntelligence?: boolean;
   /** Mobile-only: the flow may not run on a desktop (hardware-confirmed). Off by default. */
@@ -816,6 +824,10 @@ export function createKYCApi(baseUrl: string, apiKey: string) {
       workflowId?: string;
       /** Persistent device id — the anonymous-mount resume fallback. */
       deviceRef?: string;
+      /** The same device block the submission sends, so the dashboard's
+       *  in-progress row shows the device and SDK from the moment the SDK
+       *  loads rather than after the applicant finishes (2026-09-08). */
+      device?: Record<string, unknown>;
     }): Promise<{
       sessionId: string;
       expiresAt: string;
@@ -1028,6 +1040,36 @@ export function createKYCApi(baseUrl: string, apiKey: string) {
      * for what hosted pages render client-side. Null on any failure: the
      * review page simply shows no thumbnail, never an error.
      */
+    /**
+     * The pinned location as a PICTURE, for the review card.
+     *
+     * A confirmation screen wants a photograph of the place, not a second
+     * instrument: a live map there invites a drag that goes nowhere. Returned
+     * as a Blob because a browser <img> cannot send an Authorization header;
+     * hosted pages holding a browser key build the URL themselves instead.
+     */
+    async addressStaticMap(view: {
+      lat: number;
+      lng: number;
+      zoom?: number;
+      width?: number;
+      height?: number;
+    }): Promise<Blob | null> {
+      try {
+        const params = new URLSearchParams({
+          lat: String(view.lat),
+          lng: String(view.lng),
+          zoom: String(view.zoom ?? 16),
+          width: String(Math.round(view.width ?? 640)),
+          height: String(Math.round(view.height ?? 360)),
+        });
+        const res = await fetch(`${base}/address/static-map?${params}`, { headers });
+        return res.ok ? await res.blob() : null;
+      } catch {
+        return null;
+      }
+    },
+
     async addressStreetViewPreview(frame: {
       panoId: string;
       heading: number;

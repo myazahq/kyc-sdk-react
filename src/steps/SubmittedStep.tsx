@@ -20,6 +20,12 @@ import { successAction, successDescription, successTitle } from "./success-copy"
 import { PresenceExpectations } from "./presence-expectations";
 import { SubmittingScreen, SubmitErrorScreen, SubmitSuccessScreen } from "./SubmittedScreens";
 import { requiredPrefillSubmission } from './address/address-field-modes';
+import { describeWaiting } from '../lib/result-copy';
+import { biometricCopyFor } from '../lib/biometric-copy';
+import { showsDoneButton, showsSelfieReview, waitsForResult } from '../lib/biometric-options';
+import { IDLE_SELFIE_UPLOAD } from '../lib/selfie-upload-wait';
+import { useSelfieUploadGate } from './selfie-upload-gate';
+import { SubmittedResult } from './SubmittedResult';
 
 export function SubmittedStep() {
 	const { state, dispatch } = useKYCContext();
@@ -50,7 +56,23 @@ export function SubmittedStep() {
 	const [retryInfo, setRetryInfo] = useState<{ attempt: number; total: number } | null>(null);
 	const onRetry = (attempt: number, total: number) => setRetryInfo({ attempt, total });
 
+	// The biometric scopes hand over BEFORE the selfie upload lands (the review
+	// is off, so nothing on the liveness step gated on it): wait for the
+	// upload's own record here, under the same loading screen. Settled from
+	// the start on every flow that shows the review. A failed upload was
+	// already reported to onError by the step that ran it.
+	const uploadGate = useSelfieUploadGate({
+		enabled: !showsSelfieReview(config),
+		selfieUpload: state.selfieUpload,
+		selfieMediaId: state.mediaIds.selfie,
+	});
+
 	useEffect(() => {
+		if (uploadGate === 'waiting') return;
+		if (!uploadGate.ok) {
+			dispatch({ type: "SET_ERROR", payload: new KYCError("upload_failed", uploadGate.message) });
+			return;
+		}
 		// Guard against React 18 Strict Mode double-invocation in dev — without
 		// this, each mount fires two requests with different requestIds, creating
 		// duplicate Verification rows.
@@ -58,7 +80,17 @@ export function SubmittedStep() {
 		submittedTriggerRef.current = submitTrigger;
 		runSubmit();
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [submitTrigger]);
+	}, [submitTrigger, uploadGate]);
+
+	// Try Again after a failed selfie upload re-enters the liveness step, whose
+	// mount resumes the interrupted upload and hands straight back here. The
+	// record is reset first so this step waits for the NEW attempt rather than
+	// reading the old failure a second time.
+	const retryUpload = () => {
+		dispatch({ type: "SET_SELFIE_UPLOAD", payload: IDLE_SELFIE_UPLOAD });
+		dispatch({ type: "CLEAR_ERROR" });
+		dispatch({ type: "SET_STEP", payload: "liveness" });
+	};
 
 	// Business (KYB) APPLICATION — registry details + documents/key-people/
 	// applicant extras, then (fire-and-forget) the applicant's own individual
@@ -300,15 +332,11 @@ export function SubmittedStep() {
 		}
 	}
 
-	if (state.status === "loading") {
-		return <SubmittingScreen retryInfo={retryInfo} />;
-	}
-
 	if (state.status === "error" && state.error) {
 		return (
 			<SubmitErrorScreen
 				message={state.error.message}
-				onRetry={() => setSubmitTrigger((t) => t + 1)}
+				onRetry={state.error.code === "upload_failed" ? retryUpload : () => setSubmitTrigger((t) => t + 1)}
 				onClose={() => config.onClose?.()}
 			/>
 		);
@@ -320,6 +348,38 @@ export function SubmittedStep() {
 	// {businessName} resolves from real data (falling back to any upfront value).
 	const businessName = state.business.registrationName.trim() || config.userData?.businessName;
 	const tokens = { firstName, lastName, businessName };
+	// The `doneButton` option hides the embedded Done for a host app that
+	// dismisses the flow itself; a hosted page has no host app, so its
+	// redirect or close-this-tab note stays whatever the option says.
+	const terminalAction =
+		!config.hostedMode && !showsDoneButton(config)
+			? undefined
+			: successAction({
+					success: config.success,
+					hostedMode: config.hostedMode === true,
+					tokens,
+					onClose: () => config.onClose?.(),
+				});
+
+	// A flow that waits for its verdict (a biometric re-authentication, by
+	// default) renders the result screen from the FIRST render: it shows the
+	// one loading screen through the upload wait, the submission and the poll,
+	// then the verdict. onSubmit has already fired by the time the id lands.
+	if (waitsForResult(config)) {
+		return (
+			<SubmittedResult
+				verificationId={state.status === "success" ? state.verificationId : null}
+				retryInfo={retryInfo}
+				action={terminalAction}
+			/>
+		);
+	}
+
+	if (state.status === "loading") {
+		const words = biometricCopyFor(config).waiting;
+		const copy = describeWaiting({ scope: configScope(config), waitsForResult: false, retry: retryInfo, override: words });
+		return <SubmittingScreen title={copy.title} description={copy.description} retrying={retryInfo != null} />;
+	}
 
 	return (
 		<SubmitSuccessScreen
@@ -353,12 +413,7 @@ export function SubmittedStep() {
 					}
 				</>
 			}
-			action={successAction({
-				success: config.success,
-				hostedMode: config.hostedMode === true,
-				tokens,
-				onClose: () => config.onClose?.(),
-			})}
+			action={terminalAction}
 		/>
 	);
 }

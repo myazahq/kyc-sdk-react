@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Check, FileText, House, Landmark, Zap, type LucideIcon } from 'lucide-react';
+import { Check, FileText, House, Landmark, Stamp, Zap, type LucideIcon } from 'lucide-react';
 import { cn } from '../lib/utils';
 import type { PoaDocumentType } from '../types/config';
 
@@ -13,6 +13,7 @@ export const POA_TYPE_ICONS: Record<PoaDocumentType, LucideIcon> = {
   utility_bill: Zap,
   bank_statement: Landmark,
   tenancy_agreement: House,
+  government_document: Stamp,
   other: FileText,
 };
 

@@ -167,6 +167,11 @@ describe('the capture ring in the liveness step', () => {
     // A challenge's only continuous measure is its clock, and the clock never
     // fills the segment on its own: time running out is not progress.
     expect(hook).toContain('Math.min(CHALLENGE_SEGMENT_CAP, onClock)');
+    // The capture segment is capped the same way: only `complete` closes the
+    // ring, so a finished circle always means the still is in hand.
+    expect(hook).toContain(
+      'Math.min(CHALLENGE_SEGMENT_CAP, positionStableRef.current / CAPTURE_STABLE_FRAMES)',
+    );
     expect(hook).not.toMatch(/livenessProgressRef\.current = positionStableRef/);
   });
 

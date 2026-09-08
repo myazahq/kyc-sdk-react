@@ -2,17 +2,24 @@
 
 import React, { useEffect, useState } from 'react';
 import { PencilLine } from 'lucide-react';
+import { cn } from '../lib/utils';
 import { AddressMap } from '../components/AddressMap';
 import { StepHeader } from '../components/StepHeader';
 import { Button } from '../components/ui/button';
 import { StickyActions } from '../components/StickyActions';
+import { LineSkeleton } from '../components/LineSkeleton';
 import { useKYCContext } from '../context/KYCContext';
 import { useAddressFlow } from './address/use-address-flow';
 import { useAddressIntroGate } from './address/AddressIntroGate';
 import { DetailsSheet } from './address/DetailsSheet';
 import { CurrentLocationRow, LocateFab } from './address/CurrentLocationRow';
 import { LabelDecisionRow } from './address/LabelDecisionRow';
-import { displayAddressLine, shouldAskLabelDecision } from './address/flow-steps';
+import {
+  ADDRESS_LINE_PENDING,
+  ADDRESS_LINE_UNAVAILABLE,
+  displayAddressLine,
+  shouldAskLabelDecision,
+} from './address/flow-steps';
 import { ADDRESS_FIELD_LABELS, missingRequiredAddressFields } from './address/address-field-modes';
 
 /**
@@ -65,6 +72,8 @@ export function AddressCollectionStep() {
   const { pin } = flow;
   const label = state.address?.label ?? null;
   const askLabel = state.address ? shouldAskLabelDecision(state.address) : false;
+  const addressLine = state.address ? displayAddressLine(state.address) : '';
+  const pendingLine = Boolean(state.address) && !addressLine && flow.labelling;
   const detailCount = [
     state.address?.propertyNumber,
     state.address?.street,
@@ -113,8 +122,21 @@ export function AddressCollectionStep() {
 
       <div className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-muted/20 px-3.5 py-3">
         <div className="min-w-0">
-          <p className="truncate text-sm font-semibold">
-            {state.address ? displayAddressLine(state.address) : 'No pin placed yet'}
+          {/* Three states, and none is a coordinate pair: no pin, a pin whose
+              address is still being read (a skeleton line at the text's own
+              height, so nothing moves when the words land), and a pin with no
+              address at all. */}
+          <p className="flex items-center truncate text-sm font-semibold">
+            {pendingLine ? (
+              <LineSkeleton label={ADDRESS_LINE_PENDING} />
+            ) : (
+              <span
+                key={addressLine}
+                className={cn('truncate animate-fade-in', !addressLine && 'font-medium text-muted-foreground')}
+              >
+                {!state.address ? 'No pin placed yet' : addressLine || ADDRESS_LINE_UNAVAILABLE}
+              </span>
+            )}
           </p>
           <p className="text-xs text-muted-foreground">
             {detailCount > 0

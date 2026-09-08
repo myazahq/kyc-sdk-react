@@ -1,4 +1,11 @@
-import type { AddressCollectionConfig, KYCStep, PoaDocumentType, ProofOfAddressConfig, QuestionnaireConfig } from '../types/config';
+import type {
+  AddressCollectionConfig,
+  KYCStep,
+  PoaDocumentType,
+  PoaNameRule,
+  ProofOfAddressConfig,
+  QuestionnaireConfig,
+} from '../types/config';
 import type { SubjectType, WorkflowBusinessConfig } from '../types/business';
 import { hasActiveQuestionnaire } from './questionnaire';
 import { isBusinessFlow } from './business';
@@ -56,7 +63,19 @@ export function hasProofOfAddressStep(poa: ProofOfAddressConfig | undefined | nu
   return poa?.enabled === true;
 }
 
-export const POA_ALL_KINDS = ['utility_bill', 'bank_statement', 'tenancy_agreement', 'other'] as const;
+export const POA_ALL_KINDS = [
+  'utility_bill',
+  'bank_statement',
+  'tenancy_agreement',
+  'government_document',
+  'other',
+] as const;
+
+/** A kind THIS build knows how to label and draw. A newer kind the dashboard
+ *  offers before the SDK ships is hidden from the picker rather than rendered
+ *  as a blank card (the business-products rule). */
+const knownKinds = (kinds: readonly string[] | undefined): PoaDocumentType[] =>
+  (kinds ?? []).filter((k): k is PoaDocumentType => (POA_ALL_KINDS as readonly string[]).includes(k));
 
 /**
  * The document kinds the PoA step offers for a given country: the per-country
@@ -68,10 +87,29 @@ export function poaOfferedKinds(
   poa: ProofOfAddressConfig | undefined | null,
   country: string | undefined | null,
 ): PoaDocumentType[] {
-  const override = country ? poa?.countryDocuments?.[country.toUpperCase()] : undefined;
-  if (override && override.length > 0) return override;
-  if (poa?.documentTypes && poa.documentTypes.length > 0) return poa.documentTypes;
+  const override = knownKinds(country ? poa?.countryDocuments?.[country.toUpperCase()] : undefined);
+  if (override.length > 0) return override;
+  const global = knownKinds(poa?.documentTypes);
+  if (global.length > 0) return global;
   return [...POA_ALL_KINDS];
+}
+
+/**
+ * The name rule the server will judge THIS document under — the country's
+ * per-kind exception, else the workflow default, else `required`. Mirror of
+ * the server's `resolvePoaNamePolicy` (kyc-core lib/proof-of-address/
+ * name-policy.ts) and the RN / Flutter twins — keep the four in lockstep. Read
+ * only to word the step: under `off` the header stops asking for the name.
+ */
+export function poaNamePolicy(
+  poa: ProofOfAddressConfig | undefined | null,
+  country: string | undefined | null,
+  kind: PoaDocumentType | undefined | null,
+): PoaNameRule {
+  const exception = country && kind ? poa?.countryNameMatch?.[country.toUpperCase()]?.[kind] : undefined;
+  if (exception === 'required' || exception === 'optional' || exception === 'off') return exception;
+  const def = poa?.nameMatch;
+  return def === 'optional' || def === 'off' ? def : 'required';
 }
 
 /**

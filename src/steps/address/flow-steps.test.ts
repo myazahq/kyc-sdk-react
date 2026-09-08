@@ -106,6 +106,8 @@ describe('displayAddressLine', () => {
 
   it('falls back to coordinates only when there is nothing typed either', () => {
     expect(displayAddressLine({ ...base, street: 'Wisdom Close', propertyNumber: '8' })).toBe('8 Wisdom Close');
-    expect(displayAddressLine(base)).toBe('4.93240, 8.32540');
+    // NEVER coordinates: an unlabelled pin has NO line, and the caller shows
+    // that one is on its way.
+    expect(displayAddressLine(base)).toBe('');
   });
 });

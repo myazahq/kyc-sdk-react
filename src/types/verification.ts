@@ -10,6 +10,24 @@ export interface KYCSubmission {
 }
 
 // ---------------------------------------------------------------------------
+// Result callback payload (returned to onResult, on a flow that WAITS)
+// ---------------------------------------------------------------------------
+
+/**
+ * The verdict, on a flow that waits for it in the app (a biometric
+ * re-authentication on `resultDelivery: 'both'`, the default, or 'app').
+ * `status` is the same vocabulary `GET /api/kyc/status/:id` serves; `reason`
+ * and `reasonCode` are the server's own, null on success. Never result data:
+ * scores and biodata stay behind the secret key.
+ */
+export interface KYCResult {
+  verificationId: string;
+  status: import('../services/api').SessionStatus;
+  reason: string | null;
+  reasonCode: string | null;
+}
+
+// ---------------------------------------------------------------------------
 // Technical error types (onError callback)
 // ---------------------------------------------------------------------------
 

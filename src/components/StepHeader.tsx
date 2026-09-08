@@ -7,6 +7,7 @@ import { Button } from './ui/button';
 import { CountryFlag } from './CountryFlag';
 import { cn } from '../lib/utils';
 import { useStepHeaderSlot } from './step-header-slot';
+import { useBackAvailable } from './opening-step';
 import type { AnyCountry } from '../types/config';
 
 interface StepHeaderProps {
@@ -24,11 +25,14 @@ export function StepHeader({ title, description, onBack, country, className }: S
   // outside it (standalone biometric re-auth) it renders inline as before. See
   // step-header-slot for why `null` renders nothing rather than falling back.
   const slot = useStepHeaderSlot();
+  // Hidden on the flow's opening step (see opening-step.ts): a consent-less
+  // flow opens on a step whose Back target is a screen it does not contain.
+  const backAvailable = useBackAvailable();
   if (slot === null) return null;
 
   const content = (
     <div className={cn('flex items-start gap-3', className)}>
-      {onBack && (
+      {onBack && backAvailable && (
         <Button
           variant="ghost"
           size="icon"

@@ -4,8 +4,13 @@
 export const SDK_TYPE = 'web' as const;
 
 // Single source of truth for the SDK version — also used by services/api.ts
-// for the X-SDK-Version header. Keep in sync with package.json.
-export const SDK_VERSION = '2.13.0';
+// for the X-SDK-Version header.
+//
+// The RELEASE pins this: sync-react-sdk.yml rewrites it from the tag before
+// publishing, and fails the release if it cannot. It used to say "keep in sync
+// with package.json", which nothing enforced -- 2.12.0 shipped reporting
+// 2.11.0. Treat the value here as a development default, not the released one.
+export const SDK_VERSION = '2.16.0';
 
 export interface WebDeviceMetadata {
 	sdkType: 'web';

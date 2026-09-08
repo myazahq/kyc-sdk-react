@@ -37,12 +37,17 @@ export function withPreviewMocks(api: KYCApi): KYCApi {
       return { verificationId: 'preview_verification', status: 'pending', applicantKeyPersonId: null, keyPeopleInvites: [] };
     },
 
+    // The preview submission settles at once: a flow that waits for its
+    // verdict (a biometric re-authentication) would otherwise spin for the
+    // whole wait budget in the builder, on an id nothing will ever settle.
     async status(verificationId: string): Promise<VerificationStatusResponse> {
+      await delay(600);
       return {
         verificationId,
-        status: 'processing',
-        checkStatus: 'pending',
+        status: 'approved',
+        checkStatus: 'verified',
         createdAt: new Date().toISOString(),
+        completedAt: new Date().toISOString(),
       };
     },
 

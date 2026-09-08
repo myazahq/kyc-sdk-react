@@ -1,14 +1,19 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   addressFieldModes,
   displayedAddressValue,
   missingRequiredAddressFields,
   requiredPrefillSubmission,
+  type AddressFieldKey,
 } from './address-field-modes';
+import type { AddressCollectionConfig } from '../../types/config';
 import type { KYCState } from '../../context/types';
 
 // LOCKSTEP with the server's lib/workflows/address-fields.ts (kyc-core) —
 // the resolution rule must agree or the SDK gates what the server accepts.
+// The RN and Flutter mirrors replay the SAME vector file below, so a rule
+// changed in one mirror fails in all three.
 
 type Address = NonNullable<KYCState['address']>;
 const address = (over: Partial<Address> = {}): Address =>
@@ -60,4 +65,34 @@ describe('requiredPrefillSubmission', () => {
     );
     expect(out).toEqual({ city: 'Calabar' });
   });
+});
+
+// ─── The shared vectors (kyc-sdk-flutter/test/address_field_modes_vectors.json)
+interface Vector {
+  name: string;
+  config: AddressCollectionConfig | null;
+  typed: Record<string, string>;
+  expectModes: Record<string, string>;
+  expectMissing: string[];
+  expectPrefill: Record<string, string>;
+}
+const shared = JSON.parse(
+  readFileSync(
+    new URL('../../../../kyc-sdk-flutter/test/address_field_modes_vectors.json', import.meta.url).pathname,
+    'utf8',
+  ),
+) as { address: Record<string, unknown>; vectors: Vector[] };
+
+describe('shared vectors (web mirror)', () => {
+  for (const v of shared.vectors) {
+    it(v.name, () => {
+      const addr = { ...shared.address, ...v.typed } as unknown as Address;
+      const modes = addressFieldModes(v.config ?? undefined);
+      for (const [key, mode] of Object.entries(v.expectModes)) {
+        expect(modes[key as AddressFieldKey]).toBe(mode);
+      }
+      expect(missingRequiredAddressFields(v.config ?? undefined, addr)).toEqual(v.expectMissing);
+      expect(requiredPrefillSubmission(v.config ?? undefined, addr)).toEqual(v.expectPrefill);
+    });
+  }
 });

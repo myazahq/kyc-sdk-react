@@ -30,6 +30,7 @@ export function MyazaKYCHosted({
   onStart,
   onStepChange,
   onSubmit,
+  onResult,
   onError,
   onCompleted,
 }: MyazaKYCHostedProps) {
@@ -157,6 +158,7 @@ export function MyazaKYCHosted({
       onStart={onStart}
       onStepChange={onStepChange}
       onSubmit={onSubmit}
+      onResult={onResult}
       onError={onError}
     />,
   );

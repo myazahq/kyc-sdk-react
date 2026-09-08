@@ -1,6 +1,6 @@
 import type { CompletedSessionSummary, HandoffBootstrapResponse } from '../services/api';
 import type { KYCAppearance, KYCStep } from '../types/config';
-import type { KYCError, KYCSubmission } from '../types/verification';
+import type { KYCError, KYCResult, KYCSubmission } from '../types/verification';
 
 // The hosted entry point's public props, split out of MyazaKYCHosted.tsx
 // (200-line rule). Re-exported from there, so the public surface is unchanged.
@@ -64,6 +64,8 @@ export interface MyazaKYCHostedProps {
   onStart?: () => void;
   onStepChange?: (step: KYCStep) => void;
   onSubmit?: (submission: KYCSubmission) => void;
+  /** The verdict, on a session that waits for it in the flow (a biometric re-authentication). */
+  onResult?: (result: KYCResult) => void;
   onError?: (error: KYCError) => void;
   /** A returning applicant opened a link whose verification was already submitted. */
   onCompleted?: (summary: CompletedSessionSummary | null) => void;

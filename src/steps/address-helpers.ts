@@ -2,6 +2,7 @@
 // the 200-line rule and so the fix logic stays pure-ish and testable.
 
 import { isAcceptedAddressPhoto } from '../components/AddressPhotoUpload';
+import { IMAGE_MAX_BYTES } from '../lib/upload-limits';
 
 const FIX_TIMEOUT_MS = 8_000;
 
@@ -24,23 +25,73 @@ export function currentPosition(): Promise<GeolocationPosition> {
  * Best-effort by contract: a denied prompt or a slow read returns {} and the
  * submission simply goes without the `attested` tier.
  */
+export interface DeviceFixReading {
+  lat: number;
+  lng: number;
+  accuracy: number | null;
+  timestamp: number;
+}
+
+// The most recent fix ANY read produced, kept so the confirm-time attest read
+// can fall back on it (see pickDeviceFix).
+let lastGoodFix: DeviceFixReading | null = null;
+/** Called by every path that obtains a real fix. */
+export function rememberDeviceFix(fix: DeviceFixReading): void {
+  lastGoodFix = fix;
+}
+
+/** How old a fix from earlier in the SAME address flow may be and still stand
+ *  in for the confirm-time read. Placing a pin takes a minute or two; a fix
+ *  from that window still says the device was here, and the server judges it
+ *  by its own `capturedAt` anyway. Mirrored on RN and Flutter. */
+export const RECENT_FIX_MAX_AGE_MS = 3 * 60_000;
+
+/** The reading the attest step should send: a fresh one when the read
+ *  answered, else the recent one the flow already took, else nothing. Pure. */
+export function pickDeviceFix(
+  fresh: DeviceFixReading | null,
+  recent: DeviceFixReading | null,
+  now: number = Date.now(),
+): DeviceFixReading | null {
+  if (fresh) return fresh;
+  if (recent && now - recent.timestamp <= RECENT_FIX_MAX_AGE_MS) return recent;
+  return null;
+}
+
+function readingOf(pos: GeolocationPosition): DeviceFixReading {
+  return {
+    lat: pos.coords.latitude,
+    lng: pos.coords.longitude,
+    accuracy: typeof pos.coords.accuracy === 'number' ? pos.coords.accuracy : null,
+    timestamp: pos.timestamp || Date.now(),
+  };
+}
+
 export async function deviceFixFields(): Promise<{
   deviceLat?: number;
   deviceLng?: number;
   deviceAccuracy?: number;
   capturedAt?: string;
 }> {
+  // A single read at confirm can time out while the GPS settles, and the
+  // submission then goes out with no fix even though "Use my location" had
+  // just placed the pin on one (seen on RN, 2026-09-07; same shape here).
+  // The fix the flow already holds is the fallback.
+  let fresh: DeviceFixReading | null = null;
   try {
-    const fix = await currentPosition();
-    return {
-      deviceLat: fix.coords.latitude,
-      deviceLng: fix.coords.longitude,
-      ...(typeof fix.coords.accuracy === 'number' ? { deviceAccuracy: fix.coords.accuracy } : {}),
-      capturedAt: new Date(fix.timestamp || Date.now()).toISOString(),
-    };
+    fresh = readingOf(await currentPosition());
+    rememberDeviceFix(fresh);
   } catch {
-    return {};
+    fresh = null;
   }
+  const fix = pickDeviceFix(fresh, lastGoodFix);
+  if (!fix) return {};
+  return {
+    deviceLat: fix.lat,
+    deviceLng: fix.lng,
+    ...(fix.accuracy != null ? { deviceAccuracy: fix.accuracy } : {}),
+    capturedAt: new Date(fix.timestamp).toISOString(),
+  };
 }
 
 /** Accuracy at which a fix is good enough to stop waiting for GPS. */
@@ -102,6 +153,8 @@ export async function resolveMyLocation(
 ): Promise<{ lat: number; lng: number; accuracy: number | null }> {
   if (preview) return { lat: 6.4281, lng: 3.4219, accuracy: 15 };
   const fix = await precisePosition();
+  // The pin's fix is also the attest step's fallback (see deviceFixFields).
+  rememberDeviceFix(readingOf(fix));
   return { lat: fix.coords.latitude, lng: fix.coords.longitude, accuracy: fix.coords.accuracy ?? null };
 }
 
@@ -144,9 +197,10 @@ export async function uploadAddressPhoto(
   file: File,
 ): Promise<string> {
   if (!isAcceptedAddressPhoto(file)) throw new Error('Please upload a photo (JPEG, PNG or WebP).');
-  // Both mobile ports cap at 20MB; without a mirror here the web quietly
-  // accepted anything and the server refused it later with a worse message.
-  if (file.size > 20 * 1024 * 1024) throw new Error('Please upload a photo under 20MB.');
+  // The shared image cap (both mobile ports apply the same one); without a
+  // mirror here the web quietly accepted anything and the server refused it
+  // later with a worse message.
+  if (file.size > IMAGE_MAX_BYTES) throw new Error('Please upload a photo under 5 MB.');
   try {
     return await api.upload(file, 'address_photo');
   } catch {

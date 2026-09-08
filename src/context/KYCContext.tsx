@@ -5,6 +5,7 @@ import { recordStep } from '../lib/step-log';
 import { normalizeRestoredKeyPeople } from '../lib/key-person-normalize';
 import { primeDeviceHints } from '../utils/device-metadata';
 import type { KYCState, KYCAction } from './types';
+import { IDLE_SELFIE_UPLOAD } from '../lib/selfie-upload-wait';
 
 // ---------------------------------------------------------------------------
 // Initial state
@@ -12,6 +13,7 @@ import type { KYCState, KYCAction } from './types';
 
 export const initialKYCState: KYCState = {
   currentStep: 'consent',
+  openingStep: 'consent',
   status: 'idle',
   isOpen: false,
   sessionId: null,
@@ -29,6 +31,7 @@ export const initialKYCState: KYCState = {
   businessCheck: { status: 'idle', company: null, keyPeople: [], checkedNumber: null, prefilled: [] },
   businessApplication: { keyPeople: [], documents: [], applicantRole: null, applicantName: '', applicantKeyPersonIndex: null, uboUnidentifiable: false },
   selfieImage: null,
+  selfieUpload: IDLE_SELFIE_UPLOAD,
   addressPhotoPreview: null,
   addressSandboxOutcome: null,
   addressIntroSeen: false,
@@ -192,6 +195,9 @@ export function kycReducer(state: KYCState, action: KYCAction): KYCState {
 
     case 'SET_STEP':
       return { ...state, currentStep: action.payload, error: null };
+
+    case 'SET_OPENING_STEP':
+      return state.openingStep === action.payload ? state : { ...state, openingStep: action.payload };
 
     case 'SET_COUNTRY':
     case 'SET_COUNTRY_AUTO': {
@@ -365,8 +371,13 @@ export function kycReducer(state: KYCState, action: KYCAction): KYCState {
       return {
         ...state,
         selfieImage: null,
+        selfieUpload: IDLE_SELFIE_UPLOAD,
         mediaIds: { ...state.mediaIds, selfie: undefined },
       };
+
+    // The upload's progress report (see lib/selfie-upload-wait.ts).
+    case 'SET_SELFIE_UPLOAD':
+      return { ...state, selfieUpload: action.payload };
 
     // ── Video blobs ─────────────────────────────────────────────────────────
 
@@ -483,6 +494,7 @@ export function kycReducer(state: KYCState, action: KYCAction): KYCState {
         livenessVideoBlob: null,
         mediaIds: {},
         selfieImage: null,
+        selfieUpload: IDLE_SELFIE_UPLOAD,
         addressPhotoPreview: null,
   addressSandboxOutcome: null,
         verificationId: null,

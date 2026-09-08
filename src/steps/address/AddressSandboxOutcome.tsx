@@ -26,38 +26,39 @@ const OPTIONS: Array<{
   value: Outcome;
   label: string;
   Icon: LucideIcon;
+  /** The icon's own colour while this tab is INACTIVE, so the row reads as
+   *  four outcomes rather than one live state and three dead ones. */
+  tint: string;
   /** The sliding indicator's fill when this tab is active. */
   pill: string;
-  /** The tab's icon tint while inactive. */
-  tint: string;
 }> = [
   {
     value: 'address_attested',
     label: 'Attested',
     Icon: ShieldCheck,
-    pill: 'bg-emerald-600',
     tint: 'text-emerald-600 dark:text-emerald-400',
+    pill: 'bg-emerald-600',
   },
   {
     value: 'address_corroborated',
     label: 'Corroborated',
     Icon: BadgeCheck,
-    pill: 'bg-sky-600',
     tint: 'text-sky-600 dark:text-sky-400',
+    pill: 'bg-sky-600',
   },
   {
     value: 'address_collected',
     label: 'Collected',
     Icon: CircleDashed,
-    pill: 'bg-slate-600',
     tint: 'text-muted-foreground',
+    pill: 'bg-slate-600',
   },
   {
     value: 'address_mismatch',
     label: 'Mismatch',
     Icon: XCircle,
-    pill: 'bg-red-600',
     tint: 'text-red-600 dark:text-red-400',
+    pill: 'bg-red-600',
   },
 ];
 
@@ -109,6 +110,9 @@ export function AddressSandboxOutcome() {
                 active ? 'text-white' : 'text-muted-foreground hover:text-foreground'
               }`}
             >
+              {/* The active outcome goes white on its pill; the rest keep
+                  their own semantic tint, so the row reads as four outcomes
+                  to choose between. Mirrored on RN and Flutter. */}
               <Icon className={`h-4 w-4 shrink-0 transition-colors sm:h-3.5 sm:w-3.5 ${active ? 'text-white' : tint}`} />
               <span className="hidden truncate sm:inline">{label}</span>
             </button>

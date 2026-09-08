@@ -59,6 +59,14 @@ describe('mergeWorkflowConfig', () => {
     expect(merged.disableClose).toBe(true);
   });
 
+  it('biometric merges per field too, so a flow switching the review on keeps a host\'s hidden Done', () => {
+    const merged = mergeWorkflowConfig(
+      { country: 'NG', scope: 'biometric-authentication', biometric: { selfieReview: true } },
+      { country: 'NG', apiKey: 'pk', biometric: { doneButton: false } },
+    );
+    expect(merged.biometric).toEqual({ selfieReview: true, doneButton: false });
+  });
+
   it('appearance merges shallowly with flow fields winning per-field', () => {
     const merged = mergeWorkflowConfig(
       { country: 'NG', appearance: { primaryColor: '#111111', theme: 'dark' } },

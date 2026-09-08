@@ -30,6 +30,8 @@ import { isBusinessFlow } from '../lib/business';
 import { multiIdPlan } from '../lib/multi-id';
 import { MultiIdProgress } from './MultiIdProgress';
 import { getStepPosition, resolveNarrowedStep } from '../lib/step-order';
+import { hasConsentStep } from '../lib/consent-step';
+import { BackAvailableContext, useOpeningStep } from './opening-step';
 import { ProofOfAddressStep } from '../steps/ProofOfAddressStep';
 import { AddressCollectionStep } from '../steps/AddressCollectionStep';
 import { AddressSearchStep } from '../steps/address/AddressSearchStep';
@@ -108,11 +110,10 @@ function ConfigErrorScreen({ message, onClose }: { message: string; onClose: () 
   );
 }
 
-function CurrentStep({ plan }: { plan: ReturnType<typeof multiIdPlan> }) {
-  const { state } = useKYCContext();
+function CurrentStep({ plan, step }: { plan: ReturnType<typeof multiIdPlan>; step: KYCStep }) {
   const config = useKYCConfig();
 
-  switch (state.currentStep) {
+  switch (step) {
     case 'consent':
       return <ConsentStep />;
     // Distinct keys are LOAD-BEARING: both mounts are the same component type
@@ -250,6 +251,7 @@ export function KYCModal({ open, onClose, showThemeToggle, disableClose, fullScr
     hasDocCapture,
     hasLiveness,
     hasCountrySelect,
+    hasConsent: hasConsentStep(config),
     hasEmailVerification,
     hasPhoneVerification,
     hasPoa,
@@ -282,8 +284,13 @@ export function KYCModal({ open, onClose, showThemeToggle, disableClose, fullScr
   // applicant walked the whole flow. This is the ONE seam every dispatch lands
   // in, so mapping the current step here honours the narrowing without
   // rewriting the per-screen logic that makes the flow correct.
+  // The builder preview is NOT exempt: with the consent screen switched off
+  // its Consent card still asks for 'consent', and the preview must show what
+  // an applicant will see, which is the first real step (user report
+  // 2026-09-07: "turned off consent but it still shows on the builder preview").
   const shownStep = resolveNarrowedStep(state.currentStep, stepOptions);
   const skipping = shownStep !== state.currentStep;
+  const { backAvailable } = useOpeningStep(stepOptions, shownStep, dispatch);
   useEffect(() => {
     if (skipping) dispatch({ type: 'SET_STEP', payload: shownStep });
   }, [skipping, shownStep, dispatch]);
@@ -316,6 +323,7 @@ export function KYCModal({ open, onClose, showThemeToggle, disableClose, fullScr
     // inline style, so they re-read the brand vars from this context.
     <ThemeVarsContext.Provider value={themeVars}>
     <StepHeaderSlotContext.Provider value={titleSlot}>
+    <BackAvailableContext.Provider value={backAvailable}>
     <CaptureLightContext.Provider value={setLightOverride}>
     <ImmersiveCaptureContext.Provider value={setImmersive}>
     <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen && !dismissBlocked) onClose(); }}>
@@ -387,7 +395,7 @@ export function KYCModal({ open, onClose, showThemeToggle, disableClose, fullScr
                       even for the frame before the skip lands — the applicant
                       would see it flash past and reasonably wonder what they
                       missed. */}
-                  {!skipping && <CurrentStep plan={plan} />}
+                  {!skipping && <CurrentStep plan={plan} step={shownStep} />}
                 </>
               )}
             </div>
@@ -402,6 +410,7 @@ export function KYCModal({ open, onClose, showThemeToggle, disableClose, fullScr
     </Dialog>
     </ImmersiveCaptureContext.Provider>
     </CaptureLightContext.Provider>
+    </BackAvailableContext.Provider>
     </StepHeaderSlotContext.Provider>
     </ThemeVarsContext.Provider>
   );

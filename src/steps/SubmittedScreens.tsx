@@ -9,7 +9,22 @@ import { Button } from "../components/ui/button";
 // all state and submission logic lives in SubmittedStep.tsx.
 // ---------------------------------------------------------------------------
 
-export function SubmittingScreen({ retryInfo }: { retryInfo: { attempt: number; total: number } | null }) {
+/**
+ * The one loading screen after the capture. Every wait renders THIS, with
+ * copy from lib/result-copy.ts (`describeWaiting`): the liveness hand-over,
+ * the submission and, on a flow that waits for its verdict, the status poll
+ * all show one loader under one title. A retry in flight swaps only the
+ * description, in the warning colour.
+ */
+export function SubmittingScreen({
+	title,
+	description,
+	retrying = false,
+}: {
+	title: string;
+	description: string;
+	retrying?: boolean;
+}) {
 	return (
 		<div className='flex flex-col items-center justify-center gap-6 py-12 animate-fade-in'>
 			<div className='relative flex items-center justify-center'>
@@ -19,13 +34,9 @@ export function SubmittingScreen({ retryInfo }: { retryInfo: { attempt: number; 
 				</div>
 			</div>
 			<div className='text-center space-y-2'>
-				<p className='text-base font-medium'>
-					{retryInfo ? "Reconnecting…" : "Submitting your verification..."}
-				</p>
-				<p className='text-sm text-muted-foreground'>
-					{retryInfo
-						? `Connection issue — retrying (${retryInfo.attempt}/${retryInfo.total})…`
-						: "Please wait a moment."}
+				<p className='text-base font-medium'>{title}</p>
+				<p className={retrying ? 'text-sm text-amber-700 dark:text-amber-400' : 'text-sm text-muted-foreground'}>
+					{description}
 				</p>
 			</div>
 		</div>
@@ -120,7 +131,9 @@ export function SubmitSuccessScreen({
 }: {
 	title: string;
 	description: string;
-	action: SubmitSuccessAction;
+	/** The terminal affordance; absent when the `doneButton` option hid it (the
+	 *  host app dismisses the flow itself, so the screen stays until it does). */
+	action?: SubmitSuccessAction;
 	/** Optional block between the message and the terminal action (e.g. the KYB
 	 *  key-people invite links). */
 	extra?: React.ReactNode;
@@ -155,7 +168,7 @@ export function SubmitSuccessScreen({
 
 			{extra}
 
-			{'note' in action ? (
+			{action === undefined ? null : 'note' in action ? (
 				<p className='text-sm text-muted-foreground text-center'>{action.note}</p>
 			) : (
 				<Button className='w-full' onClick={action.onClick}>

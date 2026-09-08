@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { BellRing, MapPin, MapPinHouse, Radar } from 'lucide-react';
+import { BellRing, MapPinCheck, MapPinHouse, Radar } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { IntroDisclosures } from './IntroDisclosures';
 import { cn } from '../../lib/utils';
@@ -30,7 +30,7 @@ const CHECK_IN_CAPTION = {
 const milestonesFor = (
   background: boolean,
 ): Array<{
-  Icon: typeof MapPin;
+  Icon: typeof MapPinCheck;
   stage: string;
   title: string;
   caption: string;
@@ -73,7 +73,7 @@ export function useAddressIntroGate(step: KYCStep, firstStep: KYCStep): React.Re
       <div className="overflow-hidden rounded-2xl border border-primary/15">
         <div className="space-y-1 bg-primary/[0.06] px-4 pb-3 pt-4">
           <span className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider text-primary">
-            <MapPin className="h-3 w-3" />
+            <MapPinCheck className="h-3 w-3" />
             Address verification
           </span>
           <p className="text-base font-semibold">Let&apos;s confirm your address</p>

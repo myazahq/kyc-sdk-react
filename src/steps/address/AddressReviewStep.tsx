@@ -3,13 +3,15 @@
 import React, { useEffect, useState } from 'react';
 import { Camera, MapPin } from 'lucide-react';
 import { AddressMap } from '../../components/AddressMap';
+import { MapPinMarker } from '../../components/MapPinMarker';
 import { StepHeader } from '../../components/StepHeader';
+import { LineSkeleton } from '../../components/LineSkeleton';
 import { Button } from '../../components/ui/button';
 import { cn } from '../../lib/utils';
 import { useKYCContext } from '../../context/KYCContext';
 import { useKYCConfig } from '../../context/KYCConfigContext';
 import { useAddressFlow } from './use-address-flow';
-import { displayAddressLine } from './flow-steps';
+import { ADDRESS_LINE_PENDING, ADDRESS_LINE_UNAVAILABLE, displayAddressLine } from './flow-steps';
 import { ADDRESS_FIELD_LABELS, missingRequiredAddressFields } from './address-field-modes';
 import { AddressSandboxOutcome } from './AddressSandboxOutcome';
 
@@ -60,6 +62,41 @@ export function AddressReviewStep() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [frame?.panoId, frame?.heading, frame?.pitch, frame?.fov, flow.googleKey]);
 
+  // The map as a PICTURE. A confirmation screen wants a photograph of the
+  // place, not a second instrument: a live map here invites a drag that goes
+  // nowhere. A browser key renders it client-side; keyless mounts fetch the
+  // same image through the server. Either way it falls back to the live map,
+  // so this can only improve the screen, never empty it.
+  const [staticMap, setStaticMap] = useState<string | null>(null);
+  // A refused image falls back to the live map. The Maps Static API is a
+  // SEPARATE console enablement, so a project without it answers 403 and the
+  // <img> would otherwise sit there broken.
+  const [staticMapFailed, setStaticMapFailed] = useState(false);
+  useEffect(() => {
+    if (!pin || flow.googleKey || config.previewMode) {
+      setStaticMap(null);
+      return;
+    }
+    let alive = true;
+    let url: string | null = null;
+    void config.api.addressStaticMap({ lat: pin.lat, lng: pin.lng, zoom: 16 }).then((blob) => {
+      if (!alive || !blob) return;
+      url = URL.createObjectURL(blob);
+      setStaticMap(url);
+    });
+    return () => {
+      alive = false;
+      if (url) URL.revokeObjectURL(url);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pin?.lat, pin?.lng, flow.googleKey]);
+
+  const staticMapSrc = staticMapFailed
+    ? null
+    : pin && flow.googleKey
+      ? `https://maps.googleapis.com/maps/api/staticmap?center=${pin.lat},${pin.lng}&zoom=16&size=640x360&scale=2&maptype=hybrid&format=jpg&key=${encodeURIComponent(flow.googleKey)}`
+      : staticMap;
+
   // The framed entrance AS AN IMAGE: the browser key renders the exact framed
   // Street View client-side (the server stores its own copy at processing);
   // keyless mounts use the server-fetched copy above.
@@ -93,14 +130,31 @@ export function AddressReviewStep() {
       <div className="overflow-hidden rounded-2xl border border-border/60">
         {pin && (
           <div className="relative">
-            <AddressMap
-              value={pin}
-              onChange={() => undefined}
-              defaultCenter={pin}
-              defaultZoom={16}
-              className="h-48 rounded-none border-0 sm:h-56"
-              interactive={false}
-            />
+            {staticMapSrc ? (
+              <div className="relative h-48 w-full sm:h-56">
+                <img
+                  src={staticMapSrc}
+                  alt="Map of the pinned location"
+                  onError={() => setStaticMapFailed(true)}
+                  className="h-full w-full object-cover"
+                />
+                {/* The SDK's own pin, centred on the picture, so the flow
+                    shows one pin throughout rather than a vendor marker on
+                    the last screen. */}
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                  <MapPinMarker />
+                </div>
+              </div>
+            ) : (
+              <AddressMap
+                value={pin}
+                onChange={() => undefined}
+                defaultCenter={pin}
+                defaultZoom={16}
+                className="h-48 rounded-none border-0 sm:h-56"
+                interactive={false}
+              />
+            )}
             <button
               type="button"
               aria-label="Edit the pinned location"
@@ -139,7 +193,17 @@ export function AddressReviewStep() {
                   address (displayAddressLine) — typed number replaces a
                   differing picked one, a typed street leads the line. */}
               <p className="text-base font-semibold leading-snug">
-                {state.address ? displayAddressLine(state.address) : 'No pin placed'}
+                {/* Never coordinates: an unread pin shows a skeleton line
+                    while its address is still coming. */}
+                {!state.address ? (
+                  'No pin placed'
+                ) : displayAddressLine(state.address) ? (
+                  displayAddressLine(state.address)
+                ) : flow.labelling ? (
+                  <LineSkeleton label={ADDRESS_LINE_PENDING} size="base" width="70%" />
+                ) : (
+                  ADDRESS_LINE_UNAVAILABLE
+                )}
               </p>
               {directions && (
                 <p className="text-xs leading-snug text-muted-foreground">“{directions}”</p>

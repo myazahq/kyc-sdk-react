@@ -13,6 +13,7 @@ import {
 } from './flow-steps';
 import { currentFix, currentFixFailure, locating, locationFailureMessage, prefetchCurrentFix, type CurrentFix } from './current-location';
 import { configScope } from '../../lib/scope';
+import { adoptionDecision } from './country-adoption';
 import type { AddressParts } from '../../services/api';
 
 // The pin's mechanics — labelling, the shared current-location fix, and every
@@ -41,8 +42,12 @@ export function usePinActions({ config, state, dispatch, setError }: PinActionDe
   stateRef.current = state;
   const stepStillInAddressFlow = () => String(stepRef.current).startsWith('address-');
   const reverseTimer = useRef<number | null>(null);
+  // The summary line shows NOTHING while a pin has no address (never
+  // coordinates), so it has to say whether an answer is on its way.
+  const [labelling, setLabelling] = useState(false);
   const labelPin = (lat: number, lng: number, delay = REVERSE_DEBOUNCE_MS) => {
     if (reverseTimer.current) window.clearTimeout(reverseTimer.current);
+    setLabelling(true);
     // The builder preview never reverse-geocodes: its pin is the country's
     // map centre, not an address, and labelling it with the real place there
     // (Nigeria's centroid reads "Wamba, Nasarawa") presented a fake pin as
@@ -56,6 +61,7 @@ export function usePinActions({ config, state, dispatch, setError }: PinActionDe
           type: 'SET_ADDRESS',
           payload: { ...current, label: SAMPLE_ADDRESS_LINE },
         });
+        setLabelling(false);
       }, 0);
       return;
     }
@@ -80,21 +86,16 @@ export function usePinActions({ config, state, dispatch, setError }: PinActionDe
           });
           adoptGeocodedCountry(r.parts);
         })
-        .catch(() => undefined);
+        .catch(() => undefined)
+        .finally(() => setLabelling(false));
     }, delay);
   };
 
-  // GEOCODED EVIDENCE outranks every GUESS about the declared country: a
-  // reverse-geocoded pin or current-location fix says where the person
-  // actually is, while the defaults (IP geo, or nothing — leaving the
-  // workflow's configured market) are inferences. The rule that bit: on a
-  // local dev box the declaration once fell back to the browser LOCALE
-  // (en-US -> US) while the device sat in Calabar, and the search returned
-  // California — so the fix's own geocode now corrects the guess the moment
-  // it resolves. An explicit pick is never overridden; the org's accepted
-  // list still gates like the geo default; and outside the address scope a
-  // bare (never-guessed) country is left alone — there `selectedCountry` is
-  // the ID-verification country choice, not an address declaration.
+  // GEOCODED EVIDENCE outranks every GUESS about the declared country; an
+  // explicit pick is never overridden by a geocode; a PICKED address replaces
+  // even that; the org's accepted list gates all of it; and outside the
+  // address scope only a guessed value is ever touched. The rule, and why
+  // each guard exists, is country-adoption.ts (shared with RN + Flutter).
   const adoptGeocodedCountry = (
     parts: AddressParts | null | undefined,
     opts?: {
@@ -108,14 +109,17 @@ export function usePinActions({ config, state, dispatch, setError }: PinActionDe
       explicit?: boolean;
     },
   ) => {
-    const c = parts?.country?.toUpperCase();
-    if (!c || !/^[A-Z]{2}$/.test(c)) return;
     const s = stateRef.current;
-    const guessed = s.countryAutoPicked || (!s.selectedCountry && configScope(config) === 'address');
-    if (!(opts?.explicit || guessed) || c === s.selectedCountry) return;
-    const accepted = config.proofOfAddress?.countries;
-    if (accepted?.length && !accepted.some((x) => x.toUpperCase() === c)) return;
-    dispatch({ type: opts?.explicit ? 'SET_COUNTRY' : 'SET_COUNTRY_AUTO', payload: c as never });
+    const decision = adoptionDecision({
+      country: parts?.country,
+      selectedCountry: s.selectedCountry,
+      countryAutoPicked: s.countryAutoPicked,
+      scope: configScope(config),
+      accepted: config.proofOfAddress?.countries,
+      explicit: opts?.explicit,
+    });
+    if (!decision) return;
+    dispatch({ type: decision.auto ? 'SET_COUNTRY_AUTO' : 'SET_COUNTRY', payload: decision.country as never });
   };
   useEffect(() => () => {
     if (reverseTimer.current) window.clearTimeout(reverseTimer.current);
@@ -267,6 +271,8 @@ export function usePinActions({ config, state, dispatch, setError }: PinActionDe
 
   return {
     adoptGeocodedCountry,
+    /** A reverse geocode is out: the pin has no line YET, rather than none. */
+    labelling,
     currentFix: fix,
     locating: fixPending,
     startPrefetch,

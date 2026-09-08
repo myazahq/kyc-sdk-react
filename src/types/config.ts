@@ -1,7 +1,7 @@
 import type { ResubmitConfig } from '../lib/resubmit';
 import type { ButtonHTMLAttributes } from 'react';
 
-import type { KYCSubmission, KYCError } from './verification';
+import type { KYCSubmission, KYCError, KYCResult } from './verification';
 
 // ---------------------------------------------------------------------------
 // Supported countries & ID types
@@ -118,7 +118,19 @@ export type ProgressStyle = 'steps' | 'bar' | 'none';
 // Proof of Address (utility bill / bank statement / tenancy document)
 // ---------------------------------------------------------------------------
 
-export type PoaDocumentType = 'utility_bill' | 'bank_statement' | 'tenancy_agreement' | 'other';
+export type PoaDocumentType =
+  | 'utility_bill'
+  | 'bank_statement'
+  | 'tenancy_agreement'
+  | 'government_document'
+  | 'other';
+
+/**
+ * Whether the applicant's name must appear on the proof-of-address document.
+ * The SERVER judges this; the SDK only reads it to word the step honestly
+ * (a rule of `off` asks for a document that shows the address, not the name).
+ */
+export type PoaNameRule = 'required' | 'optional' | 'off';
 
 export interface ProofOfAddressConfig {
   /** Adds the Proof of Address step (after capture, before the questionnaire). */
@@ -135,6 +147,10 @@ export interface ProofOfAddressConfig {
   otherLabel?: string;
   /** Recency window the server checks the document date against (default 90). */
   maxAgeDays?: number;
+  /** The default name rule for every country and kind (absent = required). */
+  nameMatch?: PoaNameRule;
+  /** Per-country, per-kind exceptions to `nameMatch` (ISO-2 → kind → rule). */
+  countryNameMatch?: Record<string, Partial<Record<PoaDocumentType, PoaNameRule>>>;
 }
 
 // ---------------------------------------------------------------------------
@@ -699,6 +715,31 @@ export interface MyazaKYCConfig<C extends AnyCountry = AnyCountry> {
   deviceHandoff?: boolean;
 
   /**
+   * Show the consent (welcome) screen as the flow's first step. Default
+   * `true`. Set `false` when your own app has already collected the person's
+   * consent, so the flow opens straight on its first real step (the contact
+   * codes, the country picker, the ID list, the business form, or a scoped
+   * flow's own check). Normally set by a workflow. Switching the screen off
+   * does not change what you attest to the verification provider: consent
+   * remains your organisation's statement.
+   */
+  consentStep?: boolean;
+
+  /**
+   * The biometric scopes' flow options (workflow-driven, or passed here on a
+   * prop-configured mount): `selfieReview` shows the captured selfie with
+   * Retake and Continue before submitting (off by default on both biometric
+   * scopes); `resultDelivery` says where a re-authentication's verdict lands,
+   * 'both' (the default: the SDK holds the person on one loading screen until
+   * the check settles, and the org's webhook receives it too), 'app' (the
+   * same wait, but the server sends no webhook for the check) or 'webhook'
+   * (fire-and-forget); `doneButton` (default true) hides the final screen's
+   * Done when the host app closes the flow itself from `onResult`. A flow key
+   * wins per field. See lib/biometric-options.ts.
+   */
+  biometric?: import('../lib/biometric-options').BiometricFlowConfig;
+
+  /**
    * Mobile-only: refuse to run the flow on a desktop/laptop. The SDK starts
    * only when it can CONFIRM a real handheld device — the check reads hardware
    * signals (GPU renderer, motion sensor, touch), never viewport width, so a
@@ -859,6 +900,14 @@ export interface MyazaKYCConfig<C extends AnyCountry = AnyCountry> {
    * The submission is always status: 'processing' — results arrive async via webhook.
    */
   onSubmit?: (submission: KYCSubmission) => void;
+  /**
+   * Fires once with the verdict when the flow WAITS for it in-app (a
+   * biometric re-authentication on `resultDelivery: 'both'`, the default, or
+   * 'app'). Never fires on a fire-and-forget flow, and never on a wait that
+   * timed out: the webhook stays the record either way. Carries state and
+   * reason only, never result data.
+   */
+  onResult?: (result: KYCResult) => void;
   onClose?: () => void;
   /**
    * Fires for technical errors only. Receives a {@link KYCError} — a real

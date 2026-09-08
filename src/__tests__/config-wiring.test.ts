@@ -43,6 +43,11 @@ describe('every workflow key survives the MyazaKYC provider mount', () => {
   // component props. Adding a key here is a claim that some step will never
   // need it — check every `config.<key>` consumer before you do.
   const PROP_THREADED = new Set(['voiceGuidance', 'showThemeToggle', 'fullScreen', 'disableClose']);
+  // The hosted page's chrome consumes these outside the provider (HostedChrome
+  // / the handoff gate). `disableClose` is consumed nowhere on a hosted page:
+  // a hosted session is never closable, so the key has nothing to reach.
+  const HOSTED_CHROME = new Set(['voiceGuidance', 'showThemeToggle', 'fullScreen']);
+  const HOSTED_UNUSED = new Set(['disableClose']);
 
   it('MyazaKYC passes each key (or documents why not)', () => {
     const mount = providerMount(read('MyazaKYC.tsx'));
@@ -62,10 +67,18 @@ describe('every workflow key survives the MyazaKYC provider mount', () => {
     expect(source).toContain('configureSpeech(voiceGuidance)');
   });
 
-  it('the hosted mount passes the keys that burned us', () => {
-    const mount = providerMount(read('hosted/HostedFlow.tsx'));
-    for (const key of ['multiId', 'resubmit', 'deviceIntelligence']) {
-      expect(mount).toContain(key);
-    }
+  it('the hosted mount passes every key too (it burned us a fourth time)', () => {
+    // `consentStep` shipped on MyazaKYC and never reached HostedFlow, so a
+    // re-authentication link with consent switched off still opened on the
+    // consent screen (user report 2026-09-07). Same defect, same check: the
+    // hosted mount is held to the whole list, with the chrome-threaded keys
+    // named rather than assumed.
+    const source = read('hosted/HostedFlow.tsx');
+    const mount = providerMount(source);
+    const missing = workflowKeys().filter(
+      (key) => !HOSTED_CHROME.has(key) && !HOSTED_UNUSED.has(key) && !mount.includes(`${key}={`),
+    );
+    expect(missing).toEqual([]);
+    for (const key of HOSTED_CHROME) expect(source).toContain(`${key}={`);
   });
 });

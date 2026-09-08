@@ -5,7 +5,7 @@ import { X } from 'lucide-react';
 import { Drawer, DrawerContent, DrawerTitle } from '../../components/ui/drawer';
 import { Button } from '../../components/ui/button';
 import { cn } from '../../lib/utils';
-import { AddressDirectionsField } from '../../components/AddressPropertyFields';
+import { AddressDirectionsField } from '../../components/AddressDirectionsField';
 import { AreaFields, Field, SectionHeading, type DetailPatch, type DetailValues } from './DetailsSheetFields';
 import { addressFieldModes, type AddressFieldKey, type AddressFieldMode } from './address-field-modes';
 import type { AddressCollectionConfig } from '../../types/config';

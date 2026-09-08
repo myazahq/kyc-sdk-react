@@ -10,11 +10,8 @@ import {
   prevBusinessStep,
   resolveBusinessDocumentTypes,
 } from '../lib/business-application';
-import {
-  BusinessDocumentSlot,
-  BUSINESS_DOC_ACCEPTED_MIMES,
-  BUSINESS_DOC_MAX_BYTES,
-} from './BusinessDocumentSlot';
+import { BusinessDocumentSlot, BUSINESS_DOC_ACCEPTED_MIMES } from './BusinessDocumentSlot';
+import { uploadSizeError } from '../lib/upload-limits';
 import type { BusinessDocumentKey } from '../types/business';
 
 /**
@@ -42,11 +39,12 @@ export function BusinessDocumentsStep() {
   const handlePick = async (key: BusinessDocumentKey, file: File) => {
     setError(key, null);
     if (!BUSINESS_DOC_ACCEPTED_MIMES.includes((file.type.split(';')[0] || '').toLowerCase())) {
-      setError(key, 'Please upload a photo (JPEG/PNG/WebP) or a PDF.');
+      setError(key, 'Please upload a PDF, JPG or PNG file.');
       return;
     }
-    if (file.size > BUSINESS_DOC_MAX_BYTES) {
-      setError(key, 'File is too large (max 20MB).');
+    const sizeError = uploadSizeError(file.type, file.size);
+    if (sizeError) {
+      setError(key, sizeError);
       return;
     }
     setUploadingKey(key);

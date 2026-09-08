@@ -187,6 +187,13 @@ export interface MediaIds {
 
 export interface KYCState {
   currentStep: KYCStep;
+  /**
+   * The step this flow OPENS on: 'consent', or the first real step when the
+   * workflow switched the consent screen off. Published by KYCModal from the
+   * built step order (the one place that knows it), read by the progress
+   * saver so a consent-less flow is not written as "started" on mount.
+   */
+  openingStep: KYCStep;
   status: ApiStatus;
   isOpen: boolean;
 
@@ -246,6 +253,13 @@ export interface KYCState {
 
   // Step 4 – Liveness / selfie
   selfieImage: string | null;
+  /**
+   * The selfie upload's progress report, written by LivenessStep. The
+   * biometric scopes hand over before the upload lands (the review is off),
+   * so the submitted step waits on THIS rather than on the step's own state.
+   * See lib/selfie-upload-wait.ts.
+   */
+  selfieUpload: import('../lib/selfie-upload-wait').SelfieUploadState;
 
   // Video blobs captured during document and liveness steps
   documentFrontVideoBlob: Blob | null;
@@ -386,6 +400,7 @@ export type KYCAction =
     }
   | { type: 'CLOSE_MODAL' }
   | { type: 'SET_STEP'; payload: KYCStep }
+  | { type: 'SET_OPENING_STEP'; payload: KYCStep }
   | { type: 'SET_COUNTRY'; payload: AnyCountry }
   | { type: 'SET_COUNTRY_AUTO'; payload: AnyCountry }
   | { type: 'SELECT_ID_TYPE'; payload: AnyIdType }
@@ -414,6 +429,7 @@ export type KYCAction =
   // Selfie
   | { type: 'SET_SELFIE_IMAGE'; payload: string }
   | { type: 'CLEAR_SELFIE_IMAGE' }
+  | { type: 'SET_SELFIE_UPLOAD'; payload: import('../lib/selfie-upload-wait').SelfieUploadState }
   // Video blobs
   | { type: 'SET_DOCUMENT_FRONT_VIDEO'; payload: Blob }
   | { type: 'SET_DOCUMENT_BACK_VIDEO'; payload: Blob }

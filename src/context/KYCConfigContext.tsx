@@ -4,7 +4,7 @@ import React, { createContext, useContext, useEffect, useMemo, useRef, useState,
 import type { ResubmitConfig } from '../lib/resubmit';
 import type { AnyCountry, AnyIdType, EmailVerificationConfig, IdTypeDefinition, KYCAppearance, KYCConsentContent, KYCSuccessContent, PhoneVerificationConfig, QuestionnaireConfig, ProofOfAddressConfig, NfcConfig, ProgressStyle, AddressCollectionConfig } from '../types/config';
 import type { SubjectType, WorkflowBusinessConfig } from '../types/business';
-import type { KYCSubmission } from '../types/verification';
+import type { KYCSubmission, KYCResult } from '../types/verification';
 import { createKYCApi, KYCApiError, type CompletedSessionSummary, type KYCApi, type SdkConfigIdType, type SdkConfigResponse, type SdkConfigBranding, type WorkflowConfigPayload } from '../services/api';
 import { overlayApplicantWorkflow } from '../lib/workflow-merge';
 import { withPreviewMocks } from '../services/preview-mock';
@@ -142,6 +142,14 @@ export interface KYCConfigValue {
    */
   deviceHandoff?: boolean;
   /**
+   * Whether the flow opens on the consent screen (default true). `false` is
+   * the workflow's `consentStep: false`: the host has already asked, so the
+   * flow opens on its first real step. See lib/consent-step.ts.
+   */
+  consentStep?: boolean;
+  /** The biometric scopes' flow options (review / delivery / Done). See lib/biometric-options.ts. */
+  biometric?: import('../lib/biometric-options').BiometricFlowConfig;
+  /**
    * How header progress is drawn: 'steps' (default, numbered circles), 'bar'
    * (a thin bar on the header's bottom edge), or 'none' (no progress element).
    * See KYCConfig.progressStyle.
@@ -186,6 +194,8 @@ export interface KYCConfigValue {
   /** NFC chip verification (native SDKs; web renders it for preview only). */
   nfc?: NfcConfig;
   onSubmit?: (submission: KYCSubmission) => void;
+  /** Fires once with the verdict on a flow that waits for it in-app (see types/config.ts). */
+  onResult?: (result: KYCResult) => void;
   onClose?: () => void;
   /** Fires for technical errors — including a fatal config-load auth failure. Receives a typed {@link KYCError}. */
   onError?: (error: KYCError) => void;
@@ -461,6 +471,8 @@ export function KYCConfigProvider({ children, apiOverride, serverConfigOverride,
       config.flashSequenceLength,
       config.deviceIntelligence,
       config.deviceHandoff,
+      config.consentStep,
+      config.biometric,
       config.requireMobileDevice,
       config.assetsBasePath,
       config.appearance,
@@ -473,6 +485,7 @@ export function KYCConfigProvider({ children, apiOverride, serverConfigOverride,
       config.addressCollection,
       config.nfc,
       config.onSubmit,
+      config.onResult,
       config.onClose,
       config.onError,
       serverConfig,

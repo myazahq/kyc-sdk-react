@@ -8,19 +8,21 @@ import { AddressCountryControl } from './address/AddressCountryControl';
 import { Button } from '../components/ui/button';
 import { useKYCContext } from '../context/KYCContext';
 import { useKYCConfig } from '../context/KYCConfigContext';
-import { poaOfferedKinds, stepAfterProofOfAddress } from '../lib/post-capture';
+import { poaNamePolicy, poaOfferedKinds, stepAfterProofOfAddress } from '../lib/post-capture';
+import { poaCountryDeclared, poaOfferedCountries } from '../lib/poa-country-gate';
 import { lastContactStep } from '../lib/contact-steps';
+import { uploadSizeError } from '../lib/upload-limits';
 import type { PoaDocumentType } from '../types/config';
 
 const TYPE_LABELS: Record<PoaDocumentType, string> = {
   utility_bill: 'Utility bill',
   bank_statement: 'Bank statement',
   tenancy_agreement: 'Tenancy agreement',
+  government_document: 'Government-issued document',
   other: 'Other document',
 };
 
 const ACCEPTED_MIMES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
-const MAX_BYTES = 20 * 1024 * 1024;
 
 /**
  * Proof of Address: the user picks the document kind and uploads a recent
@@ -48,21 +50,35 @@ export function ProofOfAddressStep() {
       ? config.proofOfAddress.otherLabel.trim()
       : TYPE_LABELS[type];
   const maxAgeDays = config.proofOfAddress?.maxAgeDays ?? 90;
+  // Ask for what the server will check: where the workflow does not require
+  // the name on this kind in this country (a Nigerian utility bill names the
+  // meter, not the tenant), asking for "your name" sends people hunting for a
+  // document they do not have.
+  const nameNeeded = poaNamePolicy(config.proofOfAddress, config.country, selectedType) !== 'off';
   const uploaded = Boolean(state.mediaIds.proofOfAddress);
   // The flag on the attachment area: on the address scope only a country the
   // applicant picked (the scope has no seeded country to show), else the
   // flow's effective country.
   const flagCountry =
     config.scope === 'address' ? (state.selectedCountry ?? null) : (config.country ?? null);
+  // The address scope's country is the applicant's declaration and drives the
+  // document's market; Continue holds until it is made (the control below
+  // asks for it). Never bites elsewhere. See lib/poa-country-gate.ts.
+  const countryDeclared = poaCountryDeclared({
+    scope: config.scope ?? null,
+    selectedCountry: state.selectedCountry,
+    offered: poaOfferedCountries(config.proofOfAddress?.countries),
+  });
 
   const handleFile = async (file: File) => {
     setError(null);
     if (!ACCEPTED_MIMES.includes((file.type.split(';')[0] || '').toLowerCase())) {
-      setError('Please upload a photo (JPEG/PNG/WebP) or a PDF.');
+      setError('Please upload a PDF, JPG or PNG file.');
       return;
     }
-    if (file.size > MAX_BYTES) {
-      setError('File is too large (max 20MB).');
+    const sizeError = uploadSizeError(file.type, file.size);
+    if (sizeError) {
+      setError(sizeError);
       return;
     }
     setUploading(true);
@@ -103,7 +119,7 @@ export function ProofOfAddressStep() {
     <div className="space-y-6 animate-slide-up">
       <StepHeader
         title="Proof of address"
-        description={`Upload a document that shows your name and home address, issued within the last ${maxAgeDays} days.`}
+        description={`Upload a document that shows your ${nameNeeded ? 'name and home address' : 'home address'}, issued within the last ${maxAgeDays} days.`}
         onBack={handleBack}
       />
 
@@ -171,7 +187,7 @@ export function ProofOfAddressStep() {
 
       <Button
         onClick={handleContinue}
-        disabled={!uploaded || uploading}
+        disabled={!uploaded || uploading || !countryDeclared}
         className="w-full h-12 rounded-xl text-base font-medium"
       >
         Continue

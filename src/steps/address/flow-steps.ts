@@ -173,7 +173,11 @@ export function displayAddressLine(address: {
     if (typed) return withClaims([number ? `${number} ${typed}` : typed]);
     const claimed = withClaims([]);
     if (claimed) return claimed;
-    return `${address.lat.toFixed(5)}, ${address.lng.toFixed(5)}`;
+    // NEVER coordinates. A moved pin has no line until the reverse geocode
+    // answers, and "4.93240, 8.32540" is not an address: it read as one, for
+    // the second or so before the real line arrived. Empty means "nothing
+    // human-readable yet", and the caller shows that it is still coming.
+    return '';
   }
   const segs = label.split(', ').map((t) => t.trim()).filter(Boolean);
   if (typed && !label.toLowerCase().includes(typed.toLowerCase())) {
@@ -191,3 +195,11 @@ export function displayAddressLine(address: {
   }
   return withClaims(segs);
 }
+
+/** Read to assistive tech while the reverse geocode is out: the pin has a
+ *  line coming, and a lat/lng pair is not it. Sighted users see a skeleton
+ *  line in its place (components/LineSkeleton), never a spinner. Mirrored on
+ *  the RN and Flutter SDKs. */
+export const ADDRESS_LINE_PENDING = 'Finding the address…';
+/** Shown when the geocode came back with nothing. Still not coordinates. */
+export const ADDRESS_LINE_UNAVAILABLE = 'No address found for this spot';

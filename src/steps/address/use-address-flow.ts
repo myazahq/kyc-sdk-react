@@ -10,6 +10,7 @@ import { addressBackStep, addressNextStep } from '../../lib/address-step-nav';
 import { deviceFixFields, uploadAddressPhoto } from '../address-helpers';
 import { addressFlowOptions, addressFlowSteps, addressVendorsStubbed, nextAddressStep, prevAddressStep } from './flow-steps';
 import { usePinActions } from './use-pin-actions';
+import { geoDefaultCountry } from './country-adoption';
 import type { KYCStep } from '../../types/config';
 
 // The address flow's shared brain: every address step mounts this hook and
@@ -75,22 +76,21 @@ export function useAddressFlow() {
   // selectedCountry never re-defaults); the AddressCountryControl on the PoA
   // step is where the applicant corrects it by hand. Preview mode stays
   // deterministic (no dispatch).
-  const geoRaw = config.serverConfig?.geoCountry?.trim().toUpperCase();
-  const geoCountry = geoRaw && /^[A-Z]{2}$/.test(geoRaw) ? geoRaw : null;
-  // The org's accepted-country list (proofOfAddress.countries): a guess the
-  // submission gate would refuse must never become the default.
-  const acceptedList = config.proofOfAddress?.countries;
-  const geoAccepted =
-    !acceptedList?.length || (geoCountry != null && acceptedList.some((c) => c.toUpperCase() === geoCountry));
+  // The rule (and the accepted-list gate) is country-adoption.ts, shared with
+  // RN + Flutter. No comparison against config.country here: the address
+  // scope has no seeded country, so an IP answer is adopted whatever the
+  // workflow says.
+  const geoDefault = geoDefaultCountry({
+    geoCountry: config.serverConfig?.geoCountry,
+    selectedCountry: state.selectedCountry,
+    scope: configScope(config),
+    accepted: config.proofOfAddress?.countries,
+  });
   useEffect(() => {
-    if (!isAddressScope || config.previewMode || state.selectedCountry) return;
-    // No comparison against config.country here: the address scope has no
-    // seeded country, so an IP answer is adopted whatever the workflow says.
-    if (geoCountry && geoAccepted) {
-      dispatch({ type: 'SET_COUNTRY_AUTO', payload: geoCountry as never });
-    }
+    if (config.previewMode || !geoDefault) return;
+    dispatch({ type: 'SET_COUNTRY_AUTO', payload: geoDefault as never });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAddressScope, geoCountry, geoAccepted]);
+  }, [geoDefault]);
 
   // Pin mechanics (labelling, current-location fix, every way the pin can
   // move) live in use-pin-actions.ts — split per the 200-line rule.

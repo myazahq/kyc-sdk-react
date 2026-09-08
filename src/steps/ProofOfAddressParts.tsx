@@ -5,6 +5,7 @@ import { CheckCircle2, Loader2, Upload, X } from 'lucide-react';
 import { UploadedFileThumb } from '../components/UploadedFilePreview';
 import { CountryFlag } from '../components/CountryFlag';
 import { regionCountryName } from '../lib/regions';
+import { UPLOAD_HINT } from '../lib/upload-limits';
 
 // Proof of Address — the two states of the attachment area, split out of the
 // step (200-line rule; mirrors RN's ProofOfAddressParts and Flutter's
@@ -89,7 +90,7 @@ export function PoaDropzone({
         <Flag country={country} className="h-5 w-5 shrink-0" />
         {uploading ? 'Uploading…' : `Upload your ${typeLabel.toLowerCase()}`}
       </span>
-      <span className="text-xs text-muted-foreground">Photo or PDF, up to 20MB</span>
+      <span className="text-xs text-muted-foreground">{UPLOAD_HINT}</span>
     </button>
   );
 }

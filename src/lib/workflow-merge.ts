@@ -26,6 +26,8 @@ const WORKFLOW_KEYS = [
   'flashSequenceLength',
   'deviceIntelligence',
   'deviceHandoff',
+  'consentStep',
+  'biometric',
   'requireMobileDevice',
   'voiceGuidance',
   'showThemeToggle',
@@ -51,9 +53,10 @@ type WorkflowKey = (typeof WORKFLOW_KEYS)[number];
 /**
  * Merge a resolved flow config over the consumer's props — **flow wins** on
  * every key it defines; props fill the gaps (so a dev can still set e.g.
- * `assetsBasePath` when the flow doesn't). `appearance` merges shallowly with
- * flow keys winning per-field, so a flow that only sets `primaryColor` doesn't
- * wipe a prop-supplied `logo`.
+ * `assetsBasePath` when the flow doesn't). `appearance` and `biometric` merge
+ * shallowly with flow keys winning per-field, so a flow that only sets
+ * `primaryColor` doesn't wipe a prop-supplied `logo`, and a flow that only
+ * switches the selfie review on doesn't wipe a host's `doneButton: false`.
  *
  * Pure and side-effect free — unit-tested in flow-merge.test.ts.
  */
@@ -67,10 +70,10 @@ export function mergeWorkflowConfig<P extends Record<string, unknown>>(
   for (const key of WORKFLOW_KEYS) {
     const value = flow[key as WorkflowKey];
     if (value === undefined) continue;
-    if (key === 'appearance') {
-      const propAppearance = props['appearance'];
+    if (key === 'appearance' || key === 'biometric') {
+      const propBlock = props[key];
       merged[key] = {
-        ...(typeof propAppearance === 'object' && propAppearance !== null ? propAppearance : {}),
+        ...(typeof propBlock === 'object' && propBlock !== null ? propBlock : {}),
         ...(value as Record<string, unknown>),
       };
     } else {

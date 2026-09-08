@@ -74,11 +74,14 @@ export function progressFromState(state: KYCState): SessionProgressPayload {
  * worked through — the presence of stored progress IS "they started", and a
  * save-on-mount made every opened link look started.
  *
- * `consent` is the first step of both flows unconditionally (see step-order.ts),
- * so it is a safe universal marker. Everything else errs towards saving.
+ * Judged against the flow's OPENING step: `consent` unless the workflow
+ * switched that screen off (`consentStep: false`), in which case the first real
+ * step (see step-order.ts). Naming consent here would make every consent-less
+ * flow save on mount, and every opened link would read "In progress".
+ * Everything else errs towards saving.
  */
-export function isUntouchedProgress(payload: SessionProgressPayload): boolean {
-  if (payload.step && payload.step !== 'consent') return false;
+export function isUntouchedProgress(payload: SessionProgressPayload, openingStep: string = 'consent'): boolean {
+  if (payload.step && payload.step !== openingStep) return false;
   if (Object.keys(payload.mediaIds ?? {}).length > 0) return false;
   const d = payload.data;
   if (!d) return true;

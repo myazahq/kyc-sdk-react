@@ -30,7 +30,15 @@ describe('isUntouchedProgress', () => {
     expect(isUntouchedProgress({ step: 'consent', data: { selectedCountry: 'NG' } })).toBe(false);
   });
 
-  // The predicate hangs on `consent` being the first step. If that ever stops
+  // A consent-less flow opens on its first real step: judged against THAT, or
+  // every such flow would save on mount and every opened link read "In progress".
+  it('judges a consent-less flow against its own opening step', () => {
+    expect(isUntouchedProgress({ step: 'id-type', mediaIds: {}, data: {} }, 'id-type')).toBe(true);
+    expect(isUntouchedProgress({ step: 'document-capture', mediaIds: {}, data: {} }, 'id-type')).toBe(false);
+    expect(isUntouchedProgress({ step: 'id-type', data: { selectedIdType: 'bvn' } }, 'id-type')).toBe(false);
+  });
+
+  // The default hangs on `consent` being the first step. If that ever stops
   // being true, every flow starts by saving and the distinction quietly dies.
   it('rests on consent being the first step of both flows', () => {
     const opts = {
@@ -45,5 +53,6 @@ describe('isUntouchedProgress', () => {
     };
     expect(buildStepOrder({ ...opts, isBusiness: false })[0]).toBe('consent');
     expect(buildStepOrder({ ...opts, isBusiness: true })[0]).toBe('consent');
+    expect(buildStepOrder({ ...opts, isBusiness: false, hasConsent: false })[0]).toBe('id-type');
   });
 });

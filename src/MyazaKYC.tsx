@@ -1,6 +1,7 @@
 'use client';
 
 import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { collectWebDeviceMetadata } from './utils/device-metadata';
 import { Loader2 } from 'lucide-react';
 import { KYCProvider, useKYCContext } from './context/KYCContext';
 
@@ -128,6 +129,8 @@ function KYCInner({
   fullScreen,
   disableClose,
   deviceHandoff,
+  consentStep,
+  biometric,
   progressStyle,
   requireMobileDevice,
   defaultOpen,
@@ -137,6 +140,7 @@ function KYCInner({
   onStart,
   onStepChange,
   onSubmit,
+  onResult,
   onClose,
   onError,
   appearance,
@@ -177,6 +181,8 @@ function KYCInner({
     ...(flashSequenceLength !== undefined ? { flashSequenceLength } : {}),
     ...(deviceIntelligence !== undefined ? { deviceIntelligence } : {}),
     ...(deviceHandoff !== undefined ? { deviceHandoff } : {}),
+    ...(consentStep !== undefined ? { consentStep } : {}),
+    ...(biometric ? { biometric } : {}),
     ...(requireMobileDevice !== undefined ? { requireMobileDevice } : {}),
     ...(voiceGuidance !== undefined ? { voiceGuidance } : {}),
     ...(showThemeToggle !== undefined ? { showThemeToggle } : {}),
@@ -197,7 +203,7 @@ function KYCInner({
     ...(userData ? { userData } : {}),
     ...(businessPrefill ? { businessPrefill } : {}),
     ...(assetsBasePath ? { assetsBasePath } : {}),
-  }), [country, workflowId, idTypes, countries, multiId, enableSelfie, enableDocumentCapture, allowDocumentUpload, enableLiveness, livenessMode, flashSequenceLength, deviceIntelligence, deviceHandoff, requireMobileDevice, voiceGuidance, showThemeToggle, progressStyle, fullScreen, disableClose, appearance, consent, success, emailVerification, phoneVerification, questionnaire, proofOfAddress, addressCollection, nfc, metadata, userId, userData, businessPrefill, assetsBasePath]);
+  }), [country, workflowId, idTypes, countries, multiId, enableSelfie, enableDocumentCapture, allowDocumentUpload, enableLiveness, livenessMode, flashSequenceLength, deviceIntelligence, deviceHandoff, consentStep, biometric, requireMobileDevice, voiceGuidance, showThemeToggle, progressStyle, fullScreen, disableClose, appearance, consent, success, emailVerification, phoneVerification, questionnaire, proofOfAddress, addressCollection, nfc, metadata, userId, userData, businessPrefill, assetsBasePath]);
 
   // Pre-load MediaPipe Face Mesh model as soon as the SDK mounts and apply the
   // voice-guidance config (enabled + language) for the spoken liveness prompts.
@@ -305,6 +311,9 @@ function KYCInner({
             // has nothing else to find the previous attempt by, and every
             // relaunch minted a fresh session.
             deviceRef: persistentDeviceId(),
+            // What this browser is, sent up front: the dashboard's in-progress
+            // row shows Device and Source from the moment the SDK loads.
+            device: collectWebDeviceMetadata() as unknown as Record<string, unknown>,
           }),
       );
       dispatch({ type: 'SET_SESSION_ID', payload: sessionId });
@@ -411,6 +420,8 @@ function KYCInner({
       flashSequenceLength={flashSequenceLength}
       deviceIntelligence={deviceIntelligence}
       deviceHandoff={deviceHandoff}
+      consentStep={consentStep}
+      biometric={biometric}
       progressStyle={progressStyle}
       requireMobileDevice={requireMobileDevice}
       assetsBasePath={assetsBasePath}
@@ -425,6 +436,7 @@ function KYCInner({
       nfc={nfc}
       previewMode={previewMode}
       onSubmit={onSubmit}
+      onResult={onResult}
       onClose={handleClose}
       onError={onError}
     >

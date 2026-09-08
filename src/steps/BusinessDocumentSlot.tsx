@@ -3,9 +3,9 @@
 import React, { useRef } from 'react';
 import { CheckCircle2, Loader2, Upload, X } from 'lucide-react';
 import { UploadedFileThumb } from '../components/UploadedFilePreview';
+import { UPLOAD_HINT } from '../lib/upload-limits';
 
 export const BUSINESS_DOC_ACCEPTED_MIMES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
-export const BUSINESS_DOC_MAX_BYTES = 20 * 1024 * 1024;
 
 interface BusinessDocumentSlotProps {
   label: string;
@@ -96,7 +96,7 @@ export function BusinessDocumentSlot({
               {required && <span className="text-destructive"> *</span>}
             </span>
             <span className="block text-xs text-muted-foreground">
-              {uploading ? 'Uploading…' : 'Photo or PDF, up to 20MB'}
+              {uploading ? 'Uploading…' : UPLOAD_HINT}
             </span>
           </span>
         </button>

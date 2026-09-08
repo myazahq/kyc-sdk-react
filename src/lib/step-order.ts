@@ -21,6 +21,12 @@ export interface StepOrderOptions {
   hasDocCapture: boolean;
   hasLiveness: boolean;
   hasCountrySelect: boolean;
+  /**
+   * Whether the flow opens on the consent screen. Absent = yes. `false` is the
+   * workflow's `consentStep: false`: the org's own app has already asked, so
+   * the flow opens on its first real step instead (see lib/consent-step.ts).
+   */
+  hasConsent?: boolean;
   hasEmailVerification: boolean;
   hasPhoneVerification: boolean;
   hasPoa: boolean;
@@ -64,6 +70,11 @@ export function buildStepOrder(o: StepOrderOptions): KYCStep[] {
   return applyResubmitSteps(fullStepOrder(o), o.resubmit);
 }
 
+/** The flow's opening screen: consent, unless the workflow switched it off. */
+function openingSteps(o: StepOrderOptions): KYCStep[] {
+  return o.hasConsent === false ? [] : ['consent'];
+}
+
 /**
  * The step the flow should actually SHOW, given a reviewer's narrowing.
  *
@@ -86,6 +97,10 @@ export function buildStepOrder(o: StepOrderOptions): KYCStep[] {
 export function resolveNarrowedStep(step: KYCStep, o: StepOrderOptions): KYCStep {
   const narrowed = buildStepOrder(o);
   if (narrowed.includes(step)) return step;
+  // A consent-less flow (`consentStep: false`): the reducer still opens on
+  // 'consent', and an older Back target may still name it, so both land on
+  // the flow's real first step rather than on a screen it does not contain.
+  if (step === 'consent' && o.hasConsent === false) return narrowed[0] ?? step;
 
   const full = fullStepOrder(o);
   const from = full.indexOf(step);
@@ -106,7 +121,7 @@ function fullStepOrder(o: StepOrderOptions): KYCStep[] {
     // its questions are about the company, so it stays with the company form
     // rather than trailing the applicant's own capture leg.
     const steps: KYCStep[] = [
-      'consent',
+      ...openingSteps(o),
       ...contactSteps(o),
       ...businessSectionSteps(o.business, o.hasQuestionnaire, o.hasAddressCollection),
     ];
@@ -119,7 +134,7 @@ function fullStepOrder(o: StepOrderOptions): KYCStep[] {
   }
   // Scoped flows: the scope's headline section IS the flow.
   if (o.scope === 'address') {
-    const steps: KYCStep[] = ['consent', ...contactSteps(o)];
+    const steps: KYCStep[] = [...openingSteps(o), ...contactSteps(o)];
     if (o.hasPoa) steps.push('proof-of-address');
     if (o.addressFlow?.search) steps.push('address-search');
     steps.push('address-collection');
@@ -130,16 +145,16 @@ function fullStepOrder(o: StepOrderOptions): KYCStep[] {
     return steps;
   }
   if (o.scope === 'biometric-authentication' || o.scope === 'biometric-enrollment') {
-    const steps: KYCStep[] = ['consent', ...contactSteps(o), 'liveness'];
+    const steps: KYCStep[] = [...openingSteps(o), ...contactSteps(o), 'liveness'];
     if (o.hasQuestionnaire) steps.push('questionnaire');
     steps.push('submitted');
     return steps;
   }
   if (o.scope === 'questionnaire') {
-    return ['consent', ...contactSteps(o), 'questionnaire', 'submitted'];
+    return [...openingSteps(o), ...contactSteps(o), 'questionnaire', 'submitted'];
   }
   if (o.scope === 'contact') {
-    return ['consent', ...contactSteps(o), 'submitted'];
+    return [...openingSteps(o), ...contactSteps(o), 'submitted'];
   }
   const middle: KYCStep[] = [o.hasDocCapture ? 'document-capture' : 'id-input'];
   if (o.hasLiveness) middle.push('liveness');
@@ -152,7 +167,7 @@ function fullStepOrder(o: StepOrderOptions): KYCStep[] {
   }
   if (o.hasQuestionnaire) middle.push('questionnaire');
   return [
-    'consent',
+    ...openingSteps(o),
     ...contactSteps(o),
     ...(o.hasCountrySelect ? (['country-select'] as KYCStep[]) : []),
     'id-type',

@@ -8,7 +8,7 @@ import { overlayApplicantWorkflow } from '../lib/workflow-merge';
 import { HostedFlowInner } from './HostedFlowInner';
 import { HANDOFF_TOKEN_PREFIX } from './token';
 import type { HandoffBootstrapResponse, KYCApi } from '../services/api';
-import type { KYCError, KYCSubmission } from '../types/verification';
+import type { KYCError, KYCSubmission, KYCResult } from '../types/verification';
 import type {
   AnyCountry,
   AnyIdType,
@@ -43,6 +43,7 @@ export function HostedFlow({
   onStart,
   onStepChange,
   onSubmit,
+  onResult,
   onError,
 }: {
   token: string;
@@ -54,6 +55,7 @@ export function HostedFlow({
   onStart?: () => void;
   onStepChange?: (step: import('../types/config').KYCStep) => void;
   onSubmit?: (submission: KYCSubmission) => void;
+  onResult?: (result: KYCResult) => void;
   onError?: (error: KYCError) => void;
 }) {
   const snap = bootstrap.configSnapshot;
@@ -101,6 +103,7 @@ export function HostedFlow({
         hostedMode={!embedded}
         onClose={onClose}
         onSubmit={onSubmit}
+        onResult={onResult}
         onError={onError}
         hostedToken={token}
         subjectType={snap.subjectType as SubjectType | undefined}
@@ -128,6 +131,11 @@ export function HostedFlow({
         flashSequenceLength={leg.flashSequenceLength as number | undefined}
         deviceIntelligence={snap.deviceIntelligence}
         deviceHandoff={snap.deviceHandoff}
+        // The consent screen switch: off, the hosted flow opens on its first
+        // real step (user report 2026-09-07: a re-authentication link with
+        // consent off still opened on consent, because this list lacked it).
+        consentStep={snap.consentStep}
+        biometric={snap.biometric}
         progressStyle={snap.progressStyle as ProgressStyle | undefined}
         requireMobileDevice={snap.requireMobileDevice}
         appearance={snap.appearance as KYCAppearance | undefined}

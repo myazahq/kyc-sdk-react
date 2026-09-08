@@ -35,6 +35,8 @@ import {
 import type { ChallengeEntry } from '../liveness/challenge-manager';
 import { usePortalHost } from '../lib/sdk-frame-context';
 import { CaptureRing } from '../components/CaptureRing';
+import { LivenessHandover, useSelfieAutoAdvance } from './liveness-handover';
+import { showsSelfieReview } from '../lib/biometric-options';
 
 // ---------------------------------------------------------------------------
 // LivenessStep — active liveness check with gesture challenges
@@ -239,6 +241,9 @@ export function LivenessStep() {
     setIsUploading(true);
     setUploadError(null);
     setRetryInfo(null);
+    // The reducer-side progress report: the biometric scopes hand over before
+    // this lands, and the submitted step waits on THIS (lib/selfie-upload-wait).
+    dispatch({ type: 'SET_SELFIE_UPLOAD', payload: { status: 'uploading', message: null } });
 
     const api = config.api;
 
@@ -257,11 +262,13 @@ export function LivenessStep() {
       dispatch({ type: 'SET_MEDIA_ID', payload: { mediaType: 'selfie', mediaId } });
       setRetryInfo(null);
       setIsUploading(false);
+      dispatch({ type: 'SET_SELFIE_UPLOAD', payload: { status: 'done', message: null } });
     } catch (err) {
       setRetryInfo(null);
       setIsUploading(false);
       const kycError = mapToKycError(err, 'upload');
       setUploadError(kycError.message);
+      dispatch({ type: 'SET_SELFIE_UPLOAD', payload: { status: 'failed', message: kycError.message } });
       safeReportError(config.onError, kycError);
     }
   }
@@ -337,6 +344,19 @@ export function LivenessStep() {
     }
   };
 
+  // The biometric scopes skip the review by default: hand over the moment a
+  // selfie exists, WITHOUT waiting for the upload (see liveness-handover.tsx).
+  // The upload reports to the reducer and the submitted step waits on it, so
+  // the person sees one loading screen rather than one per step. A restored
+  // selfie (media id, no bytes) is ready at once; an upload that already
+  // failed keeps the review, whose Retry Upload is the recovery.
+  const selfieReview = showsSelfieReview(config);
+  useSelfieAutoAdvance({
+    enabled: !selfieReview,
+    ready: (!!preview || restoredSelfie) && !uploadError,
+    onAdvance: handleContinue,
+  });
+
   const handleBack = () => {
     camera.stop();
     const hasDocCapture = kycState.selectedIdType
@@ -365,6 +385,12 @@ export function LivenessStep() {
   // ---------------------------------------------------------------------------
 
   if (preview || restoredSelfie) {
+    // Review hidden: the hook above advances on this render; the view is the
+    // submitted step's own loading screen, so the hand-over is invisible. A
+    // FAILED upload still gets the review, for its retry.
+    if (!selfieReview && !uploadError) {
+      return <LivenessHandover />;
+    }
     return (
       <div className="space-y-5 animate-slide-up">
         <StepHeader
@@ -685,7 +711,7 @@ export function LivenessStep() {
               // Primary while it builds: progress is the brand colour, outcome
               // is the semantic one. It turns success-green ONLY as it closes,
               // on the same frame as the shutter flash, the solid border and
-              // the "Saving your selfie" text, so the colour change is itself
+              // the solid border, so the colour change is itself
               // the completion signal — earned at the shutter, not claimed
               // from the first frame of positioning.
               className={cn(
@@ -806,9 +832,10 @@ function getInstructionText(state: ReturnType<typeof useLiveness>['state']): str
     case 'capturing':
       return state.guidance ?? 'Kindly hold still...';
     case 'complete':
-      // The shutter has fired; the recording is still being flushed. "Capture
-      // complete" beside a sweeping ring told the user two different things.
-      return 'Saving your selfie';
+      // No line at all. The ring closing green on the same frame as the shutter
+      // IS the completion signal, and the review follows within the beat —
+      // narrating the upload over it said nothing the user needed.
+      return '';
     case 'failed':
       return '';
     default:

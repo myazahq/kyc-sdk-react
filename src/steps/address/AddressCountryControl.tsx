@@ -9,7 +9,8 @@ import { DropdownSurface } from '../../components/DropdownSurface';
 import { useDropdownAnchor } from '../../lib/use-dropdown-anchor';
 import { eventPathIncludes } from '../../lib/event-path';
 import { inferredCountry } from '../../lib/inferred-country';
-import { ALL_REGION_CODES, groupCountriesByRegion, regionCountryName } from '../../lib/regions';
+import { groupCountriesByRegion, regionCountryName } from '../../lib/regions';
+import { poaOfferedCountries } from '../../lib/poa-country-gate';
 import { useKYCConfig } from '../../context/KYCConfigContext';
 import { useKYCContext } from '../../context/KYCContext';
 import { configScope } from '../../lib/scope';
@@ -53,14 +54,12 @@ export function AddressCountryControl() {
   const geo = inferredCountry(config.serverConfig?.geoCountry);
 
   // What the picker offers: the org's accepted list (proofOfAddress.countries,
-  // the server refuses submissions outside it) — or the whole world when the
-  // workflow doesn't limit it.
-  const offered = useMemo(() => {
-    const configured = (config.proofOfAddress?.countries ?? [])
-      .map((c) => c.toUpperCase())
-      .filter((c) => ALL_REGION_CODES.includes(c));
-    return configured.length > 0 ? configured : ALL_REGION_CODES;
-  }, [config.proofOfAddress?.countries]);
+  // the server refuses submissions outside it), else the whole world; the
+  // PoA step's Continue gate reads the same list (lib/poa-country-gate.ts).
+  const offered = useMemo(
+    () => poaOfferedCountries(config.proofOfAddress?.countries),
+    [config.proofOfAddress?.countries],
+  );
 
   // The inferred country, pinned — while the org accepts it and it matches the
   // search (a pin that ignores the search box is a row that will not go away).

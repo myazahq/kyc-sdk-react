@@ -114,6 +114,12 @@ export function HostedCompleted({
         appearance={snap.appearance as KYCAppearance | undefined}
         success={snap.success as KYCSuccessContent | undefined}
         userData={snap.userData}
+        // The scope is what tells the returning screen WHAT was verified: without
+        // it a finished face check read "This business has been verified" (user
+        // report 2026-09-08). The biometric block carries the org's own words
+        // for that verdict, so the screen matches the one the person left.
+        scope={snap.scope as import('../lib/scope').WorkflowScope | undefined}
+        biometric={snap.biometric}
         // Without this the returning screen cannot know presence is on, and
         // the "address check active" card silently vanished on reload — the
         // one instruction that still applies (keep location on).

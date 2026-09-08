@@ -15,7 +15,7 @@ describe('MyazaKYCHosted lifecycle', () => {
   const flow = read('./HostedFlow.tsx');
 
   it('forwards every flow callback to HostedFlow', () => {
-    for (const cb of ['onStart', 'onStepChange', 'onSubmit', 'onError', 'onClose']) {
+    for (const cb of ['onStart', 'onStepChange', 'onSubmit', 'onResult', 'onError', 'onClose']) {
       expect(entry).toMatch(new RegExp(`\\b${cb}=\\{${cb}\\}`));
     }
   });
@@ -28,6 +28,7 @@ describe('MyazaKYCHosted lifecycle', () => {
 
   it('HostedFlow hands submit/error to the config provider and start/step to the lifecycle', () => {
     expect(flow).toMatch(/onSubmit=\{onSubmit\}/);
+    expect(flow).toMatch(/onResult=\{onResult\}/);
     expect(flow).toMatch(/onError=\{onError\}/);
     expect(flow).toMatch(/<HostedLifecycle onStart=\{onStart\} onStepChange=\{onStepChange\} \/>/);
   });

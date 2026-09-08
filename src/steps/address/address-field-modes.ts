@@ -31,6 +31,11 @@ export const ADDRESS_FIELD_LABELS: Record<AddressFieldKey, string> = {
   postcode: 'Area code',
 };
 
+const MODES: readonly string[] = ['off', 'optional', 'required'];
+function isAddressFieldMode(value: unknown): value is AddressFieldMode {
+  return typeof value === 'string' && MODES.includes(value);
+}
+
 export function addressFieldModes(
   config: AddressCollectionConfig | undefined,
 ): Record<AddressFieldKey, AddressFieldMode> {
@@ -39,7 +44,10 @@ export function addressFieldModes(
   for (const key of ADDRESS_FIELD_KEYS) {
     const fallback: AddressFieldMode =
       group === 'off' ? 'off' : group === 'required' && key === 'propertyNumber' ? 'required' : 'optional';
-    modes[key] = config?.fields?.[key] ?? fallback;
+    // An override outside the vocabulary falls back rather than being taken
+    // literally: the server validates writes, the client validates reads.
+    const override = config?.fields?.[key];
+    modes[key] = isAddressFieldMode(override) ? override : fallback;
   }
   return modes;
 }

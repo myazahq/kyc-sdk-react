@@ -517,7 +517,10 @@ export function useLiveness({
   // by the thing actually gating it — steady frames toward the positioning
   // threshold, the challenge's clock, steady frames toward the shutter — so the
   // line moves at the pace the test is really moving at, and a gesture landing
-  // is a visible jump to the start of the next segment. `complete` is 1.
+  // is a visible jump to the start of the next segment. `complete` is 1, and
+  // it is the ONLY thing that closes the ring: the capture segment is capped
+  // on its counter like a challenge on its clock, because a ring that closed
+  // before the still was in hand announced a photo not yet taken.
   //
   // Computed BEFORE the no-face early return below: a challenge's clock keeps
   // running while the face is briefly lost, so its segment should too.
@@ -542,7 +545,9 @@ export function useLiveness({
       case 'capturing':
         value =
           seg *
-          (1 + challengeCount + Math.min(1, positionStableRef.current / CAPTURE_STABLE_FRAMES));
+          (1 +
+            challengeCount +
+            Math.min(CHALLENGE_SEGMENT_CAP, positionStableRef.current / CAPTURE_STABLE_FRAMES));
         break;
       case 'complete':
         value = 1;

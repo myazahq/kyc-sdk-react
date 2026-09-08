@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildStepOrder, getStepPosition, type StepOrderOptions } from './step-order';
+import { buildStepOrder, getStepPosition, resolveNarrowedStep, type StepOrderOptions } from './step-order';
 import { stepAfterCapture, stepAfterProofOfAddress } from './post-capture';
 import { stepBeforeLiveness } from './contact-steps';
 
@@ -301,5 +301,46 @@ describe('stepBeforeLiveness', () => {
     expect(stepBeforeLiveness({ emailVerification: on, phoneVerification: on }, 'id-input')).toBe(
       'id-input',
     );
+  });
+});
+
+// ─── The consent screen switched off (`consentStep: false`) ──────────────────
+//
+// The org's own app has already asked, so the flow opens on its first real
+// step. Every branch builds its head from the flag, and the redirect seam
+// sends a stray 'consent' (the reducer's initial step, an old Back target)
+// to that real first step rather than to a screen the flow does not contain.
+describe('consentStep off', () => {
+  const off = (over: Partial<StepOrderOptions> = {}) => individual({ hasConsent: false, ...over });
+
+  it('opens the individual flow on the ID list, or the country picker, or the contact codes', () => {
+    expect(buildStepOrder(off())[0]).toBe('id-type');
+    expect(buildStepOrder(off({ hasCountrySelect: true }))[0]).toBe('country-select');
+    expect(buildStepOrder(off({ hasEmailVerification: true }))[0]).toBe('email-verification');
+    expect(buildStepOrder(off())).not.toContain('consent');
+  });
+
+  it('opens a KYB flow on the business form and a scoped flow on its own check', () => {
+    expect(buildStepOrder(off({ isBusiness: true }))[0]).toBe('business-details');
+    expect(buildStepOrder(off({ scope: 'biometric-authentication' }))[0]).toBe('liveness');
+    expect(buildStepOrder(off({ scope: 'questionnaire', hasQuestionnaire: true }))[0]).toBe('questionnaire');
+    expect(buildStepOrder(off({ scope: 'contact', hasPhoneVerification: true }))[0]).toBe('phone-verification');
+    expect(buildStepOrder(off({ scope: 'address' }))[0]).toBe('address-collection');
+  });
+
+  it('keeps the classic shape one step shorter, so the progress row counts what is walked', () => {
+    expect(getStepPosition('id-type', off())).toEqual({ index: 0, total: 3 });
+    expect(getStepPosition('id-type', individual())).toEqual({ index: 1, total: 4 });
+  });
+
+  it('redirects a stray consent step to the real first step, and only then', () => {
+    expect(resolveNarrowedStep('consent', off())).toBe('id-type');
+    expect(resolveNarrowedStep('consent', off({ hasEmailVerification: true }))).toBe('email-verification');
+    expect(resolveNarrowedStep('consent', individual())).toBe('consent');
+  });
+
+  it('is absent by default, so an unset flag changes nothing', () => {
+    expect(buildStepOrder(individual())[0]).toBe('consent');
+    expect(buildStepOrder(individual({ hasConsent: true }))).toEqual(buildStepOrder(individual()));
   });
 });

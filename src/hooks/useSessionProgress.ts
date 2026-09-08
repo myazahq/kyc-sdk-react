@@ -31,7 +31,14 @@ export function useSessionProgress(api: KYCApi, state: KYCState): void {
     // Nothing has happened yet. Writing this would restore them to the screen
     // they are already on, and would make an untouched link indistinguishable
     // from one somebody worked through.
-    if (isUntouchedProgress(payload)) return;
+    if (isUntouchedProgress(payload, state.openingStep)) return;
+    // Submitting spends the session, and a spent session refuses every write
+    // (409 handoff_session_used), so a save of the `submitted` step could only
+    // ever fail: a returning applicant lands on the finished screen from the
+    // summary, never on restored progress. It also kept a hosted page's
+    // network tab full of refusals while the verdict poll was the thing to
+    // read (user report 2026-09-08).
+    if (payload.step === 'submitted') return;
 
     const id = setTimeout(() => {
       lastSaved.current = fingerprint;

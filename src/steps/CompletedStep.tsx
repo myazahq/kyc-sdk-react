@@ -3,11 +3,13 @@
 import React from 'react';
 import { useKYCConfig } from '../context/KYCConfigContext';
 import { KeyPeopleAwaitList, type AwaitRow } from './KeyPeopleAwaitList';
-import { SubmitSuccessScreen, type TerminalTone } from './SubmittedScreens';
+import { SubmitSuccessScreen } from './SubmittedScreens';
 import { successAction, successDescription, successTitle } from './success-copy';
+import { decidedCopy } from './completed-copy';
+import { biometricCopyFor } from '../lib/biometric-copy';
 import { configScope } from '../lib/scope';
 import { PresenceExpectations } from './presence-expectations';
-import type { AwaitingPersonPayload, CompletedSessionSummary } from '../services/api';
+import type { AwaitingPersonPayload } from '../services/api';
 
 // The success screen as an applicant sees it when they come BACK to their link.
 //
@@ -39,45 +41,6 @@ export function toAwaitRows(people: AwaitingPersonPayload[]): AwaitRow[] {
   }));
 }
 
-/**
- * What a decided application says instead of the submission copy.
- *
- * Only the outcomes that CHANGE the message appear here. `submitted` is absent
- * on purpose: nothing has been decided, so the org's own success copy is still
- * the right thing to show and overriding it would be a downgrade.
- */
-const OUTCOME_COPY: Partial<
-  Record<
-    NonNullable<CompletedSessionSummary['outcome']>,
-    { tone: TerminalTone; title: string; description: string }
-  >
-> = {
-  approved: {
-    tone: 'success',
-    title: 'Verification complete',
-    description: 'This business has been verified. There is nothing left to do here.',
-  },
-  declined: {
-    tone: 'declined',
-    title: 'Verification unsuccessful',
-    description:
-      'This business could not be verified. Contact the organisation that sent you this link to find out what happens next.',
-  },
-  action_needed: {
-    tone: 'neutral',
-    title: 'More information needed',
-    description:
-      'Some details need to be provided again. The organisation that sent you this link will have shared a new link to continue.',
-  },
-  // Ours, not theirs, so it says so rather than reading as a rejection.
-  error: {
-    tone: 'neutral',
-    title: 'Something went wrong on our side',
-    description:
-      'This verification could not be completed because of a problem at our end. Nothing was charged. Contact the organisation that sent you this link.',
-  },
-};
-
 export function CompletedStep() {
   const config = useKYCConfig();
   const summary = config.completedSummary;
@@ -91,25 +54,27 @@ export function CompletedStep() {
   };
   const rows = summary ? toAwaitRows(summary.keyPeople) : [];
 
-  // WHAT HAPPENED, not merely that it was sent.
+  // WHAT HAPPENED, not merely that it was sent, worded for what was verified
+  // (completed-copy.ts). The server's own reason rides along: it is user-safe
+  // prose by contract, and `business_not_found` telling somebody to check the
+  // registration number is the most useful thing this screen can say.
   //
   // Absent on an older server, which only ever reported the submission, so the
   // default keeps that behaviour rather than inventing a verdict.
   const outcome = summary?.outcome ?? 'submitted';
-  const decided = OUTCOME_COPY[outcome];
+  const decided = decidedCopy(outcome, {
+    isBusiness,
+    scope: configScope(config),
+    reason: summary?.reason ?? null,
+    words: biometricCopyFor(config),
+  });
 
   return (
     <SubmitSuccessScreen
       tone={decided?.tone ?? 'success'}
       title={decided ? decided.title : successTitle(config.success, tokens)}
       description={
-        decided
-          ? // The server's own reason where there is one: it is user-safe prose
-            // by contract, and `business_not_found` telling somebody to check
-            // the registration number is the most useful thing this screen can
-            // say. The generic line is the fallback, never a replacement.
-            summary?.reason || decided.description
-          : successDescription(config.success, tokens, isBusiness, configScope(config))
+        decided ? decided.description : successDescription(config.success, tokens, isBusiness, configScope(config))
       }
       extra={
         <>

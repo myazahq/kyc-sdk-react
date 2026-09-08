@@ -41,9 +41,15 @@ export type {
 
 export type {
   KYCSubmission,
+  KYCResult,
   KYCErrorCode,
   KYCErrorDetails,
 } from './types/verification';
+
+// The biometric scopes' flow options (selfie review, where the verdict lands,
+// the Done button), resolved the same way on the server and every SDK.
+export type { BiometricFlowConfig, BiometricFlowOptions, BiometricCopy, BiometricCopyText } from './lib/biometric-options';
+export { biometricFlowOptions, showsSelfieReview, waitsForResult, showsDoneButton } from './lib/biometric-options';
 
 // Verification Flow types — the dashboard-built config templates the SDK can
 // run from via the `workflowId` prop.

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Camera, ScanFace, Video } from 'lucide-react';
+import { Camera, ImageUp, ScanFace, Video } from 'lucide-react';
 import { StepHeader } from '../components/StepHeader';
 import { Button } from '../components/ui/button';
 import { ReadyPrimer } from '../components/ReadyPrimer';
@@ -9,6 +9,8 @@ import { READY_DOCUMENT, READY_LIVENESS } from '../components/ready-primer-conte
 import { useKYCContext } from '../context/KYCContext';
 import { useKYCConfig } from '../context/KYCConfigContext';
 import { stepAfterCapture } from '../lib/post-capture';
+import { documentCaptureMethods } from '../lib/document-capture-methods';
+import { DocumentUploadPanel } from './DocumentUploadPanel';
 
 /**
  * Builder-preview stand-in for the camera steps (document capture & liveness).
@@ -25,6 +27,11 @@ export function PreviewCapturePlaceholder({ kind }: { kind: 'document' | 'livene
   // repeating the gate here the builder would show a flow its end users never
   // get — the one thing this preview must never do.
   const [ready, setReady] = useState(false);
+  // Upload-only document capture (`allowDocumentScan: false`) never opens the
+  // camera, so real users get no ready gate and no viewfinder: they land on the
+  // upload screen. The preview shows that screen too, never the camera stand-in.
+  const uploadOnlyDocument = kind === 'document' && !documentCaptureMethods(config).scan;
+  const showReady = !ready && !uploadOnlyDocument;
 
   const hasLiveness =
     config.enableSelfie !== false &&
@@ -57,22 +64,31 @@ export function PreviewCapturePlaceholder({ kind }: { kind: 'document' | 'livene
   return (
     <div className="space-y-6 animate-slide-up">
       <StepHeader
-        title={kind === 'document' ? 'Scan your document' : 'Confirm you’re present'}
+        title={
+          uploadOnlyDocument
+            ? 'Upload your document'
+            : kind === 'document' ? 'Scan your document' : 'Confirm you’re present'
+        }
         description={
           kind === 'document'
-            ? 'Real users capture the front (and back) of their ID here.'
+            ? uploadOnlyDocument
+              ? 'Real users upload a photo of the front (and back) of their ID here.'
+              : 'Real users capture the front (and back) of their ID here.'
             : 'Real users complete gesture challenges and a selfie here.'
         }
         onBack={handleBack}
       />
 
-      {!ready ? (
+      {showReady ? (
         // Same gate the real steps open with, so the builder shows the flow end
         // users actually walk. Continuing lands on the camera stand-in below.
         <ReadyPrimer
           {...(kind === 'document' ? READY_DOCUMENT : READY_LIVENESS)}
           onReady={() => setReady(true)}
         />
+      ) : uploadOnlyDocument ? (
+        // The real upload screen, with no handlers: the picker never opens here.
+        <DocumentUploadPanel />
       ) : kind === 'document' ? (
         // Document frame — ID-card aspect ratio.
         <div className="mx-auto flex aspect-[1.586] w-full max-w-sm flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-border bg-muted/40">
@@ -94,11 +110,13 @@ export function PreviewCapturePlaceholder({ kind }: { kind: 'document' | 'livene
       {/* The preview note and Continue belong to the camera stand-in — while the
           ready screen is up it owns the only call to action, exactly as it does
           for real users. */}
-      {ready && (
+      {!showReady && (
         <>
           <div className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
-            <Video className="h-3.5 w-3.5" />
-            The camera only activates for real users — this is a builder preview.
+            {uploadOnlyDocument ? <ImageUp className="h-3.5 w-3.5" /> : <Video className="h-3.5 w-3.5" />}
+            {uploadOnlyDocument
+              ? 'The photo picker opens only for real users. This is a builder preview.'
+              : 'The camera only activates for real users — this is a builder preview.'}
           </div>
 
           <Button onClick={handleContinue} className="w-full h-12 rounded-xl text-base font-medium">

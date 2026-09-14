@@ -10,6 +10,7 @@ import {
 	AlertTriangle,
 	CreditCard,
 	ArrowLeft,
+	ImageUp,
 } from "lucide-react";
 import { StepHeader } from "../components/StepHeader";
 import { ReadyPrimer } from "../components/ReadyPrimer";
@@ -37,6 +38,8 @@ import { useSetImmersiveCapture } from "../components/immersive-capture";
 import { isDesktopDevice } from "../lib/device";
 import { documentCropRect } from "../lib/document-guide";
 import { shortDocumentLabel } from "../lib/document-label";
+import { documentCaptureMethods } from "../lib/document-capture-methods";
+import { DocumentUploadPanel } from "./DocumentUploadPanel";
 import {
 	DocumentFramingGate,
 	documentBoxFrom,
@@ -113,9 +116,15 @@ export function DocumentCaptureStep() {
 	const { state, dispatch } = useKYCContext();
 	const config = useKYCConfig();
 
-	// Whether the user may pick a document photo from the device (gallery / file
-	// picker / drag-and-drop) instead of capturing live. Default on.
-	const allowUpload = config.allowDocumentUpload !== false;
+	// How the user may supply each side: scanned live with the camera, picked
+	// from the device (gallery / file picker / drag-and-drop), or either. Both
+	// default on, and the pair is resolved in one place so a config with both
+	// switched off still keeps the camera (see document-capture-methods.ts).
+	const { scan: allowScan, upload: allowUpload } = documentCaptureMethods(config);
+	// Upload-only (`allowDocumentScan: false`): this step never starts the
+	// camera. No primer, no viewfinder, no recording: each side is a photo the
+	// user picks, run through the same crop, compress and upload path.
+	const uploadOnly = !allowScan;
 
 	// Label + scan sides come from the resolved definition — the curated local
 	// entry when one exists, else the server-supplied metadata (Global
@@ -172,7 +181,11 @@ export function DocumentCaptureStep() {
 	const docMimeRef = useRef("video/webm");
 	const recordingSideRef = useRef<"front" | "back" | null>(null);
 
-	const cameraActive = (phase === "front" || phase === "back") && !pauseForCrop;
+	// Every camera surface below (the primers, the stream, detection, the light
+	// meter, immersive mode, recording) gates on this, so upload-only keeps them
+	// all switched off by never letting it become true.
+	const cameraActive =
+		allowScan && (phase === "front" || phase === "back") && !pauseForCrop;
 
 	// Show an "Allow camera access" primer before the OS prompt (Stripe-style),
 	// unless the camera is already granted. The camera only starts — and thus the
@@ -499,6 +512,12 @@ export function DocumentCaptureStep() {
 			setPhase("review");
 			return;
 		}
+		// Upload-only has no card to flip in front of a camera: the back's own
+		// upload screen says what to add next.
+		if (uploadOnly) {
+			setPhase("back");
+			return;
+		}
 		setShowFlipBanner(true);
 		setTimeout(() => {
 			setShowFlipBanner(false);
@@ -582,6 +601,13 @@ export function DocumentCaptureStep() {
 		fileInputRef.current?.click();
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [camera, stopDocRecorder, cancelUpload]);
+
+	// Upload-only: open the picker straight from the side's upload screen. There
+	// is no camera to pause or recording to discard, and a cancelled picker just
+	// leaves that screen as it was.
+	const chooseFile = useCallback(() => {
+		fileInputRef.current?.click();
+	}, []);
 
 	// ---------------------------------------------------------------------------
 	// Manual capture button
@@ -759,6 +785,9 @@ export function DocumentCaptureStep() {
 		dispatch({ type: "CLEAR_DOCUMENT_FRONT" });
 		detection.reset();
 		setPhase("front");
+		// Upload-only: Replace opens the picker in the same tap. Cancelling it
+		// leaves the front's upload screen, where the user can choose again.
+		if (uploadOnly) chooseFile();
 	};
 
 	const retakeBack = () => {
@@ -769,6 +798,7 @@ export function DocumentCaptureStep() {
 		dispatch({ type: "CLEAR_DOCUMENT_BACK" });
 		detection.reset();
 		setPhase("back");
+		if (uploadOnly) chooseFile();
 	};
 
 	const handleBack = () => {
@@ -803,13 +833,13 @@ export function DocumentCaptureStep() {
 
 	const title =
 		phase === "front" ?
-			isTwoSided ? `Scan Front of Your ${idTypeLabel}`
-			:	`Capture Your ${idTypeLabel}`
-		: phase === "front-preview" ? "Front Side Captured"
-		: phase === "back" ? `Scan Back of Your ${idTypeLabel}`
+			isTwoSided ? `${uploadOnly ? "Upload" : "Scan"} Front of Your ${idTypeLabel}`
+			:	`${uploadOnly ? "Upload" : "Capture"} Your ${idTypeLabel}`
+		: phase === "front-preview" ? (uploadOnly ? "Front Side Added" : "Front Side Captured")
+		: phase === "back" ? `${uploadOnly ? "Upload" : "Scan"} Back of Your ${idTypeLabel}`
 		: `Review Your ${idTypeLabel}`;
 
-	const description =
+	const cameraDescription =
 		phase === "front" ?
 			isTwoSided ? `Place the FRONT of your ${idTypeLabel} within the frame.`
 			:	`Photograph your ${idTypeLabel} — position it within the frame and hold steady.`
@@ -819,6 +849,18 @@ export function DocumentCaptureStep() {
 			`Now place the BACK of your ${idTypeLabel} within the frame.`
 		: isTwoSided ? "Both sides captured. Tap Continue to proceed."
 		: "Looks good? Tap Continue to proceed.";
+
+	// Upload-only copy: the same beats, with the camera's words taken out.
+	const uploadDescription =
+		phase === "front" ?
+			isTwoSided ? `Choose a clear photo of the FRONT of your ${idTypeLabel}.`
+			:	`Choose a clear photo of your ${idTypeLabel}.`
+		: phase === "front-preview" ? "Looks good? Tap Next to add the back."
+		: phase === "back" ? `Now choose a clear photo of the BACK of your ${idTypeLabel}.`
+		: isTwoSided ? "Both sides added. Tap Continue to proceed."
+		: "Looks good? Tap Continue to proceed.";
+
+	const description = uploadOnly ? uploadDescription : cameraDescription;
 
 	const stepProgress =
 		phase === "front" ?
@@ -949,14 +991,19 @@ export function DocumentCaptureStep() {
 							className='flex-1 gap-2'
 							onClick={retakeFront}
 							disabled={isBusy}>
-							<RotateCcw className='h-4 w-4' />
-							Retake
+							{uploadOnly ?
+								<ImageUp className='h-4 w-4' />
+							:	<RotateCcw className='h-4 w-4' />}
+							{uploadOnly ? "Replace" : "Retake"}
 						</Button>
 						<Button
 							className='flex-1 gap-2'
 							onClick={proceedToBack}
 							disabled={isBusy}>
-							{backPreview ? "Continue to Review" : "Next — Scan Back"}
+							{backPreview ?
+								"Continue to Review"
+							: uploadOnly ? "Next: Upload Back"
+							: "Next — Scan Back"}
 						</Button>
 					</div>
 				</div>
@@ -972,7 +1019,8 @@ export function DocumentCaptureStep() {
 					uploadOverlay={isUploading ? uploadOverlay : null}
 					isBusy={isBusy}
 					onRetakeFront={retakeFront}
-					onRetakeBack={retakeBack}>
+					onRetakeBack={retakeBack}
+					source={uploadOnly ? "upload" : "camera"}>
 					{retryInfo && isUploading && (
 						<p className='mb-2 text-center text-xs text-amber-700 dark:text-amber-400'>
 							Upload failed — retrying ({retryInfo.attempt}/{retryInfo.total})…
@@ -1017,6 +1065,16 @@ export function DocumentCaptureStep() {
 				<CameraPermissionPrimer
 					bodyText="When prompted, allow camera access to photograph your document."
 					onGrant={() => setPrimed(true)}
+				/>
+			)}
+
+			{/* Upload-only: each side is a photo picked from the device. The camera
+			    never starts on this step, so this panel is the whole capture screen. */}
+			{uploadOnly && (phase === "front" || phase === "back") && (
+				<DocumentUploadPanel
+					busy={isBusy}
+					onChoose={chooseFile}
+					onDrop={handleDrop}
 				/>
 			)}
 
@@ -1217,7 +1275,7 @@ export function DocumentCaptureStep() {
 			{/* Upload-in-progress placeholder — keeps the step from collapsing to an
           empty shell while the OS file picker is open (and gives a way back if
           the user cancels it). */}
-			{pauseForCrop && (phase === "front" || phase === "back") && (
+			{!uploadOnly && pauseForCrop && (phase === "front" || phase === "back") && (
 				<div className='space-y-3'>
 					<div
 						className='flex flex-col items-center justify-center gap-3 rounded-xl border border-border bg-muted/30 text-center'

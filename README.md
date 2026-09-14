@@ -115,6 +115,7 @@ export default function VerifyButton() {
 | `enableSelfie`          | `boolean`                                 | `true`              | Capture a selfie during liveness.                                                                                    |
 | `enableDocumentCapture` | `boolean`                                 | `true`              | Enable the document-scan step for document IDs.                                                                      |
 | `allowDocumentUpload`   | `boolean`                                 | `true`              | Allow picking a document photo from the device (gallery / drag-and-drop) as an alternative to the camera. `false` hides every "upload instead" affordance (it's still offered on the camera-permission-denied screen as an escape hatch). |
+| `allowDocumentScan`     | `boolean`                                 | `true`              | Allow scanning the document live with the camera. `false` makes document capture upload only: the camera never opens and the user uploads a photo of each side instead. At least one of `allowDocumentScan` and `allowDocumentUpload` must stay on; if both are `false`, the camera stays on. |
 | `enableLiveness`        | `boolean`                                 | `true`              | Run the liveness challenge step. The server can still disable it per ID type.                                        |
 | `livenessMode`          | `'gestures' \| 'flash' \| 'both'`         | `'gestures'`        | How liveness is proven. See [Liveness modes](#liveness-modes).                                                       |
 | `flashSequenceLength`   | `number` (2–5)                            | `4`                 | Number of colours in the flash sequence, for `'flash'` / `'both'`.                                                   |
@@ -130,7 +131,7 @@ export default function VerifyButton() {
 | `disableClose`          | `boolean`                                 | `false`             | Hide the X and block **all** user dismissal (backdrop, Escape, swipe-down). The flow can then only be closed via `useMyazaKYC().close()`. The terminal "Submitted" step is already non-dismissible regardless. |
 | `requireMobileDevice`   | `boolean`                                 | `false`             | Refuse to run on desktop. Confirmed via hardware signals (GPU renderer, motion sensor, touch) — never viewport width, so responsive-mode desktops are rejected too. Desktop visitors get the handoff QR screen without the "continue on this device" option. The server re-checks and rejects with `mobile_device_required`. |
 | `assetsBasePath`        | `string`                                  | bundled data URIs   | Load the liveness gesture GIFs from a URL instead of the inlined data URIs. Only needed under a strict `img-src` CSP that forbids `data:`. Copy `node_modules/@myazahq/kyc-sdk-react/gifs/` to the path you point at. |
-| `deviceHandoff`         | `boolean`                                 | `true`              | On desktop, show a "continue on your phone" screen (QR + copyable link) before the flow starts — handy when the computer has no webcam. The user can still choose to continue on the current device, and when they finish on their phone the desktop completes automatically. Set `false` to disable. Has no effect on mobile/touch devices. |
+| `deviceHandoff`         | `boolean`                                 | `true`              | On desktop, show a "continue on your phone" screen (QR + copyable link) before the flow starts — handy when the computer has no webcam. The user can still choose to continue on the current device, and when they finish on their phone the desktop completes automatically. Set `false` to disable. Has no effect on mobile/touch devices. Skipped when nothing in the flow needs a camera, for example upload-only document capture (`allowDocumentScan: false`) with liveness off. |
 | `appearance`            | `KYCAppearance`                           | brand defaults      | Brand & theme the modal — colors, logo, light/dark. See [Appearance & theming](#appearance--theming).                |
 | `consent`               | `KYCConsentContent`                       | built-in copy       | Override the consent/welcome screen `title` and `description`. See [Consent screen copy](#consent-screen-copy).      |
 | `success`               | `KYCSuccessContent`                       | built-in copy       | Override the success/submitted screen `title` and `description`. See [Success screen copy](#success-screen-copy).    |
@@ -448,7 +449,9 @@ exhausted** (`upload_failed` for uploads, `network_error` for connectivity).
 If the user denies camera access, the SDK shows a clear "camera access needed"
 screen (with how to re-enable it) instead of hanging, and reports
 `camera_permission_denied` to `onError`. Document capture additionally offers a
-gallery-upload fallback unless `allowDocumentUpload` is `false`.
+gallery-upload fallback unless `allowDocumentUpload` is `false`. When
+`allowDocumentScan` is `false`, document capture never asks for the camera at
+all: each side is uploaded as a photo, so only liveness can show this screen.
 
 ### Liveness quality guards
 

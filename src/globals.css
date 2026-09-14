@@ -1,5 +1,7 @@
 /* Native Tailwind v4 import — honours @source for self-contained SDK CSS. */
 @import "tailwindcss";
+/* Scoped scrollbar styling for every SDK surface (see the file header). */
+@import "./scrollbar.css";
 @config "../tailwind.config.ts";
 
 /* Scan every SDK source file so all utility classes (space-y-*, gap-*, p-*,

@@ -1,6 +1,6 @@
-import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { adoptionDecision, geoDefaultCountry } from './country-adoption';
+import { describeInMonorepo, sharedVectors } from '../../__tests__/monorepo';
 
 // ─── The shared vectors (kyc-sdk-flutter/test/country_adoption_vectors.json)
 //
@@ -26,14 +26,12 @@ interface GeoVector {
   expect: string | null;
 }
 
-const shared = JSON.parse(
-  readFileSync(
-    new URL('../../../../kyc-sdk-flutter/test/country_adoption_vectors.json', import.meta.url).pathname,
-    'utf8',
-  ),
-) as { adoption: AdoptionVector[]; geoDefault: GeoVector[] };
+const shared = sharedVectors<{ adoption: AdoptionVector[]; geoDefault: GeoVector[] }>(
+  'kyc-sdk-flutter/test/country_adoption_vectors.json',
+  { adoption: [], geoDefault: [] },
+);
 
-describe('adoptionDecision (shared vectors, web mirror)', () => {
+describeInMonorepo('adoptionDecision (shared vectors, web mirror)', () => {
   for (const v of shared.adoption) {
     it(v.name, () => {
       const decision = adoptionDecision(v.input);
@@ -44,7 +42,7 @@ describe('adoptionDecision (shared vectors, web mirror)', () => {
   }
 });
 
-describe('geoDefaultCountry (shared vectors, web mirror)', () => {
+describeInMonorepo('geoDefaultCountry (shared vectors, web mirror)', () => {
   for (const v of shared.geoDefault) {
     it(v.name, () => {
       expect(geoDefaultCountry(v.input)).toBe(v.expect);

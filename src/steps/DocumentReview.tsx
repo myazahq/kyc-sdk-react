@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, RotateCcw, X, ZoomIn } from "lucide-react";
+import { Check, ImageUp, RotateCcw, X, ZoomIn } from "lucide-react";
 
 import { Button } from "../components/ui/button";
 import { cn } from "../lib/utils";
@@ -40,6 +40,8 @@ interface DocumentReviewProps {
 	isBusy: boolean;
 	onRetakeFront: () => void;
 	onRetakeBack: () => void;
+	/** "upload" when each side was picked from the device: it is replaced, not retaken. */
+	source?: "camera" | "upload";
 	/** Errors, retry notices and the Continue button — pinned below the images. */
 	children: React.ReactNode;
 }
@@ -51,9 +53,12 @@ export function DocumentReview({
 	isBusy,
 	onRetakeFront,
 	onRetakeBack,
+	source = "camera",
 	children,
 }: DocumentReviewProps) {
 	const [zoomed, setZoomed] = useState<Side | null>(null);
+	const uploaded = source === "upload";
+	const ActionIcon = uploaded ? ImageUp : RotateCcw;
 
 	const sides: Side[] = [
 		{ src: front, label: "Front", onRetake: onRetakeFront },
@@ -69,7 +74,7 @@ export function DocumentReview({
 				<span className='flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/15'>
 					<Check className='h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400' />
 				</span>
-				{isTwoSided ? "Both sides captured" : "Photo captured"}
+				{`${isTwoSided ? "Both sides" : "Photo"} ${uploaded ? "added" : "captured"}`}
 			</p>
 
 			<div className='min-h-0 flex-1 overflow-y-auto'>
@@ -118,18 +123,17 @@ export function DocumentReview({
 								{uploadOverlay}
 							</div>
 
-							{/* Retake as a NAMED control under the photo.
-							    It used to be a 24px unlabelled circle sitting on the image,
-							    which is both below a usable tap target and unreadable as a
-							    button — people did not recognise it. The photo now carries
-							    only labels; the actions have words. */}
+							{/* Retake (or Replace) as a NAMED control under the photo. It was
+							    a 24px unlabelled circle on the image: below a usable tap
+							    target and unreadable as a button. The photo now carries only
+							    labels; the actions have words. */}
 							<button
 								type='button'
 								onClick={side.onRetake}
 								disabled={isBusy}
 								className='flex h-9 w-full items-center justify-center gap-1.5 rounded-lg text-sm font-medium text-primary transition-colors hover:bg-primary/10 disabled:opacity-40'>
-								<RotateCcw className='h-3.5 w-3.5' />
-								Retake
+								<ActionIcon className='h-3.5 w-3.5' />
+								{uploaded ? "Replace" : "Retake"}
 							</button>
 						</figure>
 					))}
@@ -186,8 +190,8 @@ export function DocumentReview({
 							setZoomed(null);
 							retake();
 						}}>
-						<RotateCcw className='h-4 w-4' />
-						Retake {zoomed.label.toLowerCase()}
+						<ActionIcon className='h-4 w-4' />
+						{uploaded ? "Replace" : "Retake"} {zoomed.label.toLowerCase()}
 					</Button>
 				</div>
 			)}

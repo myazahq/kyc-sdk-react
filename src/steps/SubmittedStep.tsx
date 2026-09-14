@@ -169,8 +169,12 @@ export function SubmittedStep() {
 		const firstName = config.userData?.firstName || state.userData.firstName || undefined;
 		const lastName  = config.userData?.lastName  || state.userData.lastName  || undefined;
 		const dob       = config.userData?.dateOfBirth;
-		const userData = (firstName || lastName || dob)
-			? { firstName, lastName, ...(dob ? { dateOfBirth: dob } : {}) }
+		// Passed through when the integrator gives one. Nothing in the flow asks for
+		// it: the server keeps it as the applicant's address for any email the org
+		// has us send about a decision.
+		const email     = config.userData?.email?.trim() || undefined;
+		const userData = (firstName || lastName || dob || email)
+			? { firstName, lastName, ...(dob ? { dateOfBirth: dob } : {}), ...(email ? { email } : {}) }
 			: undefined;
 
 		// The verify submission is retried on transient failures (network /

@@ -11,6 +11,7 @@ import {
   UsersRound,
   ScanLine,
   ScanFace,
+  ImageUp,
   Lock,
   RotateCcw,
   MapPinHouse,
@@ -23,6 +24,7 @@ import { firstStepAfterConsent, hasEmailVerificationStep, hasPhoneVerificationSt
 import { resubmitNote } from '../lib/resubmit';
 import { hasActiveQuestionnaire } from '../lib/questionnaire';
 import { hasAddressCollectionStep, hasProofOfAddressStep } from '../lib/post-capture';
+import { documentCaptureMethods, documentCaptureNeedsCamera } from '../lib/document-capture-methods';
 import {
   hasApplicantVerification,
   hasBusinessDocumentsStep,
@@ -133,7 +135,9 @@ export function ConsentStep() {
     ? hasApplicantVerification(config.business)
     : faceScope || (!scope && config.enableSelfie !== false);
   const recordsVideo =
-    capturesFace || (!isBusiness && !scope && config.enableDocumentCapture !== false);
+    // Only the camera scan records the document: a photo picked from the device
+    // (upload-only document capture) carries no video.
+    capturesFace || (!isBusiness && !scope && documentCaptureNeedsCamera(config));
 
   // Reflect the actually-enabled features so the list matches the real flow.
   const steps: ProcessStep[] = isBusiness
@@ -159,7 +163,11 @@ export function ConsentStep() {
     steps.push({ icon: Lock, label: `Confirm your ${what} with a one-time code` });
   }
   if (!isBusiness && !scope && config.enableDocumentCapture !== false) {
-    steps.push({ icon: ScanLine, label: 'Capture a photo of your ID document' });
+    steps.push(
+      documentCaptureMethods(config).scan
+        ? { icon: ScanLine, label: 'Capture a photo of your ID document' }
+        : { icon: ImageUp, label: 'Upload a photo of your ID document' },
+    );
   }
   if (!isBusiness && !scope && config.enableSelfie !== false) {
     steps.push({ icon: ScanFace, label: 'Take a selfie for facial verification' });

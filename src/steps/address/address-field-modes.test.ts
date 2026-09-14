@@ -1,5 +1,5 @@
-import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { describeInMonorepo, sharedVectors } from '../../__tests__/monorepo';
 import {
   addressFieldModes,
   displayedAddressValue,
@@ -76,14 +76,12 @@ interface Vector {
   expectMissing: string[];
   expectPrefill: Record<string, string>;
 }
-const shared = JSON.parse(
-  readFileSync(
-    new URL('../../../../kyc-sdk-flutter/test/address_field_modes_vectors.json', import.meta.url).pathname,
-    'utf8',
-  ),
-) as { address: Record<string, unknown>; vectors: Vector[] };
+const shared = sharedVectors<{ address: Record<string, unknown>; vectors: Vector[] }>(
+  'kyc-sdk-flutter/test/address_field_modes_vectors.json',
+  { address: {}, vectors: [] },
+);
 
-describe('shared vectors (web mirror)', () => {
+describeInMonorepo('shared vectors (web mirror)', () => {
   for (const v of shared.vectors) {
     it(v.name, () => {
       const addr = { ...shared.address, ...v.typed } as unknown as Address;

@@ -175,6 +175,8 @@ export interface VerifyRequest {
     firstName?: string;
     lastName?: string;
     dateOfBirth?: string;
+    /** The applicant's email, when the integrator passed one. */
+    email?: string;
   };
   /** Extra-info questionnaire answers, validated server-side against the published definition. */
   questionnaire?: Record<string, string | number | boolean | string[]>;
@@ -456,6 +458,8 @@ export interface WorkflowConfigPayload {
   enableSelfie?: boolean;
   enableDocumentCapture?: boolean;
   allowDocumentUpload?: boolean;
+  /** Live camera scan for documents. Default true; false makes capture upload only. */
+  allowDocumentScan?: boolean;
   enableLiveness?: boolean;
   /** Presence Intelligence method: gestures (default) | flash | both. */
   livenessMode?: string;
@@ -575,6 +579,8 @@ export interface HandoffSessionSnapshot {
   enableSelfie?: boolean;
   enableDocumentCapture?: boolean;
   allowDocumentUpload?: boolean;
+  /** Live camera scan for documents. Default true; false makes capture upload only. */
+  allowDocumentScan?: boolean;
   enableLiveness?: boolean;
   /** Presence Intelligence method: gestures (default) | flash | both. */
   livenessMode?: string;

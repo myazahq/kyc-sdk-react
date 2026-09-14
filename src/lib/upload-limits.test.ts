@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { IMAGE_MAX_BYTES, PDF_MAX_BYTES, UPLOAD_HINT, uploadSizeError } from './upload-limits';
+import { describeInMonorepo, sharedVectors } from '../__tests__/monorepo';
 
 // ─── The shared vectors (kyc-sdk-flutter/test/upload_limits_vectors.json) ────
 //
@@ -14,14 +15,14 @@ interface Vectors {
   cases: Array<{ name: string; mime: string | null; bytes: number | null; error: string | null }>;
 }
 
-const vectors: Vectors = JSON.parse(
-  readFileSync(
-    new URL('../../../kyc-sdk-flutter/test/upload_limits_vectors.json', import.meta.url).pathname,
-    'utf8',
-  ),
-);
+const vectors = sharedVectors<Vectors>('kyc-sdk-flutter/test/upload_limits_vectors.json', {
+  hint: '',
+  imageMaxBytes: 0,
+  pdfMaxBytes: 0,
+  cases: [],
+});
 
-describe('upload limits', () => {
+describeInMonorepo('upload limits (shared vectors)', () => {
   it('carry the shared caps and hint', () => {
     expect(IMAGE_MAX_BYTES).toBe(vectors.imageMaxBytes);
     expect(PDF_MAX_BYTES).toBe(vectors.pdfMaxBytes);
@@ -34,7 +35,9 @@ describe('upload limits', () => {
       expect(uploadSizeError(c.mime, c.bytes)).toBe(c.error);
     });
   }
+});
 
+describe('upload limits', () => {
   it('the drop zones read the hint from the one constant', () => {
     for (const rel of ['../steps/ProofOfAddressParts.tsx', '../steps/BusinessDocumentSlot.tsx']) {
       const src = readFileSync(new URL(rel, import.meta.url).pathname, 'utf8');

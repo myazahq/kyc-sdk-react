@@ -613,6 +613,12 @@ export interface MyazaKYCConfig<C extends AnyCountry = AnyCountry> {
      * NOT collected from the user (the registry lookup is the source of truth).
      */
     businessName?: string;
+    /**
+     * The applicant's email, when you already hold it. Not asked for in the flow:
+     * it is submitted so your organisation can have the applicant emailed about a
+     * decision, for example once their verification is approved.
+     */
+    email?: string;
   };
 
   /**
@@ -643,6 +649,15 @@ export interface MyazaKYCConfig<C extends AnyCountry = AnyCountry> {
    * user must capture with the camera.
    */
   allowDocumentUpload?: boolean;
+
+  /**
+   * Allow scanning the document live with the camera (viewfinder with
+   * auto-capture). Default `true`. When `false`, document capture is upload
+   * only: the step never opens the camera and the user uploads a photo of each
+   * side instead. At least one of `allowDocumentScan` and `allowDocumentUpload`
+   * must stay on; if both are `false`, the camera stays on.
+   */
+  allowDocumentScan?: boolean;
 
   /** Enable liveness detection during selfie capture (default: true) */
   enableLiveness?: boolean;

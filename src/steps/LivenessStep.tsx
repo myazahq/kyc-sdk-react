@@ -37,6 +37,7 @@ import { usePortalHost } from '../lib/sdk-frame-context';
 import { CaptureRing } from '../components/CaptureRing';
 import { LivenessHandover, useSelfieAutoAdvance } from './liveness-handover';
 import { showsSelfieReview } from '../lib/biometric-options';
+import { isSelfieBlurry, measureSelfieSharpness } from '../lib/selfie-sharpness';
 
 // ---------------------------------------------------------------------------
 // LivenessStep — active liveness check with gesture challenges
@@ -47,6 +48,9 @@ export function LivenessStep() {
   const config = useKYCConfig();
   const portalHost = usePortalHost();
   const [preview, setPreview] = useState<string | null>(kycState.selfieImage);
+  // The fresh capture measured soft. A notice on the review, never a gate:
+  // Continue stays available whatever it says (see lib/selfie-sharpness).
+  const [selfieSoft, setSelfieSoft] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [retryInfo, setRetryInfo] = useState<{ attempt: number; total: number } | null>(null);
@@ -229,6 +233,11 @@ export function LivenessStep() {
       setPreview(selfie);
       dispatch({ type: 'SET_SELFIE_IMAGE', payload: selfie });
       uploadSelfie(selfie);
+      // Measured AFTER the preview is up, so the review never waits on it. A
+      // restored selfie is not measured: its bytes are gone by design.
+      void measureSelfieSharpness(selfie).then((score) => {
+        if (!cancelled) setSelfieSoft(isSelfieBlurry(score));
+      });
     })();
 
     return () => {
@@ -319,6 +328,7 @@ export function LivenessStep() {
     primeSpeech();
     setPreview(null);
     setUploadError(null);
+    setSelfieSoft(false);
     setReady(true);
     // Clears the preview AND mediaIds.selfie, so the restored-selfie review
     // (no bytes, mediaId only) falls back into a fresh capture too.
@@ -426,6 +436,21 @@ export function LivenessStep() {
 
         {uploadError && (
           <p className="text-center text-sm text-destructive">{uploadError}</p>
+        )}
+
+        {/* Blurry selfie: the same amber notice the lighting warning uses.
+            Advice, not a block. Retake and Continue both stay enabled. */}
+        {selfieSoft && preview && (
+          <div className="flex w-full items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800 animate-lighting-in dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-400">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mt-0.5 shrink-0" aria-hidden>
+              <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" />
+              <path d="M12 9v4" />
+              <path d="M12 17h.01" />
+            </svg>
+            <span>
+              This photo looks blurry. For the best chance of a match, retake it holding the phone steady until your face is sharp.
+            </span>
+          </div>
         )}
 
         <div className="flex gap-3">

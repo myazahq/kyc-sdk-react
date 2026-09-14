@@ -17,6 +17,7 @@ import { buildThemeVars } from './lib/theme';
 import { primeFaceMesh } from './liveness/face-mesh';
 import { configureSpeech } from './liveness/speech';
 import { mergeWorkflowConfig, overlayApplicantWorkflow } from './lib/workflow-merge';
+import { documentCaptureNeedsCamera } from './lib/document-capture-methods';
 import { safeReportError } from './lib/errors';
 import { isDesktopDevice } from './lib/device';
 import { confirmMobileDevice, type DeviceClassResult } from './lib/device-class';
@@ -120,6 +121,7 @@ function KYCInner({
   enableSelfie,
   enableDocumentCapture,
   allowDocumentUpload,
+  allowDocumentScan,
   enableLiveness,
   livenessMode,
   flashSequenceLength,
@@ -176,6 +178,7 @@ function KYCInner({
     ...(enableSelfie !== undefined ? { enableSelfie } : {}),
     ...(enableDocumentCapture !== undefined ? { enableDocumentCapture } : {}),
     ...(allowDocumentUpload !== undefined ? { allowDocumentUpload } : {}),
+    ...(allowDocumentScan !== undefined ? { allowDocumentScan } : {}),
     ...(enableLiveness !== undefined ? { enableLiveness } : {}),
     ...(livenessMode !== undefined ? { livenessMode } : {}),
     ...(flashSequenceLength !== undefined ? { flashSequenceLength } : {}),
@@ -203,7 +206,7 @@ function KYCInner({
     ...(userData ? { userData } : {}),
     ...(businessPrefill ? { businessPrefill } : {}),
     ...(assetsBasePath ? { assetsBasePath } : {}),
-  }), [country, workflowId, idTypes, countries, multiId, enableSelfie, enableDocumentCapture, allowDocumentUpload, enableLiveness, livenessMode, flashSequenceLength, deviceIntelligence, deviceHandoff, consentStep, biometric, requireMobileDevice, voiceGuidance, showThemeToggle, progressStyle, fullScreen, disableClose, appearance, consent, success, emailVerification, phoneVerification, questionnaire, proofOfAddress, addressCollection, nfc, metadata, userId, userData, businessPrefill, assetsBasePath]);
+  }), [country, workflowId, idTypes, countries, multiId, enableSelfie, enableDocumentCapture, allowDocumentUpload, allowDocumentScan, enableLiveness, livenessMode, flashSequenceLength, deviceIntelligence, deviceHandoff, consentStep, biometric, requireMobileDevice, voiceGuidance, showThemeToggle, progressStyle, fullScreen, disableClose, appearance, consent, success, emailVerification, phoneVerification, questionnaire, proofOfAddress, addressCollection, nfc, metadata, userId, userData, businessPrefill, assetsBasePath]);
 
   // Pre-load MediaPipe Face Mesh model as soon as the SDK mounts and apply the
   // voice-guidance config (enabled + language) for the spoken liveness prompts.
@@ -258,7 +261,9 @@ function KYCInner({
   const cameraNeeded =
     subjectType === 'business'
       ? business?.applicant?.verification === true || business?.documents?.enabled === true
-      : enableLiveness !== false || enableDocumentCapture !== false;
+      : enableLiveness !== false ||
+        // Upload-only documents are picked on this computer: no camera needed.
+        documentCaptureNeedsCamera({ enableDocumentCapture, allowDocumentScan, allowDocumentUpload });
 
   // Mobile-only workflows: kick off the hardware confirmation as soon as the
   // SDK mounts. The motion probe listens for up to ~1s, so doing it here keeps
@@ -415,6 +420,7 @@ function KYCInner({
       enableSelfie={enableSelfie}
       enableDocumentCapture={enableDocumentCapture}
       allowDocumentUpload={allowDocumentUpload}
+      allowDocumentScan={allowDocumentScan}
       enableLiveness={enableLiveness}
       livenessMode={livenessMode}
       flashSequenceLength={flashSequenceLength}

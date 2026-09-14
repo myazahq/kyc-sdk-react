@@ -39,6 +39,7 @@ export function MobileHandoffSheet() {
     ...(config.enableSelfie !== undefined ? { enableSelfie: config.enableSelfie } : {}),
     ...(config.enableDocumentCapture !== undefined ? { enableDocumentCapture: config.enableDocumentCapture } : {}),
     ...(config.allowDocumentUpload !== undefined ? { allowDocumentUpload: config.allowDocumentUpload } : {}),
+    ...(config.allowDocumentScan !== undefined ? { allowDocumentScan: config.allowDocumentScan } : {}),
     ...(config.enableLiveness !== undefined ? { enableLiveness: config.enableLiveness } : {}),
     ...(config.appearance ? { appearance: config.appearance as Record<string, unknown> } : {}),
     ...(config.consent ? { consent: config.consent as Record<string, unknown> } : {}),
@@ -46,7 +47,7 @@ export function MobileHandoffSheet() {
     ...(config.metadata ? { metadata: config.metadata } : {}),
   }), [
     config.country, config.idTypes, config.enableSelfie, config.enableDocumentCapture,
-    config.allowDocumentUpload, config.enableLiveness, config.appearance,
+    config.allowDocumentUpload, config.allowDocumentScan, config.enableLiveness, config.appearance,
     config.consent, config.success, config.metadata,
   ]);
 

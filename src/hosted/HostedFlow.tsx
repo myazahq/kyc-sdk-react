@@ -5,6 +5,7 @@ import { KYCProvider } from '../context/KYCContext';
 import { HostedLifecycle, HostedSessionSync } from './HostedSessionSync';
 import { KYCConfigProvider, type ServerSdkConfig } from '../context/KYCConfigContext';
 import { overlayApplicantWorkflow } from '../lib/workflow-merge';
+import { documentCaptureNeedsCamera } from '../lib/document-capture-methods';
 import { HostedFlowInner } from './HostedFlowInner';
 import { HANDOFF_TOKEN_PREFIX } from './token';
 import type { HandoffBootstrapResponse, KYCApi } from '../services/api';
@@ -75,7 +76,9 @@ export function HostedFlow({
   // off (`deviceHandoff: false`); default on.
   const captureNeeded = isBusiness
     ? snap.business?.applicant?.verification === true || snap.business?.documents?.enabled === true
-    : snap.enableLiveness !== false || snap.enableDocumentCapture !== false;
+    : snap.enableLiveness !== false ||
+      // Upload-only documents are picked on this computer: no camera needed.
+      documentCaptureNeedsCamera(snap);
   const cameraNeeded = snap.deviceHandoff !== false && captureNeeded;
   const serverConfigOverride: ServerSdkConfig = {
     status: 'ready',
@@ -126,6 +129,7 @@ export function HostedFlow({
         enableSelfie={leg.enableSelfie}
         enableDocumentCapture={leg.enableDocumentCapture}
         allowDocumentUpload={leg.allowDocumentUpload}
+        allowDocumentScan={leg.allowDocumentScan}
         enableLiveness={leg.enableLiveness}
         livenessMode={leg.livenessMode as 'gestures' | 'flash' | 'both' | undefined}
         flashSequenceLength={leg.flashSequenceLength as number | undefined}

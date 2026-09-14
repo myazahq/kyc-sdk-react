@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mergeWorkflowConfig } from './workflow-merge';
+import { mergeWorkflowConfig, overlayApplicantWorkflow } from './workflow-merge';
 
 describe('mergeWorkflowConfig', () => {
   it('flow config wins over overlapping props', () => {
@@ -97,5 +97,20 @@ describe('mergeWorkflowConfig', () => {
     );
     expect(merged.enableDocumentCapture).toBe(false);
     expect(merged.showThemeToggle).toBe(false);
+  });
+
+  it('allowDocumentScan is flow-controlled, on the mount and on a mapped applicant leg', () => {
+    // A workflow that makes document capture upload only must not be undone by
+    // a consumer prop, or the camera would open on a flow built without it.
+    const merged = mergeWorkflowConfig(
+      { country: 'NG', allowDocumentScan: false },
+      { country: 'NG', apiKey: 'pk', allowDocumentScan: true },
+    );
+    expect(merged.allowDocumentScan).toBe(false);
+    const leg = overlayApplicantWorkflow(
+      { id: 'wf_applicant', config: { country: 'NG', allowDocumentScan: false } },
+      { country: 'NG', allowDocumentScan: true },
+    );
+    expect(leg.allowDocumentScan).toBe(false);
   });
 });

@@ -121,13 +121,15 @@ export interface KYCConfigValue {
   /** The org's user reference → Entity.externalUserId at the seam (not matched). */
   userId?: string;
   /** Pre-populated user data from the consuming app */
-  userData?: { firstName?: string; lastName?: string; dateOfBirth?: string; businessName?: string };
+  userData?: { firstName?: string; lastName?: string; dateOfBirth?: string; businessName?: string; email?: string };
   /** Company details known upfront (KYB). Seeds the details step; editable. */
   businessPrefill?: { country?: string; registrationNumber?: string; registrationName?: string };
   enableSelfie?: boolean;
   enableDocumentCapture?: boolean;
   /** Allow picking a document photo from the device instead of the camera. Default true. */
   allowDocumentUpload?: boolean;
+  /** Allow scanning the document live with the camera. Default true; stays on when upload is also off. */
+  allowDocumentScan?: boolean;
   enableLiveness?: boolean;
   /** Presence Intelligence method: gestures (default) | flash | both. */
   livenessMode?: 'gestures' | 'flash' | 'both';
@@ -466,6 +468,7 @@ export function KYCConfigProvider({ children, apiOverride, serverConfigOverride,
       config.enableSelfie,
       config.enableDocumentCapture,
       config.allowDocumentUpload,
+      config.allowDocumentScan,
       config.enableLiveness,
       config.livenessMode,
       config.flashSequenceLength,

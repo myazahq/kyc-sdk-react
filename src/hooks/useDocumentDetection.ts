@@ -77,6 +77,13 @@ export interface UseDocumentDetectionOptions {
   videoRef: React.RefObject<HTMLVideoElement | null>;
   canvasRef: React.RefObject<HTMLCanvasElement | null>;
   enabled?: boolean;
+  /**
+   * The region of the video frame under the painted guide, for the full-frame
+   * fallback. Without it the fallback keeps the whole sensor frame, which holds
+   * far more than the applicant framed: the document lands small and off-centre,
+   * and a barcode that small no longer decodes.
+   */
+  getFallbackCrop?: (frame: { width: number; height: number }) => CardBounds | null;
 }
 
 export interface UseDocumentDetectionReturn {
@@ -369,7 +376,11 @@ export function useDocumentDetection({
   videoRef,
   canvasRef,
   enabled = true,
+  getFallbackCrop,
 }: UseDocumentDetectionOptions): UseDocumentDetectionReturn {
+  // Read at capture time, so a changed guide never re-arms the detection loop.
+  const fallbackCropRef = useRef(getFallbackCrop);
+  fallbackCropRef.current = getFallbackCrop;
   const [isCardDetected, setIsCardDetected] = useState(false);
   const [isStable, setIsStable] = useState(false);
   const [cardBounds, setCardBounds] = useState<CardBounds | null>(null);
@@ -387,7 +398,7 @@ export function useDocumentDetection({
   const lastProcessRef = useRef(0);
 
   // ---------------------------------------------------------------------------
-  // Fallback: capture the full video frame (no crop)
+  // Fallback: capture the frame under the guide (the whole frame without one)
   // ---------------------------------------------------------------------------
 
   const captureFullFrame = useCallback(async () => {
@@ -400,13 +411,17 @@ export function useDocumentDetection({
       return;
     }
 
+    // The edges never settled, but the applicant still framed the document in
+    // the guide: keep that region, as the manual shutter does.
+    const crop = fallbackCropRef.current?.({ width: video.videoWidth, height: video.videoHeight }) ?? null;
     const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    canvas.width = crop ? crop.width : video.videoWidth;
+    canvas.height = crop ? crop.height : video.videoHeight;
     const ctx = canvas.getContext('2d');
     if (!ctx) { isCapturingRef.current = false; return; }
 
-    ctx.drawImage(video, 0, 0);
+    if (crop) ctx.drawImage(video, crop.x, crop.y, crop.width, crop.height, 0, 0, crop.width, crop.height);
+    else ctx.drawImage(video, 0, 0);
     const raw = canvas.toDataURL('image/jpeg', DOCUMENT_IMAGE_QUALITY);
 
     try {

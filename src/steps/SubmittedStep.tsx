@@ -11,6 +11,7 @@ import { KYCError } from "../types/verification";
 import { generateRequestId, buildSubmitMetadata, uploadCaptureVideos } from "./submit-helpers";
 import { contactStepFor, expiredContactChannels } from "./contact-recovery";
 import { multiIdWireSlots } from "../lib/multi-id";
+import { keepsIdEvidence } from "../lib/resubmit";
 import { submitBusinessApplication } from "./submit-business";
 import { KeyPeopleAwaitList } from "./KeyPeopleAwaitList";
 import { toAwaitRows } from "./CompletedStep";
@@ -126,7 +127,10 @@ export function SubmittedStep() {
 			? false
 			: config.getIdTypeDefinition(primaryIdType)?.requiresDocumentCapture === false;
 		const idNumber = multiSlots ? multiSlots[0]!.idNumber : isNumberOnly ? state.idNumber : undefined;
-		if (!multiSlots && isNumberOnly && !idNumber) {
+		// A redo that keeps its ID submits the type alone: the server fills in the
+		// number the earlier attempt gave.
+		const idKept = !multiSlots && keepsIdEvidence(config.resubmit);
+		if (!multiSlots && isNumberOnly && !idNumber && !idKept) {
 			dispatch({ type: "SET_ERROR", payload: new KYCError("unknown", "Missing ID number.") });
 			return;
 		}

@@ -40,6 +40,9 @@ import { documentCropRect } from "../lib/document-guide";
 import { shortDocumentLabel } from "../lib/document-label";
 import { documentCaptureMethods } from "../lib/document-capture-methods";
 import { DocumentUploadPanel } from "./DocumentUploadPanel";
+import { DocumentCaptureWarning } from "./DocumentCaptureWarning";
+import { useDocumentCaptureCheck } from "./use-document-capture-check";
+import type { CaptureSide } from "../lib/document-capture-check";
 import {
 	DocumentFramingGate,
 	documentBoxFrom,
@@ -155,8 +158,15 @@ export function DocumentCaptureStep() {
 	);
 	const [showFlipBanner, setShowFlipBanner] = useState(false);
 	const [isUploading, setIsUploading] = useState(false);
+	// Whether the uploaded photos can be read, asked before moving on.
+	const {
+		problems: captureProblems,
+		setProblems: setCaptureProblems,
+		clear: clearCaptureCheck,
+		check: checkCapture,
+	} = useDocumentCaptureCheck();
 	const [uploadError, setUploadError] = useState<string | null>(null);
-	// "Upload failed — retrying (n/total)…" surfaced while a transient upload retries.
+	// "Upload failed. Retrying (n/total)…" surfaced while a transient upload retries.
 	const [retryInfo, setRetryInfo] = useState<{
 		attempt: number;
 		total: number;
@@ -221,10 +231,16 @@ export function DocumentCaptureStep() {
 	// (see documentCropRect) instead of storing the whole sensor frame.
 	const viewportRef = useRef<HTMLDivElement | null>(null);
 	const detectionCanvasRef = useRef<HTMLCanvasElement | null>(null);
+	// Set once the guide's aspect is known (below): the fallback capture keeps
+	// the region under the guide, like the manual shutter.
+	const fallbackCropRef = useRef<
+		((frame: { width: number; height: number }) => CardBounds | null) | null
+	>(null);
 	const detection = useDocumentDetection({
 		videoRef: camera.videoRef,
 		canvasRef: detectionCanvasRef,
 		enabled: cameraActive && camera.isReady,
+		getFallbackCrop: (frame) => fallbackCropRef.current?.(frame) ?? null,
 	});
 	const { compressDocument, isCompressing } = useImageCompress();
 	const { level: lightLevel } = useLightLevel(
@@ -275,6 +291,15 @@ export function DocumentCaptureStep() {
 	// ID-1 cards use 1.586; passports use a taller 1.42 so the data page's MRZ
 	// band is not cropped off. Mirrors the native documentGuideAspect.
 	const guideAspect = state.selectedIdType === "passport" ? 1.42 : 85.6 / 53.98;
+	fallbackCropRef.current = (frame) => {
+		const viewport = viewportRef.current;
+		if (!viewport) return null;
+		return documentCropRect({
+			frame,
+			view: { width: viewport.clientWidth, height: viewport.clientHeight },
+			aspect: guideAspect,
+		});
+	};
 
 	// Auto-capture framing gate — the Flutter logic, fed from this SDK's edge
 	// detector. It decides the five visual states and the instruction; the
@@ -685,6 +710,34 @@ export function DocumentCaptureStep() {
 	// Upload images and advance to liveness
 	// ---------------------------------------------------------------------------
 
+	// Move on from stored uploads: a successful Continue, or "Continue anyway"
+	// past the capture check, which uploads and checks nothing again.
+	const advance = useCallback(() => {
+		clearCaptureCheck();
+		// Skip liveness when the org has it disabled for this ID — go straight
+		// to the submission step.
+		const features =
+			state.selectedIdType ?
+				config.getIdTypeFeatures(config.country, state.selectedIdType)
+			:	null;
+		const skipLiveness =
+			config.enableSelfie === false ||
+			(features ? !features.livenessCheck : config.enableLiveness === false);
+		const afterRun = skipLiveness ? stepAfterCapture(config) : "liveness";
+		// Multi-ID: this slot is done — commit its evidence and move to the
+		// next slot's picker, or on to liveness after the last slot.
+		const plan = multiIdPlan(config, state, config.serverConfig.idTypes);
+		if (!skipLiveness && (!plan || plan.last)) primeSpeech();
+		if (plan) {
+			dispatch({
+				type: "COMMIT_MULTI_ID_SLOT",
+				payload: { nextStep: plan.last ? afterRun : "id-type" },
+			});
+			return;
+		}
+		dispatch({ type: "SET_STEP", payload: afterRun });
+	}, [clearCaptureCheck, config, dispatch, state]);
+
 	const handleContinue = useCallback(async () => {
 		if (!frontPreview) return;
 
@@ -719,6 +772,9 @@ export function DocumentCaptureStep() {
 			});
 
 			// Upload back if present
+			const uploads: Array<{ side: CaptureSide; mediaId: string }> = [
+				{ side: "front", mediaId: frontMediaId },
+			];
 			if (isTwoSided && backPreview) {
 				const backBlob = toBlob(backPreview);
 				const backMediaId = await withRetry(
@@ -729,32 +785,20 @@ export function DocumentCaptureStep() {
 					type: "SET_MEDIA_ID",
 					payload: { mediaType: "documentBack", mediaId: backMediaId },
 				});
+				uploads.push({ side: "back", mediaId: backMediaId });
 			}
 
 			setRetryInfo(null);
+			// Ask whether the verification can read these photos before moving on,
+			// so a photo it could not read is retaken now rather than declined
+			// later. The uploads stay stored: "Continue anyway" does not redo them.
+			const problems = await checkCapture(uploads);
 			setIsUploading(false);
-			// Skip liveness when the org has it disabled for this ID — go straight
-			// to the submission step.
-			const features =
-				state.selectedIdType ?
-					config.getIdTypeFeatures(config.country, state.selectedIdType)
-				:	null;
-			const skipLiveness =
-				config.enableSelfie === false ||
-				(features ? !features.livenessCheck : config.enableLiveness === false);
-			const afterRun = skipLiveness ? stepAfterCapture(config) : "liveness";
-			// Multi-ID: this slot is done — commit its evidence and move to the
-			// next slot's picker, or on to liveness after the last slot.
-			const plan = multiIdPlan(config, state, config.serverConfig.idTypes);
-			if (!skipLiveness && (!plan || plan.last)) primeSpeech();
-			if (plan) {
-				dispatch({
-					type: "COMMIT_MULTI_ID_SLOT",
-					payload: { nextStep: plan.last ? afterRun : "id-type" },
-				});
+			if (problems.length > 0) {
+				setCaptureProblems(problems);
 				return;
 			}
-			dispatch({ type: "SET_STEP", payload: afterRun });
+			advance();
 		} catch (err) {
 			// Retries exhausted — show the inline error AND report a typed error once.
 			setRetryInfo(null);
@@ -769,8 +813,9 @@ export function DocumentCaptureStep() {
 		isTwoSided,
 		config,
 		dispatch,
-		state.selectedIdType,
-		state.multiIdSlotIndex,
+		checkCapture,
+		setCaptureProblems,
+		advance,
 	]);
 
 	// ---------------------------------------------------------------------------
@@ -778,6 +823,7 @@ export function DocumentCaptureStep() {
 	// ---------------------------------------------------------------------------
 
 	const retakeFront = () => {
+		clearCaptureCheck();
 		stopDocRecorder(false);
 		setCaptureZoom(null);
 		setFrontPreview(null);
@@ -791,6 +837,7 @@ export function DocumentCaptureStep() {
 	};
 
 	const retakeBack = () => {
+		clearCaptureCheck();
 		stopDocRecorder(false);
 		setCaptureZoom(null);
 		setBackPreview(null);
@@ -1003,7 +1050,7 @@ export function DocumentCaptureStep() {
 							{backPreview ?
 								"Continue to Review"
 							: uploadOnly ? "Next: Upload Back"
-							: "Next — Scan Back"}
+							: "Next: Scan Back"}
 						</Button>
 					</div>
 				</div>
@@ -1023,11 +1070,19 @@ export function DocumentCaptureStep() {
 					source={uploadOnly ? "upload" : "camera"}>
 					{retryInfo && isUploading && (
 						<p className='mb-2 text-center text-xs text-amber-700 dark:text-amber-400'>
-							Upload failed — retrying ({retryInfo.attempt}/{retryInfo.total})…
+							Upload failed. Retrying ({retryInfo.attempt}/{retryInfo.total})…
 						</p>
 					)}
 
-					{uploadError ?
+					{captureProblems && captureProblems.length > 0 && !uploadError ?
+						<DocumentCaptureWarning
+							problems={captureProblems}
+							uploadOnly={uploadOnly}
+							isBusy={isBusy}
+							onRetake={(side) => (side === "front" ? retakeFront() : retakeBack())}
+							onContinueAnyway={advance}
+						/>
+					: uploadError ?
 						<div className='space-y-3'>
 							<Alert variant='destructive'>
 								<AlertTriangle className='h-4 w-4' />

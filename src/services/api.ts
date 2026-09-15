@@ -61,6 +61,23 @@ export interface UploadResponse {
   mediaId: string;
 }
 
+/** Body of `POST /api/kyc/document-capture/check`: one uploaded document side. */
+export interface DocumentCaptureCheckRequest {
+  mediaId: string;
+  side: 'front' | 'back';
+  country: string;
+  idType: string;
+  workflowId?: string;
+  sessionId?: string;
+}
+
+/** `true` fine, `false` looked and found nothing, `null` not checked. */
+export interface DocumentCaptureCheckResponse {
+  side: 'front' | 'back';
+  face: boolean | null;
+  barcode: boolean | null;
+}
+
 export interface VerifyRequest {
   country: string;
   idType: string;
@@ -948,6 +965,31 @@ export function createKYCApi(baseUrl: string, apiKey: string) {
       });
       const { mediaId } = await handleResponse<UploadResponse>(res);
       return mediaId;
+    },
+
+    /**
+     * Ask whether an uploaded document photo can be read (a face on the printed
+     * photo, a barcode that decodes), so the applicant can retake it before
+     * submitting. Resolves null on any failure and after `timeoutMs`: the check
+     * is a courtesy and must never hold the flow up.
+     */
+    async checkDocumentCapture(
+      body: DocumentCaptureCheckRequest,
+      timeoutMs = 8000,
+    ): Promise<DocumentCaptureCheckResponse | null> {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        return await request<DocumentCaptureCheckResponse>('/document-capture/check', {
+          method: 'POST',
+          body: JSON.stringify(body),
+          signal: controller.signal,
+        });
+      } catch {
+        return null;
+      } finally {
+        clearTimeout(timer);
+      }
     },
 
     async verify(body: VerifyRequest): Promise<VerifyResponse> {

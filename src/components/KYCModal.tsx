@@ -30,6 +30,7 @@ import { isBusinessFlow } from '../lib/business';
 import { multiIdPlan } from '../lib/multi-id';
 import { MultiIdProgress } from './MultiIdProgress';
 import { getStepPosition, resolveNarrowedStep } from '../lib/step-order';
+import { keptIdType } from '../lib/resubmit';
 import { hasConsentStep } from '../lib/consent-step';
 import { BackAvailableContext, useOpeningStep } from './opening-step';
 import { ProofOfAddressStep } from '../steps/ProofOfAddressStep';
@@ -294,6 +295,12 @@ export function KYCModal({ open, onClose, showThemeToggle, disableClose, fullScr
   useEffect(() => {
     if (skipping) dispatch({ type: 'SET_STEP', payload: shownStep });
   }, [skipping, shownStep, dispatch]);
+  // A redo that keeps its ID skips the picker, so the ID it ran on is selected
+  // for it: the steps after the picker, and the submission, read that selection.
+  const keptId = keptIdType(config.resubmit);
+  useEffect(() => {
+    if (keptId && !state.selectedIdType) dispatch({ type: 'SELECT_ID_TYPE', payload: keptId });
+  }, [keptId, state.selectedIdType, dispatch]);
 
   // index < 0 / total 0 means "nothing to draw" — the success screen, or a step
   // that isn't part of this flow. Mirrors the RN SDK's stepInfo.

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyResubmitSteps, isResubmission, resubmitNote } from './resubmit';
+import { applyResubmitSteps, isResubmission, keepsIdEvidence, keptIdType, resubmitNote } from './resubmit';
 import type { KYCStep } from '../types/config';
 
 const FULL: KYCStep[] = [
@@ -102,10 +102,55 @@ describe('applyResubmitSteps', () => {
     ]);
   });
 
+  it('skips the ID steps when the server keeps the ID and the reviewer asked for the selfie', () => {
+    // THE REPORTED BUG: "Selfie and liveness" was ticked and the link opened on
+    // the ID type picker. The server now keeps the ID and fills its evidence in.
+    expect(applyResubmitSteps(FULL, { steps: ['liveness'], idType: 'pvc' })).toEqual([
+      'consent',
+      'liveness',
+      'submitted',
+    ]);
+  });
+
+  it('keeps the evidence but not the picker when the document was asked for', () => {
+    expect(applyResubmitSteps(FULL, { steps: ['document-capture', 'liveness'], idType: 'pvc' })).toEqual([
+      'consent',
+      'document-capture',
+      'liveness',
+      'submitted',
+    ]);
+  });
+
+  it('shows the picker again when the reviewer ticked the ID type', () => {
+    expect(applyResubmitSteps(FULL, { steps: ['id-type', 'liveness'], idType: 'pvc' })).toEqual([
+      'consent',
+      'id-type',
+      'document-capture',
+      'liveness',
+      'submitted',
+    ]);
+  });
+
   it('never drops the frame', () => {
     const out = applyResubmitSteps(FULL, { steps: ['liveness'] });
     expect(out[0]).toBe('consent');
     expect(out[out.length - 1]).toBe('submitted');
+  });
+});
+
+describe('keptIdType and keepsIdEvidence', () => {
+  it('keeps the ID only when the server named one and the ID type was not ticked', () => {
+    expect(keptIdType({ steps: ['liveness'], idType: 'bvn' })).toBe('bvn');
+    expect(keptIdType({ steps: ['id-type'], idType: 'bvn' })).toBeNull();
+    expect(keptIdType({ steps: ['liveness'] })).toBeNull();
+    expect(keptIdType({ steps: [], idType: 'bvn' })).toBeNull();
+    expect(keptIdType(null)).toBeNull();
+  });
+
+  it('keeps the evidence only when no evidence step was asked for', () => {
+    expect(keepsIdEvidence({ steps: ['liveness'], idType: 'bvn' })).toBe(true);
+    expect(keepsIdEvidence({ steps: ['id-input'], idType: 'bvn' })).toBe(false);
+    expect(keepsIdEvidence({ steps: ['liveness'] })).toBe(false);
   });
 });
 

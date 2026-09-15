@@ -1,7 +1,8 @@
+import { readFileSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
+import { IN_MONOREPO } from '../../__tests__/monorepo';
 // Read by PATH: `exports` hides ./package.json from a normal specifier.
 import dialogPkg from '../../../node_modules/@radix-ui/react-dialog/package.json';
-import rootPkg from '../../../../../package.json';
 
 // Radix ≤1.1.15 shipped a dev-time accessibility check that did
 // `document.getElementById(titleId)` and console.error'd when it found nothing.
@@ -28,6 +29,14 @@ import rootPkg from '../../../../../package.json';
 // noise rather than a broken build.
 const MIN_VERSION = [1, 1, 23] as const;
 
+// The override lives in the MONOREPO root's package.json. The public mirror
+// carries this package alone, so that file is not there: a static import of it
+// failed the whole suite at collection. Read it only in the monorepo, and skip
+// the assertion that needs it elsewhere (see __tests__/monorepo.ts).
+const rootPkg: { pnpm?: { overrides?: Record<string, string> } } | null = IN_MONOREPO
+  ? JSON.parse(readFileSync(new URL('../../../../../package.json', import.meta.url).pathname, 'utf8'))
+  : null;
+
 function parse(v: string): number[] {
   return v.split('-')[0]!.split('.').map(Number);
 }
@@ -45,12 +54,11 @@ describe('radix dialog: no document-scoped a11y warning', () => {
     expect(atLeast(dialogPkg.version, MIN_VERSION)).toBe(true);
   });
 
-  it('forces vaul onto the same copy, so the drawer cannot reintroduce it', () => {
+  it.skipIf(!IN_MONOREPO)('forces vaul onto the same copy, so the drawer cannot reintroduce it', () => {
     // vaul (the Drawer) declares its own `^1.1.1` and resolved to 1.1.15 —
     // a SECOND copy, warning away behind every sheet, invisible from our own
     // dependency list. The root override is what collapses them into one.
-    const override = (rootPkg as { pnpm?: { overrides?: Record<string, string> } }).pnpm
-      ?.overrides?.['@radix-ui/react-dialog'];
+    const override = rootPkg?.pnpm?.overrides?.['@radix-ui/react-dialog'];
     expect(override).toBeDefined();
     expect(atLeast(override!.replace(/^[^\d]*/, ''), MIN_VERSION)).toBe(true);
   });

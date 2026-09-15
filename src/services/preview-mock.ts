@@ -30,6 +30,11 @@ export function withPreviewMocks(api: KYCApi): KYCApi {
       return `preview_media_${mediaCounter}`;
     },
 
+    // The check reads an uploaded photo, and the preview uploads nothing.
+    async checkDocumentCapture(body: { side: 'front' | 'back' }) {
+      return { side: body.side, face: null, barcode: null };
+    },
+
     async verify(): Promise<VerifyResponse> {
       await delay(500);
       // applicantKeyPersonId stays null so the KYB applicant double-submit

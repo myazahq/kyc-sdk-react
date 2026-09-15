@@ -17,6 +17,13 @@ export interface ResubmitConfig {
   steps: string[];
   /** Reviewer's note to the applicant. */
   message?: string | null;
+  /**
+   * The ID the redo keeps. The server sets it on a single-ID send-back whose
+   * reviewer did not ask for the ID type again: the flow skips the ID picker (and
+   * the ID's evidence, unless that was asked for) and the server fills in what
+   * the earlier attempt submitted.
+   */
+  idType?: string | null;
 }
 
 /**
@@ -48,19 +55,33 @@ const EVIDENCE: KYCStep[] = ['id-input', 'document-capture', 'nfc'];
  * Steps a narrowed flow keeps regardless, because without them it cannot
  * produce a submission at all.
  *
- * A resubmission is a NEW verification on a FRESH session: nothing is carried
- * forward from the one being redone, so the applicant must still say which ID
- * this is and supply it. `POST /verify` requires an `idType`, and a number-only
- * ID requires the number with it.
- *
- * So narrowing removes the things arranged AROUND the identity — liveness,
- * proof of address, the questionnaire, contact checks — and never the identity
- * itself. The alternative is a two-screen flow that collects a photo and then
- * fails to submit, which is worse for the applicant than being asked for one
- * extra screen.
+ * `POST /verify` requires an `idType`, and a number-only ID its number. When the
+ * server says the redo keeps its ID (`idType` on the instruction), it fills the
+ * evidence in from the attempt being redone, so none of these are needed and a
+ * reviewer who asked for the selfie gets the selfie. Without that (an older
+ * server) the applicant must still say which ID this is and supply it, since a
+ * two-screen flow that collects a photo and then fails to submit is worse than
+ * one extra screen.
  */
 const INDIVIDUAL_REQUIRED: KYCStep[] = ['id-type', ...EVIDENCE];
 const BUSINESS_REQUIRED: KYCStep[] = ['business-details'];
+
+/**
+ * The ID type a redo keeps, or null when the applicant chooses it again: the
+ * server named one and the reviewer did not tick the ID type.
+ */
+export function keptIdType(resubmit: ResubmitConfig | undefined | null): string | null {
+  const idType = resubmit?.idType;
+  const asked = resubmit?.steps;
+  if (typeof idType !== 'string' || idType.length === 0 || !asked?.length) return null;
+  return asked.includes('id-type') ? null : idType;
+}
+
+/** The redo keeps the ID's evidence as well: nothing about the ID was asked for. */
+export function keepsIdEvidence(resubmit: ResubmitConfig | undefined | null): boolean {
+  if (keptIdType(resubmit) === null) return false;
+  return !resubmit!.steps.some((step) => EVIDENCE.includes(step as KYCStep));
+}
 
 /**
  * Narrow a full step order to the redo, preserving flow order.
@@ -93,9 +114,12 @@ export function applyResubmitSteps(
 
   const wanted = new Set<string>(asked);
   if (wantsEvidence) for (const step of EVIDENCE) wanted.add(step);
-  for (const step of order.includes('business-details') ? BUSINESS_REQUIRED : INDIVIDUAL_REQUIRED) {
-    wanted.add(step);
-  }
+  const required = order.includes('business-details')
+    ? BUSINESS_REQUIRED
+    : keptIdType(resubmit) !== null
+      ? []
+      : INDIVIDUAL_REQUIRED;
+  for (const step of required) wanted.add(step);
 
   const narrowed = order.filter((step) => wanted.has(step) || ALWAYS.includes(step));
 

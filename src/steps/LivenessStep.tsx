@@ -430,7 +430,7 @@ export function LivenessStep() {
 
         {retryInfo && isUploading && (
           <p className="text-center text-xs text-amber-700 dark:text-amber-400">
-            Upload failed — retrying ({retryInfo.attempt}/{retryInfo.total})…
+            Upload failed. Retrying ({retryInfo.attempt}/{retryInfo.total})…
           </p>
         )}
 

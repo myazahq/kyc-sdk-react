@@ -512,13 +512,16 @@ export function useKYCConfig(): KYCConfigValue {
 }
 
 /**
- * The tolerant read, for chrome shared with surfaces that have no provider.
+ * The tolerant read, for chrome that may render outside a provider.
  *
- * MyazaBiometricAuth mounts no KYCConfigProvider (it has no flow config to
- * provide), and its modal renders the same PoweredBy footer the KYC modal
+ * Its original caller was the standalone biometric entry point, which mounted
+ * no KYCConfigProvider and rendered the same PoweredBy footer the KYC modal
  * does — where the strict hook threw and took the whole mount down with it.
- * Null means "no flow config here"; the caller falls back to default chrome.
- * Everything flow-driven keeps the strict hook, whose throw is the point.
+ * That entry point is gone (2026-09-16), so every mount today does sit inside
+ * a provider; the tolerant read stays because PoweredBy is shared chrome and a
+ * footer must never be able to crash the surface hosting it. Null means "no
+ * flow config here"; the caller falls back to default chrome. Everything
+ * flow-driven keeps the strict hook, whose throw is the point.
  */
 export function useOptionalKYCConfig(): KYCConfigValue | null {
   return useContext(KYCConfigContext);

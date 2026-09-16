@@ -258,49 +258,42 @@ its own.
 `flashSequenceLength` (2–5, default 4) sets how many colours the flash sequence
 uses. Longer is harder to spoof and takes slightly longer.
 
-## Biometric re-authentication
+## Face re-authentication
 
-For a **returning** user who has already been verified, `<MyazaBiometricAuth />`
-re-confirms it's still them with a live selfie matched 1:1 against their
-enrollment selfie. No document, no government-database lookup, no re-KYC.
+For a **returning** user who has already been verified, re-confirm it's still
+them with a live selfie matched 1:1 against their enrollment reference. No
+document, no government-database lookup, no re-KYC.
+
+There is no separate component. Build a workflow whose **scope** is
+`biometric-authentication` in the dashboard, then mount the ordinary
+`<MyazaKYC />` with its `workflowId`:
 
 ```tsx
-import { MyazaBiometricAuth } from "@myazahq/kyc-sdk-react";
+import { MyazaKYC } from "@myazahq/kyc-sdk-react";
 import "@myazahq/kyc-sdk-react/styles.css";
 
-<MyazaBiometricAuth
+<MyazaKYC
   apiKey="pk_live_xxx"
-  externalUserId="usr_123"          // the same reference you passed as `userId` at KYC
-  livenessMode="flash"
-  onAuthenticated={({ attemptId, confidence, token }) => {
-    // `token` is a SINGLE-USE proof. Send it to your backend and verify it
-    // there with a secret key — never trust this callback alone as authorization.
-  }}
-  onFailed={({ status, attemptId, confidence }) => {
-    // Ran fine, but the user did not pass (no match / liveness failed).
+  workflowId="wf_xxx"               // a biometric-authentication workflow
+  userId="usr_123"                  // who to re-authenticate — the reference you passed at KYC
+  onResult={(result) => {
+    // result.status — 'approved' | 'declined' | ...
   }}
   onError={(err) => console.error(err.code, err.message)}
 >
   Confirm it's you
-</MyazaBiometricAuth>
+</MyazaKYC>
 ```
 
-| Prop | Type | Default | Description |
-|---|---|---|---|
-| `apiKey` | `string` | — | **Required.** Same key rules as `<MyazaKYC />`. |
-| `externalUserId` | `string` | — | **Required.** The user to re-authenticate — the reference you passed as `userId` during their KYC. |
-| `livenessMode` | `'gestures' \| 'flash' \| 'both'` | `'gestures'` | As above. |
-| `defaultOpen` | `boolean` | `false` | Open the modal on mount, skipping the trigger button. |
-| `appearance` | `KYCAppearance` | brand defaults | Same theming tokens as the KYC modal. |
-| `disableClose` | `boolean` | `false` | Block user dismissal. |
-| `assetsBasePath` | `string` | bundled | As above. |
-| `onOpen` / `onClose` | `() => void` | — | Modal lifecycle. |
-| `onAuthenticated` | `({ attemptId, confidence, token }) => void` | — | Passed. Verify `token` server-side. |
-| `onFailed` | `({ status, attemptId, confidence }) => void` | — | Did not pass. |
-| `onError` | `(error: KYCError) => void` | — | Technical failure — network, not enrolled, insufficient credits. |
+The flow opens on the liveness step, captures the selfie, and submits it like
+every other scope. `userId` is required here: the server reads the subject off
+the session rather than the submission body, and refuses a re-authentication
+that names nobody (`user_reference_required`) or names someone who was never
+enrolled (`not_enrolled`).
 
-Like `<MyazaKYC />`, the trigger is a real `<button>`: `children`, `className`,
-and other button attributes are forwarded (`MyazaBiometricAuthProps` is exported).
+Where the verdict lands is the workflow's own setting — in the app
+(`onResult`), your webhook, or both — as are the selfie-review screen and the
+Done button. Everything else is the standard `<MyazaKYC />` prop surface above.
 
 > A user must have completed a KYC verification with a selfie before they can be
 > re-authenticated. Calling this for someone with no enrollment fires `onError`.

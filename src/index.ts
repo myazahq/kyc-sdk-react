@@ -1,10 +1,9 @@
 // Components
+//
+// Face re-authentication runs through this same entry point: mount it with a
+// workflow whose scope is `biometric-authentication` and the flow walks the
+// liveness step and submits to /verify like every other scope.
 export { MyazaKYC, useMyazaKYC } from './MyazaKYC';
-
-// Biometric face re-authentication — the returning-user "prove it's still you"
-// flow (a verified user re-authenticates with a live selfie, no re-KYC).
-export { MyazaBiometricAuth } from './MyazaBiometricAuth';
-export type { MyazaBiometricAuthProps, MyazaBiometricAuthConfig } from './MyazaBiometricAuth';
 
 // Hosted "continue on your phone" entry — mounted by the Myaza-hosted
 // verification page (`/verify/<token>`), not by integrators directly.

@@ -48,7 +48,9 @@ function stepAfterContactSection(config: ContactStepConfig): KYCStep {
   if (isFaceScope(scope)) return 'liveness';
   if (scope === 'questionnaire') return 'questionnaire';
   if (scope === 'contact') return 'submitted';
-  if (scope === 'address') return stepAfterCapture(config);
+  // No verified IDs on a scoped flow: the server rejects supporting
+  // documents there, so the step can never be part of this chain.
+  if (scope === 'address') return stepAfterCapture(config, []);
   const multiRegion = (config.countries?.length ?? 0) > 1;
   return multiRegion ? 'country-select' : 'id-type';
 }

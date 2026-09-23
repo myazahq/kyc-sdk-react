@@ -110,6 +110,21 @@ export default function DeviceHandoffGate({
   // A mobile-only workflow with handoff switched off has nothing to hand off
   // to — don't mint a session just to render a notice.
   const handoff = useDeviceHandoff(config.api, snapshot, !noHandoff);
+
+  // Leaving the gate gives the handoff back first. Minting the QR moved the
+  // flow's one-verification budget to the phone's session, so walking away
+  // without returning it leaves this device holding a session that no longer
+  // owns it - and the refusal does not surface until the next upload, several
+  // steps later, reading as a broken flow rather than as the QR's doing.
+  const leaveGate = (go: () => void) => () => {
+    void handoff.release().then((released) => {
+      // False means the phone has it open. Going ahead here would spend a
+      // budget it is already using, so the gate stays and the poll says so.
+      if (released) go();
+    });
+  };
+  const continueHere = leaveGate(onContinueHere);
+  const closeGate = leaveGate(onClose);
   const [copied, setCopied] = useState(false);
   const [noCamera, setNoCamera] = useState(false);
   const submittedRef = useRef(false);
@@ -168,7 +183,7 @@ export default function DeviceHandoffGate({
   const dismissBlocked = disableClose === true && !isTerminal;
 
   return (
-    <Dialog open onOpenChange={(o) => { if (!o && !dismissBlocked) onClose(); }}>
+    <Dialog open onOpenChange={(o) => { if (!o && !dismissBlocked) closeGate(); }}>
       <DialogContent
         className="kyc-root"
         style={themeVars}
@@ -208,9 +223,9 @@ export default function DeviceHandoffGate({
               mobileOnly={mobileOnly === true}
               noHandoff={noHandoff === true}
               onCopyLink={copyLink}
-              onContinueHere={onContinueHere}
+              onContinueHere={continueHere}
               onRegenerate={handoff.regenerate}
-              onDone={onClose}
+              onDone={closeGate}
             />
           </div>
 

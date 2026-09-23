@@ -42,6 +42,7 @@ const WORKFLOW_KEYS = [
   'phoneVerification',
   'questionnaire',
   'proofOfAddress',
+  'supportingDocuments',
   'addressCollection',
   'nfc',
   // Set only on a session a reviewer sent back, never on a published flow.

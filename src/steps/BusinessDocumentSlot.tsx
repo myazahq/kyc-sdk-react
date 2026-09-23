@@ -9,6 +9,13 @@ export const BUSINESS_DOC_ACCEPTED_MIMES = ['image/jpeg', 'image/png', 'image/we
 
 interface BusinessDocumentSlotProps {
   label: string;
+  /**
+   * Guidance the organisation wrote: which document, and what it has to show.
+   * Optional because the business-documents step names a fixed catalogue the
+   * applicant already recognises; a supporting document is whatever the org
+   * called it, so this is often the only thing that makes it findable.
+   */
+  description?: string | null;
   required: boolean;
   /** Uploaded file name, when this slot already has a mediaId. */
   fileName: string | null;
@@ -26,6 +33,7 @@ interface BusinessDocumentSlotProps {
  */
 export function BusinessDocumentSlot({
   label,
+  description,
   required,
   fileName,
   file,
@@ -95,6 +103,9 @@ export function BusinessDocumentSlot({
               {label}
               {required && <span className="text-destructive"> *</span>}
             </span>
+            {description && !uploading && (
+              <span className="mt-0.5 block text-xs leading-relaxed text-foreground/70">{description}</span>
+            )}
             <span className="block text-xs text-muted-foreground">
               {uploading ? 'Uploading…' : UPLOAD_HINT}
             </span>

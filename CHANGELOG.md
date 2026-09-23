@@ -1,5 +1,41 @@
 # Changelog
 
+## 3.1.0
+
+### Supporting documents
+
+A new step collects the artefacts an organisation holds **on file** — a NIN slip,
+a signed mandate, a bank letter — as opposed to the identity evidence the
+verification is decided on. It sits after the identity checks and before proof of
+address, because the documents are resolved against the ID the person actually
+verified with.
+
+There is no catalogue. The organisation names each document it asks for, so the
+SDK renders the title and guidance the workflow sent rather than captioning a key
+it recognises. A document with no title is not asked for at all.
+
+Entirely workflow-driven (`supportingDocuments` on the resolved config), so no
+props change and an existing integration needs no code edit to receive it.
+
+- One card per requested document, naming **what the document is being taken
+  for**: the values the server will read off it appear as chips under the
+  guidance, so a slot says more than a noun.
+- Per-document **ID scoping**. A document scoped to `NG/nin` is never demanded of
+  a passport holder, which is what stops the step being a dead end.
+- **`alwaysAsk`** shows the slot to everyone while the scope decides only who
+  must provide one, for an organisation that will take a document from anybody
+  who has it.
+- Where nothing is required, Continue reads **Skip**: pressing on is a deliberate
+  choice to add nothing.
+
+### Fixes
+
+- An address flow that verifies by document alone no longer opens a map, and its
+  consent notice no longer promises one it never shows.
+- A flow with nothing to capture is no longer offered a phone handoff.
+- Choosing to verify on this device now gives the handoff session back instead of
+  leaving it open.
+
 ## 3.0.0
 
 ### Face re-authentication has one entry point (breaking)

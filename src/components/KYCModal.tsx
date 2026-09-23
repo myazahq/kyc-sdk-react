@@ -1,6 +1,7 @@
 'use client';
 
 import { configScope } from '../lib/scope';
+import { hasSupportingDocumentsStep, verifiedIdsFor } from '../lib/supporting-documents';
 import React, { useEffect, useState } from 'react';
 import { buildThemeVars, resolveOverlayColor } from '../lib/theme';
 import { applyConfiguredTheme } from '../lib/apply-theme';
@@ -33,6 +34,7 @@ import { getStepPosition, resolveNarrowedStep } from '../lib/step-order';
 import { keptIdType } from '../lib/resubmit';
 import { hasConsentStep } from '../lib/consent-step';
 import { BackAvailableContext, useOpeningStep } from './opening-step';
+import { SupportingDocumentsStep } from '../steps/SupportingDocumentsStep';
 import { ProofOfAddressStep } from '../steps/ProofOfAddressStep';
 import { AddressCollectionStep } from '../steps/AddressCollectionStep';
 import { AddressSearchStep } from '../steps/address/AddressSearchStep';
@@ -154,6 +156,8 @@ function CurrentStep({ plan, step }: { plan: ReturnType<typeof multiIdPlan>; ste
       return config.previewMode ? <PreviewCapturePlaceholder kind="liveness" /> : <LivenessStep />;
     case 'proof-of-address':
       return <ProofOfAddressStep />;
+    case 'supporting-documents':
+      return <SupportingDocumentsStep />;
     case 'address-search':
       return <AddressSearchStep />;
     case 'address-collection':
@@ -213,6 +217,19 @@ export function KYCModal({ open, onClose, showThemeToggle, disableClose, fullScr
   const hasPoa =
     hasProofOfAddressStep(config.proofOfAddress) &&
     (configScope(config) === 'address' || poaCountryAccepted(config.proofOfAddress, config.country));
+  // Resolved against the ID the person has actually picked, because that is
+  // what decides whether the step has anything to ask for: a document scoped
+  // to one ID is only asked of the people who used it. Recomputed as the pick
+  // changes, so a flow that scopes its documents adds or drops the step as
+  // they choose.
+  const hasSupportingDocuments = hasSupportingDocumentsStep(
+    config.supportingDocuments,
+    verifiedIdsFor({
+      country: state.selectedCountry ?? config.country,
+      idType: state.selectedIdType,
+      multiIdSlots: state.multiIdSlots,
+    }),
+  );
   const hasAddressCollection = hasAddressCollectionStep(config.addressCollection);
   const hasEmailVerification = hasEmailVerificationStep(config.emailVerification);
   const hasPhoneVerification = hasPhoneVerificationStep(config.phoneVerification);
@@ -256,6 +273,7 @@ export function KYCModal({ open, onClose, showThemeToggle, disableClose, fullScr
     hasEmailVerification,
     hasPhoneVerification,
     hasPoa,
+    hasSupportingDocuments,
     hasAddressCollection,
     addressFlow: (() => {
       if (!hasAddressCollection || isBusiness) return undefined;

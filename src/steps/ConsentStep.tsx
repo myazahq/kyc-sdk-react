@@ -68,11 +68,17 @@ const SCOPE_DESCRIPTIONS: Record<string, string> = {
     'We need to re-confirm the email address and phone number on your account. This takes a minute and is secure.',
 };
 
+// The address scope's bullets are NOT a fixed pair: it verifies an address by
+// the pin, by a document, or by both, so promising a map on a flow that only
+// asks for a document is a promise the flow never keeps. Gated below on the
+// same step-order predicate the flow itself walks; the document's own bullet is
+// appended by the shared post-capture block, like every other flow's.
+const ADDRESS_PIN_BULLETS: ProcessStep[] = [
+  { icon: MapPinHouse, label: 'Pin your home address on a map' },
+  { icon: BadgeCheck, label: 'Confirm the details only you can know' },
+];
+
 const SCOPE_BULLETS: Record<string, ProcessStep[]> = {
-  address: [
-    { icon: MapPinHouse, label: 'Pin your home address on a map' },
-    { icon: BadgeCheck, label: 'Confirm the details only you can know' },
-  ],
   'biometric-authentication': [
     { icon: ScanFace, label: 'Take a quick selfie with liveness checks' },
     { icon: BadgeCheck, label: 'We match it against your enrolled face' },
@@ -148,7 +154,11 @@ export function ConsentStep() {
     : scope
       ? // COPY the catalogue entry: steps.push below would otherwise mutate
         // the shared constant, appending one more bullet per re-render.
-        [...SCOPE_BULLETS[scope]]
+        scope === 'address'
+          ? hasAddressCollectionStep(config.addressCollection)
+            ? [...ADDRESS_PIN_BULLETS]
+            : []
+          : [...(SCOPE_BULLETS[scope] ?? [])]
       : [
         { icon: BadgeCheck, label: 'Verify your government-issued ID' },
         { icon: UserRound, label: 'Collect basic personal information' },

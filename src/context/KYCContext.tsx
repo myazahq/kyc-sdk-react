@@ -30,6 +30,7 @@ export const initialKYCState: KYCState = {
   business: { country: null, product: null, registrationNumber: '', registrationName: '', contactEmail: '', address: '', email: '', phone: '', website: '', dateOfIncorporation: '', taxId: '', vatNumber: '', companyType: '', natureOfBusiness: '' },
   businessCheck: { status: 'idle', company: null, keyPeople: [], checkedNumber: null, prefilled: [] },
   businessApplication: { keyPeople: [], documents: [], applicantRole: null, applicantName: '', applicantKeyPersonIndex: null, uboUnidentifiable: false },
+  supportingDocuments: [],
   selfieImage: null,
   selfieUpload: IDLE_SELFIE_UPLOAD,
   addressPhotoPreview: null,
@@ -82,6 +83,20 @@ export function kycReducer(state: KYCState, action: KYCAction): KYCState {
         ...(typeof d.idNumber === 'string' ? { idNumber: d.idNumber } : {}),
         ...(d.userData ? { userData: { ...state.userData, ...d.userData } } : {}),
         ...(d.business ? { business: { ...state.business, ...d.business } } : {}),
+        // Restored uploads carry no preview file, so the slot renders in its
+        // plain uploaded state. Validate-and-drop: a snapshot written by an
+        // older build must degrade to restoring less, never to breaking.
+        ...(Array.isArray(d.supportingDocuments)
+          ? {
+              supportingDocuments: d.supportingDocuments.filter(
+                (doc): doc is { type: string; mediaId: string } =>
+                  !!doc &&
+                  typeof doc === 'object' &&
+                  typeof (doc as { type?: unknown }).type === 'string' &&
+                  typeof (doc as { mediaId?: unknown }).mediaId === 'string',
+              ),
+            }
+          : {}),
         ...(d.businessApplication
           ? {
               businessApplication: {
@@ -301,6 +316,8 @@ export function kycReducer(state: KYCState, action: KYCAction): KYCState {
     case 'SET_BUSINESS_CHECK':
       return { ...state, businessCheck: { ...state.businessCheck, ...action.payload } };
 
+    case 'SET_SUPPORTING_DOCUMENTS':
+      return { ...state, supportingDocuments: action.payload };
     case 'SET_BUSINESS_APPLICATION':
       return { ...state, businessApplication: { ...state.businessApplication, ...action.payload } };
 

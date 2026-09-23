@@ -46,6 +46,9 @@ async function handleResponse<T>(res: Response): Promise<T> {
 
 /** Media kinds the SDK can upload. Document/selfie photos plus best-effort videos. */
 export type MediaUploadType =
+  // Artefacts held on file — not the identity evidence the verification is
+  // decided on. Images + PDF, like the other document types.
+  | 'supporting_document'
   | 'document_front'
   | 'document_back'
   | 'selfie'
@@ -162,6 +165,8 @@ export interface VerifyRequest {
   deviceIntelligence?: boolean;
   /** What kind of proof-of-address document `mediaIds.proofOfAddress` is. */
   proofOfAddressType?: 'utility_bill' | 'bank_statement' | 'tenancy_agreement' | 'government_document' | 'other';
+  /** Supporting documents held on file — `{ type, mediaId }` per upload. */
+  supportingDocuments?: Array<{ type: string; mediaId: string }>;
   /**
    * Smart-address submission (Address Intelligence): the claimed pin plus the
    * optional one-shot device fix taken at confirmation (attestPresence). The
@@ -473,6 +478,8 @@ export interface WorkflowConfigPayload {
   questionnaire?: { title?: string; description?: string; fields: unknown[] };
   /** Proof of Address step configuration. */
   proofOfAddress?: { enabled?: boolean; documentTypes?: string[]; maxAgeDays?: number };
+  /** Supporting documents held on file (per-document ID scoping). */
+  supportingDocuments?: import('../types/config').SupportingDocumentsConfig;
   addressCollection?: { enabled?: boolean; requirePin?: boolean; photo?: string; directions?: string; attestPresence?: boolean };
   /** NFC chip verification configuration (native SDKs; web = preview only). */
   nfc?: { enabled?: boolean; idTypes?: string[]; allowSkip?: boolean };
@@ -594,6 +601,8 @@ export interface HandoffSessionSnapshot {
   questionnaire?: { title?: string; description?: string; fields: unknown[] };
   /** Proof of Address step configuration. */
   proofOfAddress?: { enabled?: boolean; documentTypes?: string[]; maxAgeDays?: number };
+  /** Supporting documents held on file (per-document ID scoping). */
+  supportingDocuments?: import('../types/config').SupportingDocumentsConfig;
   addressCollection?: { enabled?: boolean; requirePin?: boolean; photo?: string; directions?: string; attestPresence?: boolean };
   /** NFC chip verification configuration (native SDKs; web = preview only). */
   nfc?: { enabled?: boolean; idTypes?: string[]; allowSkip?: boolean };
@@ -1122,6 +1131,21 @@ export function createKYCApi(baseUrl: string, apiKey: string) {
     /** Desktop: poll a handoff session's lifecycle status. */
     async getHandoffSession(sessionId: string): Promise<HandoffSessionStatusResponse> {
       return request<HandoffSessionStatusResponse>(`/session/${sessionId}`);
+    },
+
+    /**
+     * Desktop: give the handoff back before verifying here instead.
+     *
+     * Minting the QR moves the flow's one-verification budget to the phone's
+     * session. Walking away from the gate without returning it leaves this
+     * device holding a session that no longer owns the budget, and the next
+     * upload is refused with "this verification was continued on another
+     * device" - several steps later, with nothing to connect it to the QR.
+     */
+    async cancelHandoffSession(sessionId: string): Promise<{ cancelled: boolean }> {
+      return request<{ cancelled: boolean }>(`/session/${encodeURIComponent(sessionId)}`, {
+        method: 'DELETE',
+      });
     },
 
     /** Phone: bootstrap the hosted flow from the session token (public route). */

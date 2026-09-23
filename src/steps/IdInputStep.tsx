@@ -9,6 +9,7 @@ import { useKYCContext } from '../context/KYCContext';
 import { useKYCConfig } from '../context/KYCConfigContext';
 import { stepAfterCapture } from '../lib/post-capture';
 import { multiIdPlan } from '../lib/multi-id';
+import { verifiedIdsFromState } from '../lib/supporting-documents';
 import { validateIdNumber } from '../utils/validators';
 import type { AnyCountry } from '../types/config';
 
@@ -62,7 +63,7 @@ export function IdInputStep({ country }: IdInputStepProps = {}) {
     const skipLiveness =
       config.enableSelfie === false ||
       (features ? !features.livenessCheck : config.enableLiveness === false);
-    const afterRun = skipLiveness ? stepAfterCapture(config) : 'liveness';
+    const afterRun = skipLiveness ? stepAfterCapture(config, verifiedIdsFromState(state, config)) : 'liveness';
     // Multi-ID: this slot is done — commit its evidence and move to the next
     // slot's picker, or on to liveness after the last slot.
     const plan = multiIdPlan(config, state, config.serverConfig.idTypes);

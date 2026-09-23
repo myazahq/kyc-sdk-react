@@ -26,6 +26,11 @@ export interface DeviceHandoffState {
   error: string | null;
   /** Mint a fresh session (used after expiry). */
   regenerate: () => void;
+  /**
+   * Return the one-verification budget the QR took, before verifying on this
+   * device instead. Resolves false when the phone already has the flow open.
+   */
+  release: () => Promise<boolean>;
 }
 
 const POLL_INTERVAL_MS = 2500;
@@ -67,8 +72,42 @@ export function useDeviceHandoff(
   const mintRef = useRef<{ key: string; promise: ReturnType<typeof api.createHandoffSession> } | null>(null);
   const snapshotRef = useRef(snapshot);
   snapshotRef.current = snapshot;
+  // Read by `release`, which must not be re-created as these change: the gate
+  // captures it in a click handler.
+  const sessionIdRef = useRef<string | null>(null);
+  sessionIdRef.current = sessionId;
+  const inUseRef = useRef(false);
+  inUseRef.current = phase === 'opened' || phase === 'submitted';
 
   const regenerate = useCallback(() => setNonce((n) => n + 1), []);
+
+  /**
+   * Hand the flow's one-verification budget back before running it here.
+   *
+   * Minting the QR moved that budget to the phone's session, so a desktop that
+   * walks away from the gate is holding a session that no longer owns it. The
+   * refusal does not arrive until the next upload, several steps later, where
+   * it reads as a broken flow rather than as a consequence of the QR.
+   *
+   * Resolves to whether the budget is back. FALSE means the phone already has
+   * the flow open, which is a different situation and the caller must not
+   * carry on regardless.
+   */
+  const release = useCallback(async (): Promise<boolean> => {
+    const id = sessionIdRef.current;
+    if (!id) return true;
+    // The phone already has the flow open. The server refuses the reclaim for
+    // the same reason, so this only saves a doomed request.
+    if (inUseRef.current) return false;
+    try {
+      await api.cancelHandoffSession(id);
+    } catch {
+      // Offline, or a server too old to have the route. Neither is a reason to
+      // trap somebody on the gate with no way forward, so the flow goes on as
+      // it always did - the same posture the gate takes when the mint fails.
+    }
+    return true;
+  }, [api]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -133,5 +172,5 @@ export function useDeviceHandoff(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [api, enabled, nonce]);
 
-  return { phase, code, url, sessionId, verificationId, error, regenerate };
+  return { phase, code, url, sessionId, verificationId, error, regenerate, release };
 }

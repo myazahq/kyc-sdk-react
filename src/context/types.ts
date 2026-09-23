@@ -274,6 +274,14 @@ export interface KYCState {
   // Steps 2c/2d/2e — KYB application extras (key people, documents, applicant)
   businessApplication: BusinessApplicationState;
 
+  /**
+   * Supporting documents the person uploaded — artefacts the org holds on
+   * file, not the identity evidence this verification is decided on. Each
+   * entry is `{ type, mediaId }` on the wire; `fileName` is display only and
+   * is dropped from session progress like every other preview artefact.
+   */
+  supportingDocuments: Array<{ type: string; mediaId: string; fileName?: string }>;
+
   // Steps 1b/1c — contact verification (email/phone OTP). The proof tokens are
   // single-use server mints submitted with /verify; destinations are kept for
   // display ("Verified a***@gmail.com").
@@ -417,6 +425,7 @@ export type KYCAction =
   | { type: 'SET_BUSINESS_CHECK'; payload: Partial<BusinessCheckState> }
   // KYB application extras (key people / documents / applicant role+name)
   | { type: 'SET_BUSINESS_APPLICATION'; payload: Partial<BusinessApplicationState> }
+  | { type: 'SET_SUPPORTING_DOCUMENTS'; payload: KYCState['supportingDocuments'] }
   // Document capture
   | { type: 'SET_DOCUMENT_FRONT'; payload: string }
   | { type: 'SET_DOCUMENT_BACK'; payload: string }

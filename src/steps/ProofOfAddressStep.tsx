@@ -12,6 +12,7 @@ import { poaNamePolicy, poaOfferedKinds, stepAfterProofOfAddress } from '../lib/
 import { poaCountryDeclared, poaOfferedCountries } from '../lib/poa-country-gate';
 import { lastContactStep } from '../lib/contact-steps';
 import { uploadSizeError } from '../lib/upload-limits';
+import { hasSupportingDocumentsStep, verifiedIdsFromState } from '../lib/supporting-documents';
 import type { PoaDocumentType } from '../types/config';
 
 const TYPE_LABELS: Record<PoaDocumentType, string> = {
@@ -98,8 +99,14 @@ export function ProofOfAddressStep() {
   };
 
   const handleBack = () => {
-    const backTo =
-      config.scope === 'address'
+    // Supporting documents now sit ahead of this step, so Back lands there
+    // when the flow asked for any — never past them onto the capture screen.
+    const hasSupporting =
+      config.scope !== 'address' &&
+      hasSupportingDocumentsStep(config.supportingDocuments, verifiedIdsFromState(state, config));
+    const backTo = hasSupporting
+      ? 'supporting-documents'
+      : config.scope === 'address'
         ? lastContactStep(config)
         : config.enableSelfie !== false
         ? 'liveness'

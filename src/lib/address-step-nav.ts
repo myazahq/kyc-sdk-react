@@ -1,5 +1,6 @@
 import type { KYCStep, ProofOfAddressConfig, QuestionnaireConfig } from '../types/config';
 import type { SubjectType, WorkflowBusinessConfig } from '../types/business';
+import { hasSupportingDocumentsStep } from './supporting-documents';
 import { hasProofOfAddressStep } from './post-capture';
 import { hasActiveQuestionnaire } from './questionnaire';
 import { isBusinessFlow } from './business';
@@ -17,6 +18,7 @@ export interface AddressNavConfig {
   business?: WorkflowBusinessConfig;
   questionnaire?: QuestionnaireConfig;
   proofOfAddress?: ProofOfAddressConfig;
+  supportingDocuments?: import('../types/config').SupportingDocumentsConfig;
   enableSelfie?: boolean;
   scope?: import('./scope').WorkflowScope;
   emailVerification?: import('../types/config').EmailVerificationConfig;
@@ -36,8 +38,15 @@ export function addressNextStep(config: AddressNavConfig): KYCStep | 'submit' {
 export function addressBackStep(
   config: AddressNavConfig,
   selectedIdRequiresCapture: boolean | undefined,
+  /** `"CC/idType"` composites this attempt committed — [] on flows with no ID. */
+  verifiedIds: string[] = [],
 ): KYCStep {
   if (isBusinessFlow(config)) return prevBusinessStep('address-collection', config);
+  // Supporting documents sit between the address document and the pin, so the
+  // address section backs into them before Proof of Address.
+  if (hasSupportingDocumentsStep(config.supportingDocuments, verifiedIds)) {
+    return 'supporting-documents';
+  }
   if (hasProofOfAddressStep(config.proofOfAddress)) return 'proof-of-address';
   // Address scope: there is no capture leg behind the address section — Back
   // lands on the contact section (or consent when none).

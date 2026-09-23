@@ -30,6 +30,14 @@ export interface StepOrderOptions {
   hasEmailVerification: boolean;
   hasPhoneVerification: boolean;
   hasPoa: boolean;
+  /**
+   * Whether the supporting-documents step has anything to ask for on THIS
+   * attempt. Resolved by the caller (lib/supporting-documents.ts) because the
+   * requested list depends on the ID the person actually picked — a document
+   * scoped to one ID is not asked of somebody who used another, and a step
+   * with an empty list must not appear at all.
+   */
+  hasSupportingDocuments: boolean;
   hasAddressCollection: boolean;
   /**
    * Which of the address flow's optional steps exist on THIS mount (individual
@@ -136,10 +144,17 @@ function fullStepOrder(o: StepOrderOptions): KYCStep[] {
   if (o.scope === 'address') {
     const steps: KYCStep[] = [...openingSteps(o), ...contactSteps(o)];
     if (o.hasPoa) steps.push('proof-of-address');
-    if (o.addressFlow?.search) steps.push('address-search');
-    steps.push('address-collection');
-    if (o.addressFlow?.entrance) steps.push('address-entrance');
-    steps.push('address-review');
+    // The scope verifies an address, and there are two ways to do it: the pin
+    // and the document. A flow that asks only for the document never opens a
+    // map, so these are gated exactly as they are on the full flow below
+    // (Flutter has always gated them; web and RN pushed them unconditionally,
+    // which made a proof-of-address-only address flow unwalkable).
+    if (o.hasAddressCollection) {
+      if (o.addressFlow?.search) steps.push('address-search');
+      steps.push('address-collection');
+      if (o.addressFlow?.entrance) steps.push('address-entrance');
+      steps.push('address-review');
+    }
     if (o.hasQuestionnaire) steps.push('questionnaire');
     steps.push('submitted');
     return steps;
@@ -158,6 +173,9 @@ function fullStepOrder(o: StepOrderOptions): KYCStep[] {
   }
   const middle: KYCStep[] = [o.hasDocCapture ? 'document-capture' : 'id-input'];
   if (o.hasLiveness) middle.push('liveness');
+  // Paperwork the org files comes BEFORE the address evidence the
+  // verification is judged on (user decision 2026-09-22).
+  if (o.hasSupportingDocuments) middle.push('supporting-documents');
   if (o.hasPoa) middle.push('proof-of-address');
   if (o.hasAddressCollection) {
     if (o.addressFlow?.search) middle.push('address-search');

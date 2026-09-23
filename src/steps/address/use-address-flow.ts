@@ -7,6 +7,7 @@ import { configScope } from '../../lib/scope';
 import { isBusinessFlow } from '../../lib/business';
 import { defaultMapView } from '../../lib/map-tiles';
 import { addressBackStep, addressNextStep } from '../../lib/address-step-nav';
+import { verifiedIdsFromState } from '../../lib/supporting-documents';
 import { deviceFixFields, uploadAddressPhoto } from '../address-helpers';
 import { addressFlowOptions, addressFlowSteps, addressVendorsStubbed, nextAddressStep, prevAddressStep } from './flow-steps';
 import { usePinActions } from './use-pin-actions';
@@ -136,7 +137,10 @@ export function useAddressFlow() {
     const requiresCapture = state.selectedIdType
       ? config.getIdTypeDefinition(state.selectedIdType)?.requiresDocumentCapture
       : undefined;
-    dispatch({ type: 'SET_STEP', payload: addressBackStep(config, requiresCapture) });
+    dispatch({
+      type: 'SET_STEP',
+      payload: addressBackStep(config, requiresCapture, verifiedIdsFromState(state, config)),
+    });
   };
 
   /** Commit: the one-shot attest fix (best-effort), then leave the flow. */

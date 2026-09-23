@@ -24,8 +24,10 @@ import type {
   ProgressStyle,
   VoiceGuidanceOption,
   AddressCollectionConfig,
+  SupportingDocumentsConfig,
 } from '../types/config';
 import type { SubjectType, WorkflowBusinessConfig } from '../types/business';
+import { handoffCaptureNeeded } from '../lib/handoff-capture';
 // The hosted flow itself: providers seeded from the session's config snapshot,
 // wrapping the same steps an embedded <MyazaKYC/> runs. Split out of
 // MyazaKYCHosted.tsx, which is now just the entry point and its three terminal
@@ -74,11 +76,10 @@ export function HostedFlow({
   // company-document uploads (photograph on a phone) — a bare registry lookup
   // (all typed) gains nothing. The workflow/hosted-link can also switch handoff
   // off (`deviceHandoff: false`); default on.
-  const captureNeeded = isBusiness
-    ? snap.business?.applicant?.verification === true || snap.business?.documents?.enabled === true
-    : snap.enableLiveness !== false ||
-      // Upload-only documents are picked on this computer: no camera needed.
-      documentCaptureNeedsCamera(snap);
+  const captureNeeded = handoffCaptureNeeded({
+    ...snap,
+    subjectType: isBusiness ? 'business' : snap.subjectType,
+  });
   const cameraNeeded = snap.deviceHandoff !== false && captureNeeded;
   const serverConfigOverride: ServerSdkConfig = {
     status: 'ready',
@@ -149,6 +150,7 @@ export function HostedFlow({
         phoneVerification={snap.phoneVerification as PhoneVerificationConfig | undefined}
         questionnaire={snap.questionnaire as QuestionnaireConfig | undefined}
         proofOfAddress={snap.proofOfAddress as ProofOfAddressConfig | undefined}
+        supportingDocuments={snap.supportingDocuments as SupportingDocumentsConfig | undefined}
         addressCollection={snap.addressCollection as AddressCollectionConfig | undefined}
         nfc={leg.nfc as NfcConfig | undefined}
         userData={snap.userData}

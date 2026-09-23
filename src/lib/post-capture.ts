@@ -5,9 +5,11 @@ import type {
   PoaNameRule,
   ProofOfAddressConfig,
   QuestionnaireConfig,
+  SupportingDocumentsConfig,
 } from '../types/config';
 import type { SubjectType, WorkflowBusinessConfig } from '../types/business';
 import { hasActiveQuestionnaire } from './questionnaire';
+import { hasSupportingDocumentsStep } from './supporting-documents';
 import { isBusinessFlow } from './business';
 import { addressFlowOptions, addressFlowSteps, addressVendorsStubbed } from '../steps/address/flow-steps';
 
@@ -130,6 +132,19 @@ export function poaCountryAccepted(
   return accepted.some((c) => c.toUpperCase() === code);
 }
 
+/**
+ * The facts the supporting-documents step needs: the flow's request list, and
+ * the IDs this attempt has actually committed.
+ *
+ * `verifiedIds` is REQUIRED on the chain helpers below rather than optional,
+ * deliberately. The requested list is resolved PER ID, so an omitted argument
+ * would silently drop the step for everybody — the kind of gap that compiles,
+ * passes, and only shows up as a document nobody was ever asked for.
+ */
+export interface SupportingDocumentFacts {
+  supportingDocuments?: SupportingDocumentsConfig;
+}
+
 /** Whether the Address Intelligence capture step is part of the flow. */
 export function hasAddressCollectionStep(
   address: AddressCollectionConfig | undefined | null,
@@ -153,18 +168,52 @@ export function stepAfterCapture(
   config: {
     proofOfAddress?: ProofOfAddressConfig;
     questionnaire?: QuestionnaireConfig;
-  } & AddressFlowFacts,
-): Extract<KYCStep, 'proof-of-address' | 'address-search' | 'address-collection' | 'questionnaire' | 'submitted'> {
+  } & AddressFlowFacts &
+    SupportingDocumentFacts,
+  /** `"CC/idType"` composites this attempt has committed (verifiedIdsFor). */
+  verifiedIds: string[],
+): Extract<
+  KYCStep,
+  | 'proof-of-address'
+  | 'supporting-documents'
+  | 'address-search'
+  | 'address-collection'
+  | 'questionnaire'
+  | 'submitted'
+> {
   if (isBusinessFlow(config)) return 'submitted';
+  // Paperwork the org files is asked for BEFORE the address evidence the
+  // verification is judged on (user decision 2026-09-22).
+  if (hasSupportingDocumentsStep(config.supportingDocuments, verifiedIds)) {
+    return 'supporting-documents';
+  }
+  return stepAfterSupportingDocuments(config);
+}
+
+/**
+ * The step that follows supporting documents (or capture, when the flow asks
+ * for none): Proof of Address, then Address Intelligence, then the
+ * questionnaire, then submission. The supporting-documents step's Continue
+ * resolves through here, so it never asks whether to show itself again.
+ */
+export function stepAfterSupportingDocuments(
+  config: {
+    proofOfAddress?: ProofOfAddressConfig;
+    questionnaire?: QuestionnaireConfig;
+  } & AddressFlowFacts,
+): Extract<
+  KYCStep,
+  'proof-of-address' | 'address-search' | 'address-collection' | 'questionnaire' | 'submitted'
+> {
   if (hasProofOfAddressStep(config.proofOfAddress)) return 'proof-of-address';
   return stepAfterProofOfAddress(config);
 }
 
 /**
- * The step that follows Proof of Address (or capture, when PoA is off):
- * Address Intelligence (when enabled), then the questionnaire, then
- * submission. The PoA step's Continue and the questionnaire's Back both
- * resolve through here so the chain has one owner.
+ * The step that follows Proof of Address: Address Intelligence (when
+ * enabled), then the questionnaire, then submission. The PoA step's Continue
+ * and the questionnaire's Back both resolve through here so the chain has one
+ * owner.
  */
 export function stepAfterProofOfAddress(
   config: { questionnaire?: QuestionnaireConfig } & AddressFlowFacts,

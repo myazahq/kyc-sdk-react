@@ -6,6 +6,7 @@ import { Button } from '../components/ui/button';
 import { useKYCContext } from '../context/KYCContext';
 import { useKYCConfig } from '../context/KYCConfigContext';
 import { hasProofOfAddressStep, hasAddressCollectionStep, addressReturnStep } from '../lib/post-capture';
+import { hasSupportingDocumentsStep, verifiedIdsFromState } from '../lib/supporting-documents';
 import { isBusinessFlow } from '../lib/business';
 import { nextBusinessStep, prevBusinessStep } from '../lib/business-application';
 import { QuestionField } from './QuestionnaireFields';
@@ -44,6 +45,8 @@ export function QuestionnaireStep() {
     // Address, else liveness, else capture.
     const backTo = hasAddressCollectionStep(config.addressCollection)
       ? addressReturnStep(config)
+      : hasSupportingDocumentsStep(config.supportingDocuments, verifiedIdsFromState(state, config))
+      ? 'supporting-documents'
       : hasProofOfAddressStep(config.proofOfAddress)
       ? 'proof-of-address'
       : config.enableSelfie !== false

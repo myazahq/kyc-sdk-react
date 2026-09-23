@@ -8,6 +8,7 @@ import { Button } from '../components/ui/button';
 import { useKYCContext } from '../context/KYCContext';
 import { useKYCConfig } from '../context/KYCConfigContext';
 import { stepAfterCapture } from '../lib/post-capture';
+import { verifiedIdsFromState } from '../lib/supporting-documents';
 
 /**
  * NFC Chip Verification screen — the eMRTD chip read (e-passports & chip
@@ -32,7 +33,7 @@ export function NfcStep() {
       dispatch({ type: 'SET_STEP', payload: 'liveness' });
       return;
     }
-    const next = stepAfterCapture(config);
+    const next = stepAfterCapture(config, verifiedIdsFromState(state, config));
     if (next === 'submitted') {
       dispatch({ type: 'SUBMIT_VERIFICATION' });
     } else {

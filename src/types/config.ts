@@ -100,6 +100,9 @@ export type KYCStep =
   | 'applicant-role'
   | 'liveness'
   | 'proof-of-address'
+  // Artefacts the org holds ON FILE, not the identity evidence the
+  // verification is decided on. The org names each one it asks for.
+  | 'supporting-documents'
   // Address Intelligence, as real steps (progress bar advances through them).
   // 'address-collection' is the PIN step and keeps the original wire name for
   // session-progress and step-log compatibility; search/entrance/review exist
@@ -156,6 +159,51 @@ export interface ProofOfAddressConfig {
 // ---------------------------------------------------------------------------
 // Address Intelligence (smart-address capture + corroboration)
 // ---------------------------------------------------------------------------
+
+/**
+ * One requested supporting document. There is no catalogue: the organisation
+ * names its own, so the SDK renders the title and guidance the workflow sent.
+ */
+export interface SupportingDocumentRequest {
+  /** The organisation's own slug — the wire `type` this upload submits as. */
+  key: string;
+  /** The title the applicant reads. A document without one is not asked for. */
+  label?: string;
+  /** Guidance under the slot: which document, and what it has to show. */
+  description?: string;
+  /**
+   * Server-side only: what the document is corroborated against once it is
+   * uploaded. The SDK never evaluates a document.
+   */
+  checks?: Array<'id_number' | 'name'>;
+  /**
+   * The named values the server will read off it. The SDK reads the NAMES
+   * alone, to tell the applicant what the document is being taken for; the
+   * reading itself is entirely server-side.
+   */
+  fields?: Array<{ key: string; label?: string }>;
+  required?: boolean;
+  /**
+   * Which verified IDs this document is asked for, as `"CC/idType"` composites
+   * (e.g. `["NG/nin"]`). Absent/empty = every ID the flow offers.
+   */
+  idTypes?: string[];
+  /**
+   * Offer it on every flow, whatever ID was verified, so `idTypes` decides only
+   * who MUST provide it rather than who sees the slot. Absent = the scope hides
+   * it from everybody else, which is the default.
+   */
+  alwaysAsk?: boolean;
+}
+
+export interface SupportingDocumentsConfig {
+  enabled?: boolean;
+  types?: SupportingDocumentRequest[];
+  /** Server-side only: how long the collected files are kept. */
+  retentionDays?: number;
+  /** Server-side only: the delivery allowlist for the per-document verdicts. */
+  returnedData?: string[];
+}
 
 export interface AddressCollectionConfig {
   /** Adds the address-collection step (after Proof of Address, before the questionnaire). */
@@ -865,6 +913,20 @@ export interface MyazaKYCConfig<C extends AnyCountry = AnyCountry> {
    * never changes the verification's own status. Usually configured in the
    * workflow builder (rides `workflowId`).
    */
+  /**
+   * Supporting documents: artefacts the org must hold ON FILE, which are NOT
+   * the identity evidence the verification is decided on. The person is
+   * verified against the government database, and a downstream process still
+   * wants a copy of the document itself on record. The org names each one.
+   *
+   * Each document is checked against the identity already verified and the
+   * result rides `data.supportingDocuments` on verification webhooks; it never
+   * changes the verification's own status. Which documents are asked for
+   * depends on the ID the person verified with. Usually configured in the
+   * workflow builder (rides `workflowId`).
+   */
+  supportingDocuments?: SupportingDocumentsConfig;
+
   addressCollection?: AddressCollectionConfig;
 
   /**

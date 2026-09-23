@@ -11,6 +11,7 @@ const individual = (over: Partial<StepOrderOptions> = {}): StepOrderOptions => (
   hasEmailVerification: false,
   hasPhoneVerification: false,
   hasPoa: false,
+  hasSupportingDocuments: false,
   hasAddressCollection: false,
   hasQuestionnaire: false,
   ...over,
@@ -118,7 +119,7 @@ describe('stepAfterCapture in a business flow', () => {
         subjectType: 'business',
         business: { country: 'NG' },
         questionnaire: { fields: [{ key: 'a', label: 'A', type: 'text' }] },
-      }),
+      }, []),
     ).toBe('submitted');
   });
 });
@@ -156,17 +157,17 @@ describe('address-collection step', () => {
   });
 
   it('is reachable through the post-capture chain', () => {
-    expect(stepAfterCapture({ addressCollection: { enabled: true } })).toBe('address-collection');
+    expect(stepAfterCapture({ addressCollection: { enabled: true } }, [])).toBe('address-collection');
     // With a search backend on, entering the flow lands on SEARCH — routing
     // straight to the pin step skipped it entirely, which shipped.
     expect(
       stepAfterCapture({
         addressCollection: { enabled: true },
         serverConfig: { addressSearch: true },
-      }),
+      }, []),
     ).toBe('address-search');
     expect(
-      stepAfterCapture({ proofOfAddress: { enabled: true }, addressCollection: { enabled: true } }),
+      stepAfterCapture({ proofOfAddress: { enabled: true }, addressCollection: { enabled: true } }, []),
     ).toBe('proof-of-address');
     expect(stepAfterProofOfAddress({ addressCollection: { enabled: true } })).toBe('address-collection');
     expect(stepAfterProofOfAddress({})).toBe('submitted');
@@ -190,6 +191,23 @@ describe('scoped flows', () => {
       'address-review',
       'submitted',
     ]);
+  });
+
+  it('an address scope verifying by document alone never opens a map', () => {
+    // Both are honest ways to verify an address, and the workflow picks. With
+    // the pin off, pushing the map steps anyway made the flow unwalkable: the
+    // applicant was asked to drop a pin the submission would not carry.
+    const order = buildStepOrder(
+      individual({
+        scope: 'address',
+        hasAddressCollection: false,
+        hasPoa: true,
+        addressFlow: { search: true, entrance: true },
+      }),
+    );
+    expect(order).toEqual(['consent', 'proof-of-address', 'submitted']);
+    expect(order).not.toContain('address-collection');
+    expect(order).not.toContain('address-review');
   });
 
   it('keeps the identity-free companions in their usual order', () => {
@@ -256,6 +274,7 @@ describe('stepBeforeLiveness', () => {
     hasEmailVerification: false,
     hasPhoneVerification: false,
     hasPoa: false,
+    hasSupportingDocuments: false,
     hasAddressCollection: false,
     hasQuestionnaire: false,
   };
@@ -325,7 +344,10 @@ describe('consentStep off', () => {
     expect(buildStepOrder(off({ scope: 'biometric-authentication' }))[0]).toBe('liveness');
     expect(buildStepOrder(off({ scope: 'questionnaire', hasQuestionnaire: true }))[0]).toBe('questionnaire');
     expect(buildStepOrder(off({ scope: 'contact', hasPhoneVerification: true }))[0]).toBe('phone-verification');
-    expect(buildStepOrder(off({ scope: 'address' }))[0]).toBe('address-collection');
+    // Its siblings above each pass the flag their step needs; this one was
+    // relying on the address steps being pushed unconditionally.
+    expect(buildStepOrder(off({ scope: 'address', hasAddressCollection: true }))[0]).toBe('address-collection');
+    expect(buildStepOrder(off({ scope: 'address', hasPoa: true }))[0]).toBe('proof-of-address');
   });
 
   it('keeps the classic shape one step shorter, so the progress row counts what is walked', () => {

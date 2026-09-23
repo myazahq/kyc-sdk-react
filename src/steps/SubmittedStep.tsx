@@ -261,6 +261,17 @@ export function SubmittedStep() {
 								},
 							}
 						: {}),
+					// Supporting documents — artefacts held on file. Validated against
+					// the resolved workflow's request list; anything it did not ask
+					// for is dropped server-side rather than refused.
+					...(state.supportingDocuments.length > 0
+						? {
+								supportingDocuments: state.supportingDocuments.map((d) => ({
+									type: d.type,
+									mediaId: d.mediaId,
+								})),
+							}
+						: {}),
 					...(config.userId ? { userId: config.userId } : {}),
 					...(userData ? { userData } : {}),
 					// Extra-info questionnaire answers — validated server-side

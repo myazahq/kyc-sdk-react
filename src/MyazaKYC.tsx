@@ -26,12 +26,14 @@ import { resolveBaseUrl } from './lib/resolve-url';
 import { createKYCApi, KYCApiError, type WorkflowResolutionResponse, type HandoffSessionSnapshot } from './services/api';
 import { KYCError } from './types/verification';
 import { listIdTypeDefinitions } from './utils/id-definitions';
+import { previewSelectionForSupportingDocuments } from './lib/supporting-documents-preview';
 import { resetIntegritySignals } from './lib/integrity-signals';
 import { persistentDeviceId } from './lib/fingerprint';
 import { startSessionOnce } from './lib/start-session-once';
 import { resetStepLog } from './lib/step-log';
 import type { MyazaKYCConfig, MyazaKYCProps, UseMyazaKYCReturn, KYCStep, AnyCountry } from './types/config';
 import type { SubjectType, WorkflowBusinessConfig } from './types/business';
+import { handoffCaptureNeeded } from './lib/handoff-capture';
 
 // Lazy-loaded so the QR/handoff code (and qrcode.react) is code-split out of the
 // initial bundle — it only loads when a desktop user actually reaches the gate.
@@ -45,17 +47,56 @@ const DeviceHandoffGate = lazy(() => import('./components/DeviceHandoffGate'));
 function PreviewStepDriver({ step }: { step: KYCStep | null | undefined }) {
   const { state, dispatch } = useKYCContext();
   const config = useKYCConfig(); // effective country/idTypes (post country-select)
-  const stateRef = useRef({ selectedIdType: state.selectedIdType, config });
-  stateRef.current = { selectedIdType: state.selectedIdType, config };
+  const stateRef = useRef({ state, config });
+  stateRef.current = { state, config };
 
   useEffect(() => {
     if (!step) return;
-    const { selectedIdType, config: cfg } = stateRef.current;
-    if (step === 'document-capture' || step === 'id-input' || step === 'liveness' || step === 'nfc') {
-      // Local curated defs ∪ server-synthesized ones, so previews work for
-      // any ISO country the server grants (Global Documents).
+    const { state, config: cfg } = stateRef.current;
+    const selectedIdType = state.selectedIdType;
+    // Local curated defs ∪ server-synthesized ones, so previews work for any
+    // ISO country the server grants (Global Documents). Lazy: most steps need
+    // no ID at all.
+    const offeredIds = () => {
       const all = listIdTypeDefinitions(cfg.country, cfg.serverConfig.idTypes);
-      const offered = cfg.idTypes?.length ? all.filter((t) => cfg.idTypes!.includes(t.key)) : all;
+      return cfg.idTypes?.length ? all.filter((t) => cfg.idTypes!.includes(t.key)) : all;
+    };
+
+    if (step === 'supporting-documents') {
+      // A document scoped to one ID is resolved against the ID the applicant
+      // verified with, and on a multi-region flow against the COUNTRY they
+      // picked too. In the preview nobody has picked either, so seed the frame
+      // that shows the author's own documents, or the step renders empty and
+      // reads as broken.
+      const pick = previewSelectionForSupportingDocuments({
+        config: cfg.supportingDocuments,
+        country: cfg.country,
+        isOffered: (country, idType) => {
+          const entries = cfg.countries;
+          const entry = entries?.find((c) => c.country === country);
+          if (entries && entries.length > 0 && !entry) return false;
+          if (!entries?.length && country !== cfg.country) return false;
+          const allowed = entry?.idTypes?.length ? entry.idTypes : undefined;
+          if (allowed) return allowed.includes(idType as never);
+          return listIdTypeDefinitions(country as never, cfg.serverConfig.idTypes).some(
+            (t) => t.key === idType,
+          );
+        },
+        selected: { country: state.selectedCountry, idType: selectedIdType },
+      });
+      if (pick) {
+        // The country first: the ID list is per country, so selecting an ID
+        // the old country does not offer would be dropped.
+        if (pick.country !== cfg.country) dispatch({ type: 'SET_COUNTRY', payload: pick.country as never });
+        dispatch({ type: 'SELECT_ID_TYPE', payload: pick.idType as never });
+      }
+    } else if (
+      step === 'document-capture' ||
+      step === 'id-input' ||
+      step === 'liveness' ||
+      step === 'nfc'
+    ) {
+      const offered = offeredIds();
       const current = offered.find((t) => t.key === selectedIdType);
       const needsDocument = step === 'document-capture' || step === 'nfc';
       const fits =
@@ -152,6 +193,7 @@ function KYCInner({
   phoneVerification,
   questionnaire,
   proofOfAddress,
+  supportingDocuments,
   addressCollection,
   nfc,
   ...triggerProps
@@ -199,6 +241,7 @@ function KYCInner({
     ...(emailVerification ? { emailVerification } : {}),
     ...(phoneVerification ? { phoneVerification } : {}),
     ...(proofOfAddress ? { proofOfAddress } : {}),
+    ...(supportingDocuments ? { supportingDocuments } : {}),
     ...(addressCollection ? { addressCollection } : {}),
     ...(nfc ? { nfc } : {}),
     ...(metadata ? { metadata } : {}),
@@ -206,7 +249,7 @@ function KYCInner({
     ...(userData ? { userData } : {}),
     ...(businessPrefill ? { businessPrefill } : {}),
     ...(assetsBasePath ? { assetsBasePath } : {}),
-  }), [country, workflowId, idTypes, countries, multiId, enableSelfie, enableDocumentCapture, allowDocumentUpload, allowDocumentScan, enableLiveness, livenessMode, flashSequenceLength, deviceIntelligence, deviceHandoff, consentStep, biometric, requireMobileDevice, voiceGuidance, showThemeToggle, progressStyle, fullScreen, disableClose, appearance, consent, success, emailVerification, phoneVerification, questionnaire, proofOfAddress, addressCollection, nfc, metadata, userId, userData, businessPrefill, assetsBasePath]);
+  }), [country, workflowId, idTypes, countries, multiId, enableSelfie, enableDocumentCapture, allowDocumentUpload, allowDocumentScan, enableLiveness, livenessMode, flashSequenceLength, deviceIntelligence, deviceHandoff, consentStep, biometric, requireMobileDevice, voiceGuidance, showThemeToggle, progressStyle, fullScreen, disableClose, appearance, consent, success, emailVerification, phoneVerification, questionnaire, proofOfAddress, supportingDocuments, addressCollection, nfc, metadata, userId, userData, businessPrefill, assetsBasePath]);
 
   // Pre-load MediaPipe Face Mesh model as soon as the SDK mounts and apply the
   // voice-guidance config (enabled + language) for the spoken liveness prompts.
@@ -258,12 +301,16 @@ function KYCInner({
   // document capture (skips pure number-only-no-liveness flows). KYB flows: the
   // applicant's in-flow KYC or company-document uploads — a bare registry lookup
   // (all typed) has nothing to hand off to a phone for.
-  const cameraNeeded =
-    subjectType === 'business'
-      ? business?.applicant?.verification === true || business?.documents?.enabled === true
-      : enableLiveness !== false ||
-        // Upload-only documents are picked on this computer: no camera needed.
-        documentCaptureNeedsCamera({ enableDocumentCapture, allowDocumentScan, allowDocumentUpload });
+  const cameraNeeded = handoffCaptureNeeded({
+    scope,
+    subjectType,
+    enableLiveness,
+    enableDocumentCapture,
+    allowDocumentScan,
+    allowDocumentUpload,
+    addressCollection,
+    business,
+  });
 
   // Mobile-only workflows: kick off the hardware confirmation as soon as the
   // SDK mounts. The motion probe listens for up to ~1s, so doing it here keeps
@@ -438,6 +485,7 @@ function KYCInner({
       phoneVerification={phoneVerification}
       questionnaire={questionnaire}
       proofOfAddress={proofOfAddress}
+      supportingDocuments={supportingDocuments}
       addressCollection={addressCollection}
       nfc={nfc}
       previewMode={previewMode}

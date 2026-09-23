@@ -32,6 +32,8 @@ export interface SessionProgressPayload {
     userData?: unknown;
     business?: unknown;
     businessApplication?: unknown;
+    /** Supporting documents already uploaded — `{ type, mediaId }` only. */
+    supportingDocuments?: unknown;
     contact?: unknown;
     questionnaireAnswers?: unknown;
     address?: unknown;
@@ -58,6 +60,13 @@ export function progressFromState(state: KYCState): SessionProgressPayload {
       userData: state.userData,
       business: state.business,
       businessApplication: state.businessApplication,
+      // The uploads, without their preview file names: a restored attempt
+      // shows the slot as uploaded, which is what the mediaId is for. Preview
+      // bytes never ride progress, the same rule the selfie keeps.
+      supportingDocuments:
+        state.supportingDocuments.length > 0
+          ? state.supportingDocuments.map((d) => ({ type: d.type, mediaId: d.mediaId }))
+          : undefined,
       contact: state.contact,
       questionnaireAnswers: state.questionnaireAnswers,
       address: state.address ?? undefined,

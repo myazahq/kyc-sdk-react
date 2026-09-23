@@ -2,7 +2,9 @@
 
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { ResubmitConfig } from '../lib/resubmit';
-import type { AnyCountry, AnyIdType, EmailVerificationConfig, IdTypeDefinition, KYCAppearance, KYCConsentContent, KYCSuccessContent, PhoneVerificationConfig, QuestionnaireConfig, ProofOfAddressConfig, NfcConfig, ProgressStyle, AddressCollectionConfig } from '../types/config';
+import type { AnyCountry, AnyIdType, EmailVerificationConfig, IdTypeDefinition, KYCAppearance, KYCConsentContent, KYCSuccessContent, PhoneVerificationConfig, QuestionnaireConfig, ProofOfAddressConfig, NfcConfig, ProgressStyle, AddressCollectionConfig,
+  SupportingDocumentsConfig,
+} from '../types/config';
 import type { SubjectType, WorkflowBusinessConfig } from '../types/business';
 import type { KYCSubmission, KYCResult } from '../types/verification';
 import { createKYCApi, KYCApiError, type CompletedSessionSummary, type KYCApi, type SdkConfigIdType, type SdkConfigResponse, type SdkConfigBranding, type WorkflowConfigPayload } from '../services/api';
@@ -191,6 +193,8 @@ export interface KYCConfigValue {
   resubmit?: ResubmitConfig;
   /** Proof of Address document collection (after capture). */
   proofOfAddress?: ProofOfAddressConfig;
+  /** Supporting documents held on file (see types/config.ts). */
+  supportingDocuments?: SupportingDocumentsConfig;
   /** Address Intelligence: smart-address capture (after Proof of Address). */
   addressCollection?: AddressCollectionConfig;
   /** NFC chip verification (native SDKs; web renders it for preview only). */
@@ -485,6 +489,7 @@ export function KYCConfigProvider({ children, apiOverride, serverConfigOverride,
       config.phoneVerification,
       config.questionnaire,
       config.proofOfAddress,
+      config.supportingDocuments,
       config.addressCollection,
       config.nfc,
       config.onSubmit,

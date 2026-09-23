@@ -64,6 +64,7 @@ import {
 	isFrontFacingStream,
 	logCaptureSize,
 } from "../lib/capture-settings";
+import { verifiedIdsFromState } from '../lib/supporting-documents';
 
 // Scan phases:
 //   front         — camera open for front side
@@ -723,7 +724,7 @@ export function DocumentCaptureStep() {
 		const skipLiveness =
 			config.enableSelfie === false ||
 			(features ? !features.livenessCheck : config.enableLiveness === false);
-		const afterRun = skipLiveness ? stepAfterCapture(config) : "liveness";
+		const afterRun = skipLiveness ? stepAfterCapture(config, verifiedIdsFromState(state, config)) : "liveness";
 		// Multi-ID: this slot is done — commit its evidence and move to the
 		// next slot's picker, or on to liveness after the last slot.
 		const plan = multiIdPlan(config, state, config.serverConfig.idTypes);

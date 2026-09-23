@@ -10,6 +10,7 @@ import { useKYCContext } from '../context/KYCContext';
 import { useKYCConfig } from '../context/KYCConfigContext';
 import { stepAfterCapture } from '../lib/post-capture';
 import { documentCaptureMethods } from '../lib/document-capture-methods';
+import { verifiedIdsFromState } from '../lib/supporting-documents';
 import { DocumentUploadPanel } from './DocumentUploadPanel';
 
 /**
@@ -43,7 +44,7 @@ export function PreviewCapturePlaceholder({ kind }: { kind: 'document' | 'livene
       dispatch({ type: 'SET_STEP', payload: 'liveness' });
       return;
     }
-    const next = stepAfterCapture(config);
+    const next = stepAfterCapture(config, verifiedIdsFromState(state, config));
     if (next === 'submitted') {
       dispatch({ type: 'SUBMIT_VERIFICATION' });
     } else {

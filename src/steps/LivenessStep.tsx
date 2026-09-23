@@ -38,6 +38,7 @@ import { CaptureRing } from '../components/CaptureRing';
 import { LivenessHandover, useSelfieAutoAdvance } from './liveness-handover';
 import { showsSelfieReview } from '../lib/biometric-options';
 import { isSelfieBlurry, measureSelfieSharpness } from '../lib/selfie-sharpness';
+import { verifiedIdsFromState } from '../lib/supporting-documents';
 
 // ---------------------------------------------------------------------------
 // LivenessStep — active liveness check with gesture challenges
@@ -346,7 +347,7 @@ export function LivenessStep() {
     camera.stop();
     // Proof of Address / questionnaire (when configured) sit between capture
     // and the final submission; otherwise submit straight away.
-    const next = stepAfterCapture(config);
+    const next = stepAfterCapture(config, verifiedIdsFromState(kycState, config));
     if (next === 'submitted') {
       dispatch({ type: 'SUBMIT_VERIFICATION' });
     } else {

@@ -13,7 +13,16 @@ export default defineConfig({
   // encoder, and inlining it means a consumer does not have to install anything
   // to render a QR — the SDK is a drop-in component library, so every extra
   // install step is a support ticket waiting to happen.
-  noExternal: ['qrcode-generator'],
+  // `@hugeicons/core-free-icons` is bundled for a harder reason than size: it
+  // declares `"type": "module"` at its root while pointing `require` at
+  // `dist/cjs/index.js`, and ships NO `package.json` marking that directory
+  // CommonJS. Node therefore parses its CJS entry as ESM — on Node 20/22 the
+  // require throws `exports is not defined in ES module scope`, and on Node 24
+  // it silently resolves to an object with ZERO keys, so every icon renders as
+  // nothing. Left external, the CJS build of this SDK inherits that. Inlined,
+  // the icon path data is plain arrays that tree-shake to the ones we draw and
+  // no consumer ever requires the broken package.
+  noExternal: ['qrcode-generator', '@hugeicons/core-free-icons'],
   banner: { js: '"use client";' },
   esbuildOptions(options) {
     // The compiled Tailwind sheet (src/generated/styles.css.txt, built BEFORE

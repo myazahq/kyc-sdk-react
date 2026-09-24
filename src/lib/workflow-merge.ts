@@ -83,6 +83,17 @@ export function mergeWorkflowConfig<P extends Record<string, unknown>>(
     }
   }
 
+  // A multi-region flow declares its ID offering inside countries[], where a
+  // country pinning nothing already means "every granted ID for that country",
+  // and leaves the top-level list unset. The consumer's prop must not survive
+  // there: the config context falls back to the top-level list for a country
+  // that pins none of its own, so a hardcoded ['bvn','nin','passport'] silently
+  // reduced a 58-country flow to three NG types. A flow that sets its OWN
+  // top-level list still wins, so single-country flows are untouched.
+  if (flow['idTypes'] === undefined && Array.isArray(flow['countries']) && flow['countries'].length > 0) {
+    delete merged['idTypes'];
+  }
+
   // Business (KYB) workflows carry no top-level country — fall back to the
   // registry country so downstream code that expects one (the config context)
   // never sees undefined. The business submission reads business.country anyway.

@@ -1,5 +1,37 @@
 # Changelog
 
+## 3.2.1
+
+The CommonJS build loads again, and a multi-region workflow keeps its ID types.
+
+### The CJS build no longer resolves to zero icons
+
+`@hugeicons/core-free-icons` declares `"type": "module"` at its root while
+pointing `require` at `dist/cjs/index.js`, and ships no `package.json` marking
+that directory CommonJS. Node parses its CJS entry as ESM: on Node 20 and 22 the
+require throws `exports is not defined in ES module scope`, and on Node 24 it
+resolves silently to an object with ZERO keys, so every icon renders as nothing.
+Left external, this SDK's CJS build inherited that. It is now bundled, so the
+icon path data tree-shakes to the glyphs we draw and no consumer ever requires
+the broken package.
+
+### A consumer's `idTypes` prop can no longer narrow a multi-region flow
+
+Such a flow declares its offering inside `countries[]`, where a country pinning
+nothing already means "every granted ID for that country", and leaves the
+top-level list unset. The merge read that unset value as "the flow did not
+define it" and kept the prop, which the config context then falls back to for any
+country pinning none of its own — so a hardcoded `['bvn','nin','passport']`
+reduced a 58-country flow to three Nigerian types, on every country. The prop is
+now dropped at the merge, so a flow that sets its OWN top-level list still wins
+and single-country flows are unchanged.
+
+### Retake draws a circular arrow, not a rotating hand
+
+Lucide's `RotateCcw` is a circular arrow; Hugeicons reuses the name for a hand
+rotating an object, so every Retake and retry control drew a hand. The fourth
+name collision in this set found by comparing path data rather than names.
+
 ## 3.2.0
 
 ### Dark mode: the card surface is not the border's colour

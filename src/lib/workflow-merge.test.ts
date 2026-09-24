@@ -12,6 +12,33 @@ describe('mergeWorkflowConfig', () => {
     expect(merged.enableLiveness).toBe(false);
   });
 
+  // A multi-region flow declares its ID offering inside countries[], where a
+  // country pinning nothing already means "every granted ID for that country".
+  // Keeping the consumer's prop there narrows every country the flow offers.
+  it('a multi-region flow drops the consumer idTypes prop', () => {
+    const merged = mergeWorkflowConfig(
+      { countries: [{ country: 'NG' }, { country: 'GH' }] } as never,
+      { country: 'NG', idTypes: ['bvn', 'nin', 'passport'], apiKey: 'pk_test_x' },
+    );
+    expect(merged.idTypes).toBeUndefined();
+  });
+
+  it("a flow's own top-level idTypes still wins on a multi-region flow", () => {
+    const merged = mergeWorkflowConfig(
+      { countries: [{ country: 'NG' }], idTypes: ['passport'] } as never,
+      { country: 'NG', idTypes: ['bvn', 'nin', 'passport'], apiKey: 'pk_test_x' },
+    );
+    expect(merged.idTypes).toEqual(['passport']);
+  });
+
+  it('a single-country flow keeps the consumer idTypes prop, as before', () => {
+    const merged = mergeWorkflowConfig(
+      { country: 'NG' } as never,
+      { country: 'NG', idTypes: ['bvn', 'nin', 'passport'], apiKey: 'pk_test_x' },
+    );
+    expect(merged.idTypes).toEqual(['bvn', 'nin', 'passport']);
+  });
+
   it('a flow can disable deviceHandoff (now flow-controlled); prop wins when the flow omits it', () => {
     // Flow turns it off → flow wins over a consumer prop that left it on.
     const off = mergeWorkflowConfig(

@@ -60,7 +60,6 @@ import {
   RadarIcon as HugeRadarIcon,
   ReceiptTextIcon as HugeReceiptTextIcon,
   RefreshCcw as HugeRefreshCcw,
-  RotateCcw as HugeRotateCcw,
   ScanFace as HugeScanFace,
   ScanLine as HugeScanLine,
   SearchIcon as HugeSearchIcon,
@@ -167,7 +166,13 @@ export const Plus = createAppIcon(HugePlus, 'Plus');
 export const Radar = createAppIcon(HugeRadarIcon, 'Radar');
 export const ReceiptText = createAppIcon(HugeReceiptTextIcon, 'ReceiptText');
 export const RefreshCcw = createAppIcon(HugeRefreshCcw, 'RefreshCcw');
-export const RotateCcw = createAppIcon(HugeRotateCcw, 'RotateCcw');
+// Lucide's `RotateCcw` is a circular arrow. Hugeicons' alias of that name
+// resolves to `RotateLeft01Icon`, which is a HAND rotating an object — so
+// every Retake and retry control drew a hand. It takes the same drawing as
+// `RefreshCcw`, which is the plain circular arrow the name describes. The
+// two names are both kept: a call site says whether it means retake or
+// replace, and the barrel decides the glyph.
+export const RotateCcw = createAppIcon(HugeRefreshCcw, 'RotateCcw');
 export const ScanFace = createAppIcon(HugeScanFace, 'ScanFace');
 export const ScanLine = createAppIcon(HugeScanLine, 'ScanLine');
 export const Search = createAppIcon(HugeSearchIcon, 'Search');

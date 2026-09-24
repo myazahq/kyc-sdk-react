@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Building2, FileText, FolderOpen, Landmark, MapPin, ReceiptText } from 'lucide-react';
+import { Building2, FileText, FolderOpen, Landmark, MapPin, ReceiptText } from './icons';
 import { Label } from './ui/label';
 import { RadioGroup, RadioGroupItem } from './ui/radio-group';
 import { Card } from './ui/card';

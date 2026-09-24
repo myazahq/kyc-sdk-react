@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useLayoutEffect } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Loader2 } from '../components/icons';
 import { buildThemeVars } from '../lib/theme';
 import { applyConfiguredTheme } from '../lib/apply-theme';
 import { useThemeRoot } from '../lib/sdk-frame-context';

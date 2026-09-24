@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Building2, Plus, UserRound } from 'lucide-react';
+import { Building2, Plus, UserRound } from '../components/icons';
 import { KeyPersonCard } from './KeyPersonCard';
 import { KEY_PERSON_ROLE_LABELS } from '../lib/business-application';
 import { SECTION_ROLE, type KeyPeopleSection } from '../lib/key-people-sections';

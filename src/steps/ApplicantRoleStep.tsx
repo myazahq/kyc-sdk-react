@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect } from 'react';
-import { Check, ScanFace, UserRoundPlus } from 'lucide-react';
+import { Check, ScanFace, UserRoundPlus } from '../components/icons';
 import { StepHeader } from '../components/StepHeader';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';

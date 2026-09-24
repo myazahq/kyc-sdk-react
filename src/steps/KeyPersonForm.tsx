@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { ChevronRight, Info } from 'lucide-react';
+import { ChevronRight, Info } from '../components/icons';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { isValidContactEmail } from '../lib/business';

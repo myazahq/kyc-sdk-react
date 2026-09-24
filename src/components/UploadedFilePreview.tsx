@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { FileText, X } from 'lucide-react';
+import { FileText, X } from './icons';
 
 // Preview affordance for user-uploaded files (business documents, proof of
 // address): a thumbnail in the uploaded row that opens a full-screen viewer —

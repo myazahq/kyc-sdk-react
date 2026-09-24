@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Camera, MapPin } from 'lucide-react';
+import { Camera, MapPin } from '../../components/icons';
 import { AddressMap } from '../../components/AddressMap';
 import { MapPinMarker } from '../../components/MapPinMarker';
 import { StepHeader } from '../../components/StepHeader';

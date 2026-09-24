@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, ChevronsUpDown, Search } from 'lucide-react';
+import { Check, ChevronsUpDown, Search } from './icons';
 import { CountryFlag } from './CountryFlag';
 import { cn } from '../lib/utils';
 import { businessCountryName, groupBusinessCountries } from '../lib/business';

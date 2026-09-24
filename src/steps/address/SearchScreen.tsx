@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Loader2, MapPin, Search } from 'lucide-react';
+import { Loader2, MapPin, Search } from '../../components/icons';
 import { Input } from '../../components/ui/input';
 import { AddressSearchBox } from '../../components/AddressSearchBox';
 import { DropdownSurface } from '../../components/DropdownSurface';

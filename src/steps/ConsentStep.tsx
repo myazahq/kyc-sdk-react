@@ -15,7 +15,7 @@ import {
   Lock,
   RotateCcw,
   MapPinHouse,
-} from 'lucide-react';
+} from '../components/icons';
 import { Button } from '../components/ui/button';
 import { useKYCContext } from '../context/KYCContext';
 import { useKYCConfig } from '../context/KYCConfigContext';

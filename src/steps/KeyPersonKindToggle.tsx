@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Building2, User } from 'lucide-react';
+import { Building2, User } from '../components/icons';
 import { cn } from '../lib/utils';
 
 /**

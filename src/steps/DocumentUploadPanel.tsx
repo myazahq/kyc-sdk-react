@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useId, useState } from "react";
-import { ArrowRight, Check, ImageUp, Loader2 } from "lucide-react";
+import { ArrowRight, Check, ImageUp, Loader2 } from '../components/icons';
 import { isDesktopDevice } from "../lib/device";
 import { cn } from "../lib/utils";
 

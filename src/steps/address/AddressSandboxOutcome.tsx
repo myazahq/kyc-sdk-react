@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { BadgeCheck, CircleDashed, ShieldCheck, XCircle, type LucideIcon } from 'lucide-react';
+import { BadgeCheck, CircleDashed, ShieldCheck, XCircle, type AppIconComponent } from '../../components/icons';
 import { useKYCContext } from '../../context/KYCContext';
 import { useKYCConfig } from '../../context/KYCConfigContext';
 import type { KYCState } from '../../context/types';
@@ -25,7 +25,7 @@ type Outcome = NonNullable<KYCState['addressSandboxOutcome']>;
 const OPTIONS: Array<{
   value: Outcome;
   label: string;
-  Icon: LucideIcon;
+  Icon: AppIconComponent;
   /** The icon's own colour while this tab is INACTIVE, so the row reads as
    *  four outcomes rather than one live state and three dead ones. */
   tint: string;

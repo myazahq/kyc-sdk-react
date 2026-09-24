@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { MapPinned } from 'lucide-react';
+import { MapPinned } from '../../components/icons';
 import { Button } from '../../components/ui/button';
 
 interface LabelDecisionRowProps {

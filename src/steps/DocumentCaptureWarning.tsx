@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, ImageUp, RotateCcw } from "lucide-react";
+import { AlertTriangle, ImageUp, RotateCcw } from '../components/icons';
 import { Alert, AlertDescription, AlertTitle } from "../components/ui/alert";
 import { Button } from "../components/ui/button";
 import { cn } from "../lib/utils";

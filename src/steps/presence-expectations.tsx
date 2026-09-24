@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { BellRing, MapPinCheck, Radar } from 'lucide-react';
+import { BellRing, MapPinCheck, Radar } from '../components/icons';
 import { cn } from '../lib/utils';
 
 // The success screen's presence card, drawn as a LIVE process rather than a

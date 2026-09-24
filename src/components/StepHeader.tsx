@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { createPortal } from 'react-dom';
-import { MoveLeft } from 'lucide-react';
+import { MoveLeft } from './icons';
 import { Button } from './ui/button';
 import { CountryFlag } from './CountryFlag';
 import { cn } from '../lib/utils';

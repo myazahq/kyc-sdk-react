@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { OTPInput, OTPInputContext } from 'input-otp';
-import { Minus } from 'lucide-react';
+import { Minus } from '../icons';
 import { cn } from '../../lib/utils';
 
 // shadcn/ui InputOTP — the segmented one-time-code input. Used by the contact-

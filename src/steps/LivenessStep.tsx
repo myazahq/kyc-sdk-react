@@ -2,7 +2,7 @@
 
 import React, { useRef, useState, useEffect, useLayoutEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, Loader2, RotateCcw } from 'lucide-react';
+import { Check, Loader2, RotateCcw } from '../components/icons';
 import { cn } from '../lib/utils';
 import { StepHeader } from '../components/StepHeader';
 import { useSetCaptureLight } from '../components/capture-light';

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useReducer, useState } from 'react';
-import { Maximize2, Minimize2, Moon, Sun, X } from 'lucide-react';
+import { Maximize2, Minimize2, Moon, Sun, X } from './icons';
 
 import { useBranding } from '../hooks/useBranding';
 import { cn } from '../lib/utils';

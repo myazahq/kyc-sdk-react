@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect } from 'react';
-import { MapPinHouse } from 'lucide-react';
+import { MapPinHouse } from './icons';
 import { addressVendorsStubbed } from '../steps/address/flow-steps';
 import { GoogleMapPicker } from './GoogleMapPicker';
 import { FramedMapPicker } from './FramedMapPicker';

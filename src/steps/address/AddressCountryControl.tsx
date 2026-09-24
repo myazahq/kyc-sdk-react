@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, ChevronDown, Search } from 'lucide-react';
+import { Check, ChevronDown, Search } from '../../components/icons';
 import { cn } from '../../lib/utils';
 import { CountryFlag } from '../../components/CountryFlag';
 import { DropdownSurface } from '../../components/DropdownSurface';

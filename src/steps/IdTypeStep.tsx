@@ -9,7 +9,7 @@ import {
   Contact,
   BookUser,
   Car,
-} from 'lucide-react';
+} from '../components/icons';
 import { StepHeader } from '../components/StepHeader';
 import { Card } from '../components/ui/card';
 import { cn } from '../lib/utils';

@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { MessageSquare } from 'lucide-react';
+import { MessageSquare } from './icons';
 import { WhatsAppIcon } from './WhatsAppIcon';
 import { Label } from './ui/label';
 import { RadioGroup, RadioGroupItem } from './ui/radio-group';

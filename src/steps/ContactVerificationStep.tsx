@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useRef, useState } from 'react';
-import { CheckCircle2, Loader2, Mail, Smartphone } from 'lucide-react';
+import { CheckCircle2, Loader2, Mail, Smartphone } from '../components/icons';
 import { StepHeader } from '../components/StepHeader';
 import { Button } from '../components/ui/button';
 import { ContactChannelPicker } from '../components/ContactChannelPicker';

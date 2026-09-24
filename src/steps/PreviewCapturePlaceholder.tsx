@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Camera, ImageUp, ScanFace, Video } from 'lucide-react';
+import { Camera, ImageUp, ScanFace, Video } from '../components/icons';
 import { StepHeader } from '../components/StepHeader';
 import { Button } from '../components/ui/button';
 import { ReadyPrimer } from '../components/ReadyPrimer';

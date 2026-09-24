@@ -5,7 +5,7 @@
 // above the picker/evidence/liveness steps so a reader always knows which of
 // the run's IDs the screen is about and how many remain.
 
-import { Check } from 'lucide-react';
+import { Check } from './icons';
 import { useKYCConfig } from '../context/KYCConfigContext';
 import { cn } from '../lib/utils';
 import type { MultiIdPlan } from '../lib/multi-id';

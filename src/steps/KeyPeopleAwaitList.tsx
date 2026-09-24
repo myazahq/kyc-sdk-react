@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { BadgeCheck, Building2, Check, Link2 } from 'lucide-react';
+import { BadgeCheck, Building2, Check, Link2 } from '../components/icons';
 import { CountryFlag } from '../components/CountryFlag';
 import { APPLICANT_ROLE_LABELS } from '../lib/business-application';
 import { cn } from '../lib/utils';

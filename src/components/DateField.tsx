@@ -9,7 +9,7 @@
 // unfinished.
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Calendar as CalendarIcon } from 'lucide-react';
+import { Calendar as CalendarIcon } from './icons';
 import { Calendar } from './ui/calendar';
 import { cn } from '../lib/utils';
 import { useDropdownAnchor } from '../lib/use-dropdown-anchor';

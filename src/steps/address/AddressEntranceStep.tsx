@@ -10,7 +10,7 @@ import { useAddressFlow } from './use-address-flow';
 import { StreetViewFramer } from './StreetViewFramer';
 import { FramedStreetView } from './FramedStreetView';
 import { streetViewFrameUrlOf } from '../../lib/map-frame';
-import { Landmark } from 'lucide-react';
+import { Landmark } from '../../components/icons';
 
 /**
  * The entrance step: Street View FIRST — it opens automatically wherever

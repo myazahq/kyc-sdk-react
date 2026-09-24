@@ -1,6 +1,6 @@
 'use client';
 
-import type { LucideIcon } from 'lucide-react';
+import type { AppIconComponent } from './icons';
 import { cn } from '../lib/utils';
 import { Button } from './ui/button';
 
@@ -20,11 +20,11 @@ import { Button } from './ui/button';
  */
 export interface ReadyPrimerProps {
   /** Hero glyph — the thing being captured (document, face). */
-  icon: LucideIcon;
+  icon: AppIconComponent;
   title: string;
   body: string;
   /** What to expect. Three at most; past that nobody reads it. */
-  checklist: { icon: LucideIcon; label: string }[];
+  checklist: { icon: AppIconComponent; label: string }[];
   buttonLabel?: string;
   onReady: () => void;
   className?: string;

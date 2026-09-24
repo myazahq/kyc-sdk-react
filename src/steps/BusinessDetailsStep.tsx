@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Building2, Loader2, Pencil } from 'lucide-react';
+import { Building2, Loader2, Pencil } from '../components/icons';
 import { StepHeader } from '../components/StepHeader';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';

@@ -1,15 +1,18 @@
 'use client';
 
 import React from 'react';
-import { Check, FileText, House, Landmark, Stamp, Zap, type LucideIcon } from 'lucide-react';
+import { Check, FileText, House, Landmark, Stamp, Zap, type AppIconComponent } from '../components/icons';
 import { cn } from '../lib/utils';
 import type { PoaDocumentType } from '../types/config';
 
 /**
- * One glyph per document kind — the SAME Lucide names the RN `Icon` map and
- * Flutter's `LucideIcons` carry, so the list reads identically on all three.
+ * One icon per document kind, under the SAME names the RN `Icon` map and
+ * Flutter's `LucideIcons` carry, so the three SDKs pick the same icon for the
+ * same kind. Web draws them from Hugeicons (the dashboard's set); the mobile
+ * SDKs still draw Lucide's, so a kind reads consistently within each platform
+ * and the list stays in lockstep by MEANING rather than by glyph.
  */
-export const POA_TYPE_ICONS: Record<PoaDocumentType, LucideIcon> = {
+export const POA_TYPE_ICONS: Record<PoaDocumentType, AppIconComponent> = {
   utility_bill: Zap,
   bank_statement: Landmark,
   tenancy_agreement: House,

@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { BellRing, MapPinCheck, MapPinHouse, Radar } from 'lucide-react';
+import { BellRing, MapPinCheck, MapPinHouse, Radar } from '../../components/icons';
 import { Button } from '../../components/ui/button';
 import { IntroDisclosures } from './IntroDisclosures';
 import { cn } from '../../lib/utils';

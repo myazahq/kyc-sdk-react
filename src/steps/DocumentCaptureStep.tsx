@@ -11,7 +11,7 @@ import {
 	CreditCard,
 	ArrowLeft,
 	ImageUp,
-} from "lucide-react";
+} from '../components/icons';
 import { StepHeader } from "../components/StepHeader";
 import { ReadyPrimer } from "../components/ReadyPrimer";
 import { READY_DOCUMENT } from "../components/ready-primer-content";

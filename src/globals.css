@@ -94,9 +94,16 @@
     --foreground: #F6F5FE;
     --primary: #7B6EF7;
     --primary-foreground: #F6F5FE;
-    --secondary: #302D53;
+    /* The dark card surface, NOT the border's colour. These were both #302D53,
+       so anything bordered ON a card drew its edge in the card's own colour and
+       vanished — the upload dropzone's dashed outline and the divider above it
+       among them. #0F0C2E is what the React Native and Flutter SDKs already use
+       for this surface (their `backgroundSecondary`), against the same #302D53
+       border, so the three now agree. Light mode never had the collision
+       (#F6F5FE surface vs #D3CFFC border). */
+    --secondary: #0F0C2E;
     --secondary-foreground: #F6F5FE;
-    --muted: #302D53;
+    --muted: #0F0C2E;
     --muted-foreground: #ACABBA;
     --accent: #302D53;
     --accent-foreground: #F6F5FE;
@@ -185,9 +192,16 @@
     --foreground: #F6F5FE;
     --primary: #7B6EF7;
     --primary-foreground: #F6F5FE;
-    --secondary: #302D53;
+    /* The dark card surface, NOT the border's colour. These were both #302D53,
+       so anything bordered ON a card drew its edge in the card's own colour and
+       vanished — the upload dropzone's dashed outline and the divider above it
+       among them. #0F0C2E is what the React Native and Flutter SDKs already use
+       for this surface (their `backgroundSecondary`), against the same #302D53
+       border, so the three now agree. Light mode never had the collision
+       (#F6F5FE surface vs #D3CFFC border). */
+    --secondary: #0F0C2E;
     --secondary-foreground: #F6F5FE;
-    --muted: #302D53;
+    --muted: #0F0C2E;
     --muted-foreground: #ACABBA;
     --accent: #302D53;
     --accent-foreground: #F6F5FE;

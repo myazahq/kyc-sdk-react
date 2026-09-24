@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Smartphone } from 'lucide-react';
+import { Smartphone } from '../components/icons';
 import { StepHeader } from '../components/StepHeader';
 import { NfcScanIllustration } from '../components/NfcScanIllustration';
 import { Button } from '../components/ui/button';

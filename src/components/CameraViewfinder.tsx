@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Camera, SwitchCamera, AlertCircle } from 'lucide-react';
+import { Camera, SwitchCamera, AlertCircle } from './icons';
 import { Button } from './ui/button';
 import { cn } from '../lib/utils';
 

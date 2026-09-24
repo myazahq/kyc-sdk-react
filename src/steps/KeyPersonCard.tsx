@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Building2, Pencil, X } from 'lucide-react';
+import { Building2, Pencil, X } from '../components/icons';
 import { CountryFlag } from '../components/CountryFlag';
 import {
   KEY_PERSON_ROLE_LABELS,

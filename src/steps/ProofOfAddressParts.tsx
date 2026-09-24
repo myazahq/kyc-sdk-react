@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { CheckCircle2, Loader2, Upload, X } from 'lucide-react';
+import { CheckCircle2, Loader2, Upload, X } from '../components/icons';
 import { UploadedFileThumb } from '../components/UploadedFilePreview';
 import { CountryFlag } from '../components/CountryFlag';
 import { regionCountryName } from '../lib/regions';

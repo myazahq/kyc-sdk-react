@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { StyledQRCode } from './StyledQRCode';
 import { MYAZA_QR_LOGO } from '../lib/qr-logo';
-import { Check, Copy, Loader2, RefreshCcw, Smartphone } from 'lucide-react';
+import { Check, Copy, Loader2, RefreshCcw, Smartphone } from './icons';
 import {
   Drawer,
   DrawerContent,

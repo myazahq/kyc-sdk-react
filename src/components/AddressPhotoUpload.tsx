@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Camera, CheckCircle2, Loader2, RefreshCcw, X } from 'lucide-react';
+import { Camera, CheckCircle2, Loader2, RefreshCcw, X } from './icons';
 
 // The entrance-photo capture as the HERO of its screen (redesign 2026-08-29):
 // a tall dropzone while empty — the screen is about one decision, so the zone

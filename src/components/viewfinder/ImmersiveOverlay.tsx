@@ -1,4 +1,4 @@
-import { ArrowLeft, Upload, Zap, ZapOff } from 'lucide-react';
+import { ArrowLeft, Upload, Flash, FlashOff } from '../icons';
 import { DocumentScanOverlay } from './DocumentScanOverlay';
 import { DocumentGhost } from './DocumentGhost';
 import { DocumentPill, HintPill, SCRIM, SideBadge, Shutter } from './parts';
@@ -130,7 +130,10 @@ export function ImmersiveOverlay({
               )}
               style={{ backgroundColor: torch ? '#ffffff' : SCRIM }}
             >
-              {torch ? <Zap className="h-5 w-5" /> : <ZapOff className="h-5 w-5" />}
+              {/* One family for one toggle: Flash and FlashOff are the same bolt,
+                  slashed or not. Zap is a different shape in this icon set, so the
+                  pair this used to make swapped two unrelated glyphs on one button. */}
+              {torch ? <Flash className="h-5 w-5" /> : <FlashOff className="h-5 w-5" />}
             </button>
           )}
         </div>

@@ -1,6 +1,6 @@
 'use client';
 
-import { Camera } from 'lucide-react';
+import { Camera } from './icons';
 import { cn } from '../lib/utils';
 import { Button } from './ui/button';
 

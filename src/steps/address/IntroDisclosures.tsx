@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { ChevronDown, HelpCircle, ShieldCheck, SlidersHorizontal } from 'lucide-react';
+import { ChevronDown, HelpCircle, ShieldCheck, SlidersHorizontal } from '../../components/icons';
 import { cn } from '../../lib/utils';
 
 /**

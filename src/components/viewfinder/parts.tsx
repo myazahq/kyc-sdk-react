@@ -1,4 +1,4 @@
-import { ScanLine, Loader2 } from 'lucide-react';
+import { ScanLine, Loader2 } from '../icons';
 import { CountryFlag } from '../CountryFlag';
 import { cn } from '../../lib/utils';
 

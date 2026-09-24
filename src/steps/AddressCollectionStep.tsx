@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { PencilLine } from 'lucide-react';
+import { PencilLine } from '../components/icons';
 import { cn } from '../lib/utils';
 import { AddressMap } from '../components/AddressMap';
 import { StepHeader } from '../components/StepHeader';

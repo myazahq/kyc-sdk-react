@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Check } from 'lucide-react';
+import { Check } from './components/icons';
 import { createKYCApi, type CompletedSessionSummary, type HandoffBootstrapResponse, type KYCApi } from './services/api';
 import { HostedCompleted } from './hosted/HostedCompleted';
 import { HostedFlow } from './hosted/HostedFlow';

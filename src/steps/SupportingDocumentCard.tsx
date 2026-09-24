@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useRef } from 'react';
-import { Check, FileText, Loader2, Upload, X } from 'lucide-react';
+import { Check, FileText, Loader2, Upload, X } from '../components/icons';
 import { UploadedFileThumb } from '../components/UploadedFilePreview';
 import { UPLOAD_HINT } from '../lib/upload-limits';
 import { BUSINESS_DOC_ACCEPTED_MIMES } from './BusinessDocumentSlot';

@@ -2,7 +2,7 @@
 
 import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { collectWebDeviceMetadata } from './utils/device-metadata';
-import { Loader2 } from 'lucide-react';
+import { Loader2 } from './components/icons';
 import { KYCProvider, useKYCContext } from './context/KYCContext';
 
 // Bearer prefix a hosted mount authenticates with (mirrors kyc-core's

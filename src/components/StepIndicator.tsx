@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Check } from 'lucide-react';
+import { Check } from './icons';
 
 import { cn } from '../lib/utils';
 import { fitStepCircles, windowedSteps, type StepSlot } from '../lib/step-window';

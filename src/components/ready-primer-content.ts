@@ -1,4 +1,4 @@
-import { BellRing, IdCard, LocateFixed, MapPin, MapPinned, ScanFace, ScanLine, Sun, Timer, UserRound } from 'lucide-react';
+import { BellRing, IdCard, LocateFixed, MapPin, MapPinned, ScanFace, ScanLine, Sun, Timer, UserRound } from './icons';
 import type { ReadyPrimerProps } from './ReadyPrimer';
 
 /**

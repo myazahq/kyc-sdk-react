@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { Check, X, Crop } from 'lucide-react';
+import { Check, X, Crop } from './icons';
 import { Button } from './ui/button';
 import { cn } from '../lib/utils';
 

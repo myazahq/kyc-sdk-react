@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { FlaskConical } from 'lucide-react';
+import { FlaskConical } from './icons';
 
 import { useKYCConfig } from '../context/KYCConfigContext';
 

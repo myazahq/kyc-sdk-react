@@ -11,7 +11,7 @@
 // register check, which is why selection is an explicit act rather than
 // something that happens as they type.
 import { useEffect, useState } from 'react';
-import { Search, Loader2, Building2, AlertTriangle, PenLine, Filter } from 'lucide-react';
+import { Search, Loader2, Building2, AlertTriangle, PenLine, Filter } from './icons';
 import { Button } from './ui/button';
 import { CountryFlag } from './CountryFlag';
 import { MyazaSelect } from './MyazaSelect';

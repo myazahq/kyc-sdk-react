@@ -6,7 +6,7 @@
 // invisibly: the applicant sees the business confirmed by name before they
 // invest in documents and a selfie, and a company that is not on the register is
 // caught here instead of after all that work.
-import { SearchX, AlertTriangle } from 'lucide-react';
+import { SearchX, AlertTriangle } from './icons';
 import type { BusinessCheckState } from '../context/types';
 
 export function BusinessCheckPanel({ check }: { check: BusinessCheckState }) {

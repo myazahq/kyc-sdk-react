@@ -1,7 +1,7 @@
 'use client';
 
 import React, { Component, type ErrorInfo, type ReactNode } from 'react';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle } from './icons';
 import { Button } from './ui/button';
 
 // Browser-only SDK; consumer bundlers inline process.env.NODE_ENV.

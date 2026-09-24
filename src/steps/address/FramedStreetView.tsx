@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Loader2 } from '../../components/icons';
 import { Button } from '../../components/ui/button';
 import { StickyActions } from '../../components/StickyActions';
 import {

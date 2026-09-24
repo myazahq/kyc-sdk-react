@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Loader2 } from 'lucide-react';
+import { Loader2 } from '../components/icons';
 
 /**
  * Held while the register is reconciled against what the applicant typed.

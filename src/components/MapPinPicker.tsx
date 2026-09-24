@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Minus, Plus } from 'lucide-react';
+import { Minus, Plus } from './icons';
 import { MapPinMarker } from './MapPinMarker';
 import {
   MAX_ZOOM,

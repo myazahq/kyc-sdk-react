@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { ChevronRight, Loader2, LocateFixed, MapPin } from 'lucide-react';
+import { ChevronRight, Loader2, LocateFixed, MapPin } from '../../components/icons';
 import { cn } from '../../lib/utils';
 
 /**

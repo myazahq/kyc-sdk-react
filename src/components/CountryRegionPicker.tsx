@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
-import { ChevronRight, Search } from 'lucide-react';
+import { ChevronRight, Search } from './icons';
 import { cn } from '../lib/utils';
 import { CountryFlag } from './CountryFlag';
 import { groupCountriesByRegion, regionCountryName } from '../lib/regions';

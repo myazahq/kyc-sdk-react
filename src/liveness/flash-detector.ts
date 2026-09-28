@@ -92,8 +92,12 @@ async function sampleWindow(
 }
 
 /**
- * Run the full flash sequence. `setColor` paints/clears the fullscreen overlay
- * (null = neutral). `isActive` lets the caller abort (unmount/retry).
+ * Run the full flash sequence. `setColor` paints the fullscreen overlay; null
+ * asks for the NEUTRAL baseline between colours, which the step paints BLACK
+ * while the sequence runs (liveness/flash-overlay.ts). Each colour must ADD
+ * light relative to that baseline, and a white step UI behind it (bright
+ * screen during the selfie) would make a colour remove light instead.
+ * `isActive` lets the caller abort (unmount/retry).
  */
 export async function runFlashSequence(
   video: HTMLVideoElement,
@@ -135,11 +139,12 @@ export async function runFlashSequence(
   }
 
   const total = sequence.length;
-  // Inconclusive (ambient too bright to measure ANY flash) fails soft: the
-  // caller decides — in 'both' mode gestures already passed; in 'flash' mode
-  // we accept rather than lock out users in daylight (documented trade-off).
+  // Inconclusive (no flash could be measured at all) is NOT a pass: bright
+  // ambient light and a phone screen held up to the camera both drown the
+  // reflection. The caller retries, then falls back to gestures
+  // (flash-outcome.ts).
   const inconclusive = measurable === 0;
   const score = total > 0 ? matched / total : 0;
-  const passed = inconclusive || matched >= Math.max(1, Math.ceil(measurable * 0.66));
+  const passed = !inconclusive && matched >= Math.max(1, Math.ceil(measurable * 0.66));
   return { passed, score, sequence: sequence.map((s) => s.name), matched, total, inconclusive };
 }

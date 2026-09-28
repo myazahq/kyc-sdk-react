@@ -5,14 +5,17 @@ import { cn } from "../lib/utils";
 import type { LivenessChallenge } from "../liveness/types";
 
 // ---------------------------------------------------------------------------
-// Animated GIF avatar showing each gesture.
-// GIFs are bundled as data URIs and loaded lazily per gesture so they don't
-// bloat the main bundle — each loads only when its challenge is first shown.
-// Falls back to URL-based loading when assetsBasePath is explicitly provided.
+// Animated avatar showing each gesture.
+// The animations are bundled as data URIs (transparent animated WebP, about
+// 100 KB each) and loaded lazily per gesture so they don't bloat the main
+// bundle — each loads only when its challenge is first shown. Their background
+// is keyed out, so the circle behind them takes the theme's primary colour.
+// Falls back to URL-based loading (the transparent GIFs) when assetsBasePath
+// is explicitly provided.
 // ---------------------------------------------------------------------------
 
-// The flash challenge has no gesture to demonstrate — the avatar hides for it.
-type GestureChallenge = Exclude<LivenessChallenge, "flash">;
+// The flash and the passive hold have no gesture to demonstrate — the avatar hides for them.
+type GestureChallenge = Exclude<LivenessChallenge, "flash" | "hold">;
 
 const LABEL_MAP: Record<GestureChallenge, string> = {
 	nod: "Nod your head up and down",
@@ -24,10 +27,10 @@ const LABEL_MAP: Record<GestureChallenge, string> = {
 // Lazy loaders — each is a separate chunk in the ESM build (code splitting).
 // Imported as data URIs by esbuild so no static file serving is needed.
 const GIF_LOADERS: Record<GestureChallenge, () => Promise<{ default: string }>> = {
-	nod: () => import("../../gifs/Nod.gif"),
-	turn: () => import("../../gifs/Turn.gif"),
-	blink: () => import("../../gifs/Blink.gif"),
-	smile: () => import("../../gifs/Smile.gif"),
+	nod: () => import("../../gifs/Nod.webp"),
+	turn: () => import("../../gifs/Turn.webp"),
+	blink: () => import("../../gifs/Blink.webp"),
+	smile: () => import("../../gifs/Smile.webp"),
 };
 
 interface LivenessAvatarProps {
@@ -48,9 +51,9 @@ export function LivenessAvatar({
 	assetsBasePath,
 	className,
 }: LivenessAvatarProps) {
-	// Flash has no demonstrable gesture — treat it as "no avatar".
+	// Flash and the passive hold have no demonstrable gesture — treat them as "no avatar".
 	const gesture: GestureChallenge | null =
-		rawGesture === "flash" ? null : rawGesture;
+		rawGesture === "flash" || rawGesture === "hold" ? null : rawGesture;
 	const [displayed, setDisplayed] = useState<GestureChallenge | null>(gesture);
 	const [slideState, setSlideState] = useState<"in" | "out-left" | "in-right">(
 		"in",
@@ -123,7 +126,7 @@ export function LivenessAvatar({
 						"translate-x-0 opacity-100 animate-avatar-slide-in",
 					slideState === "in" && "translate-x-0 opacity-100",
 				)}>
-				<div className='h-32 w-32 overflow-hidden rounded-full'>
+				<div className='h-32 w-32 overflow-hidden rounded-full bg-primary/10'>
 					{g && src && (
 						<img
 							src={src}

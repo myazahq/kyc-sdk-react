@@ -8,7 +8,6 @@ import {
   IdCard,
   Contact,
   BookUser,
-  Car,
 } from '../components/icons';
 import { StepHeader } from '../components/StepHeader';
 import { Card } from '../components/ui/card';
@@ -21,6 +20,7 @@ import { multiIdEvidenceStep, multiIdPlan } from '../lib/multi-id';
 import { applicantCountryOptions, applicantSelfCountry } from '../lib/business-application';
 import type { AnyIdType, AnyCountry, IdTypeDefinition } from '../types/config';
 import { defaultCountry } from '../lib/country-default';
+import { useText } from '../i18n';
 
 // Keyed by idType key, so the generic Global-Documents types (passport /
 // drivers-license / national-id) get sensible icons in ANY country; unknown
@@ -30,7 +30,7 @@ const ID_TYPE_ICONS: Record<string, React.ComponentType<{ className?: string }>>
   nin: Fingerprint,
   vnin: Fingerprint,
   passport: BookUser,
-  'drivers-license': Car,
+  'drivers-license': IdCard, // an ID card, like the other licences and cards
   pvc: Contact, // Permanent Voter's Card
   'ghana-card': IdCard,
   voters: Contact,
@@ -48,6 +48,7 @@ interface IdTypeStepProps {
 export function IdTypeStep({ country, allowedIdTypes }: IdTypeStepProps = {}) {
   const { state, dispatch } = useKYCContext();
   const config = useKYCConfig();
+  const t = useText();
   const { serverConfig } = config;
 
   // Which country's documents to offer. A named country wins; failing that the
@@ -162,19 +163,19 @@ export function IdTypeStep({ country, allowedIdTypes }: IdTypeStepProps = {}) {
   return (
     <div className="space-y-6 animate-slide-up">
       <StepHeader
-        title="Select ID Type"
-        description="Choose the type of identification document you'd like to use."
+        title={t('selectDocument.idType.title')}
+        description={t('selectDocument.idType.description')}
         onBack={handleBack}
         country={resolvedCountry}
       />
 
       {serverConfig.status === 'loading' ? (
         <div className="flex flex-col items-center justify-center py-10 text-sm text-muted-foreground">
-          Loading available ID types…
+          {t('selectDocument.idType.loading')}
         </div>
       ) : serverConfig.status === 'ready' && visibleTypes.length === 0 ? (
         <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
-          No ID types are enabled for your organization. Contact your administrator to request access.
+          {t('selectDocument.idType.empty')}
         </div>
       ) : null}
 

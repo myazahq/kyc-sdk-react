@@ -3,6 +3,8 @@ import type { ResolvedBiometricCopy } from '../lib/biometric-copy';
 import type { WorkflowScope } from '../lib/scope';
 import type { ApplicantOutcome } from '../services/api';
 import type { TerminalTone } from './SubmittedScreens';
+import { defaultText } from '../i18n/translate';
+import type { TextFn } from '../i18n/types';
 
 // ─── What a DECIDED session says when its applicant comes back ──────────────
 //
@@ -22,25 +24,14 @@ export interface DecidedCopy {
 
 type Kind = 'business' | 'individual' | Exclude<WorkflowScope, 'biometric-authentication'>;
 
-const CONTACT_ORG = 'Contact the organisation that sent you this link to find out what happens next.';
-const NOTHING_LEFT = 'There is nothing left to do here.';
-
-const VERIFIED: Record<Kind, string> = {
-  business: 'This business has been verified.',
-  individual: 'Your identity has been verified.',
-  address: 'Your address has been verified.',
-  'biometric-enrollment': 'Your face has been saved as the reference for your future face checks.',
-  questionnaire: 'Your answers have been received.',
-  contact: 'Your contact details have been verified.',
-};
-
-const NOT_VERIFIED: Record<Kind, string> = {
-  business: 'This business could not be verified.',
-  individual: 'Your identity could not be verified.',
-  address: 'Your address could not be verified.',
-  'biometric-enrollment': 'Your face enrolment could not be completed.',
-  questionnaire: 'Your answers could not be accepted.',
-  contact: 'Your contact details could not be verified.',
+/** The catalogue's name for each kind (result.completed.*.description.<kind>). */
+const KIND_KEY: Record<Kind, string> = {
+  business: 'business',
+  individual: 'individual',
+  address: 'address',
+  'biometric-enrollment': 'faceEnrolment',
+  questionnaire: 'questionnaire',
+  contact: 'contact',
 };
 
 const TONE_OF: Record<ResultTone, TerminalTone> = { success: 'success', error: 'declined', info: 'neutral' };
@@ -58,26 +49,26 @@ export interface DecidedContext {
  * The verdict copy, or null when nothing has been decided: `submitted` keeps
  * the org's own success copy, since overriding it would be a downgrade.
  */
-export function decidedCopy(outcome: ApplicantOutcome, ctx: DecidedContext): DecidedCopy | null {
+export function decidedCopy(
+  outcome: ApplicantOutcome,
+  ctx: DecidedContext,
+  t: TextFn = defaultText,
+): DecidedCopy | null {
   switch (outcome) {
     case 'submitted':
       return null;
     case 'action_needed':
       return {
         tone: 'neutral',
-        title: 'More information needed',
-        description:
-          ctx.reason ||
-          'Some details need to be provided again. The organisation that sent you this link will have shared a new link to continue.',
+        title: t('result.completed.actionNeeded.title'),
+        description: ctx.reason || t('result.completed.actionNeeded.description'),
       };
     // Ours, not theirs, so it says so rather than reading as a rejection.
     case 'error':
       return {
         tone: 'neutral',
-        title: 'Something went wrong on our side',
-        description:
-          ctx.reason ||
-          'This verification could not be completed because of a problem at our end. Nothing was charged. Contact the organisation that sent you this link.',
+        title: t('result.completed.error.title'),
+        description: ctx.reason || t('result.completed.error.description'),
       };
     case 'approved':
     case 'declined': {
@@ -85,20 +76,24 @@ export function decidedCopy(outcome: ApplicantOutcome, ctx: DecidedContext): Dec
       // default, the org's own copy, and a declined description that wins over
       // the server's reason, exactly as describeOutcome decides it there.
       if (ctx.scope === 'biometric-authentication') {
-        const r = describeOutcome({ kind: 'settled', status: outcome, reason: ctx.reason, reasonCode: null }, ctx.words);
+        const r = describeOutcome({ kind: 'settled', status: outcome, reason: ctx.reason, reasonCode: null }, ctx.words, t);
         return { tone: TONE_OF[r.tone], title: r.title, description: r.description };
       }
       const kind: Kind = ctx.scope ?? (ctx.isBusiness ? 'business' : 'individual');
       return outcome === 'approved'
         ? {
             tone: 'success',
-            title: kind === 'biometric-enrollment' ? 'Enrolment complete' : 'Verification complete',
-            description: ctx.reason || `${VERIFIED[kind]} ${NOTHING_LEFT}`,
+            title: t(
+              kind === 'biometric-enrollment'
+                ? 'result.completed.approved.title.faceEnrolment'
+                : 'result.completed.approved.title',
+            ),
+            description: ctx.reason || t(`result.completed.approved.description.${KIND_KEY[kind]}`),
           }
         : {
             tone: 'declined',
-            title: 'Verification unsuccessful',
-            description: ctx.reason || `${NOT_VERIFIED[kind]} ${CONTACT_ORG}`,
+            title: t('result.completed.declined.title'),
+            description: ctx.reason || t(`result.completed.declined.description.${KIND_KEY[kind]}`),
           };
     }
   }

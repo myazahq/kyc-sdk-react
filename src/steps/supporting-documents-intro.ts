@@ -1,3 +1,6 @@
+import { defaultText } from '../i18n/translate';
+import type { TextFn } from '../i18n/types';
+
 /**
  * The line under "Supporting documents", from what the flow is actually
  * asking for.
@@ -10,6 +13,7 @@
  */
 export function supportingDocumentsIntro(
   slots: ReadonlyArray<{ required: boolean }>,
+  t: TextFn = defaultText,
 ): string {
   const total = slots.length;
   const required = slots.filter((slot) => slot.required).length;
@@ -17,17 +21,17 @@ export function supportingDocumentsIntro(
   // Nothing is compulsory, so the honest line is that the step can be skipped.
   if (required === 0) {
     return total === 1
-      ? 'Upload this document if you have it, so we can keep it on file. You can skip it.'
-      : 'Upload any of these you have, so we can keep them on file. You can skip the rest.';
+      ? t('supportingDocuments.intro.optional.one')
+      : t('supportingDocuments.intro.optional.many');
   }
 
   if (required === total) {
     return total === 1
-      ? 'We need this document to continue. Upload it below.'
-      : `We need all ${total} of these documents to continue. Upload one for each item below.`;
+      ? t('supportingDocuments.intro.required.one')
+      : t('supportingDocuments.intro.required.all', { total });
   }
 
   // Mixed, and the only case where the asterisk earns its place on the screen.
   // The noun agrees with the TOTAL, which is always two or more here.
-  return `We need ${required} of these ${total} documents to continue, marked with *. Upload the others if you have them.`;
+  return t('supportingDocuments.intro.mixed', { required, total });
 }

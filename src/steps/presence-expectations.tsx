@@ -3,6 +3,7 @@
 import React from 'react';
 import { BellRing, MapPinCheck, Radar } from '../components/icons';
 import { cn } from '../lib/utils';
+import { useText, type TextFn } from '../i18n';
 
 // The success screen's presence card, drawn as a LIVE process rather than a
 // notice: a pulsing "active" badge (the check began the moment they submitted)
@@ -10,37 +11,39 @@ import { cn } from '../lib/utils';
 // the later ones waiting their turn. The card should feel like something is
 // already quietly working, because it is.
 
-const MILESTONES: Array<{
+const milestones = (t: TextFn): Array<{
   Icon: typeof BellRing;
   stage: string;
   title: string;
   caption: string;
   state: 'active' | 'ahead';
-}> = [
+}> => [
   {
     Icon: MapPinCheck,
-    stage: 'Today',
-    title: 'Check started',
-    caption: 'Your pin is saved. Keep location on.',
+    stage: t('address.presence.step1.stage'),
+    title: t('address.presence.step1.title'),
+    caption: t('address.presence.step1.caption'),
     state: 'active',
   },
   {
     Icon: Radar,
-    stage: 'Next few days',
-    title: 'Quiet check-ins',
-    caption: 'Your phone confirms it is at your address now and then.',
+    stage: t('address.presence.step2.stage'),
+    title: t('address.presence.step2.title'),
+    caption: t('address.presence.step2.caption'),
     state: 'ahead',
   },
   {
     Icon: BellRing,
-    stage: 'Then',
-    title: 'Confirmed',
-    caption: 'You get a notification. That is it.',
+    stage: t('address.presence.step3.stage'),
+    title: t('address.presence.step3.title'),
+    caption: t('address.presence.step3.caption'),
     state: 'ahead',
   },
 ];
 
 export function PresenceExpectations() {
+  const t = useText();
+  const MILESTONES = milestones(t);
   return (
     <div className="overflow-hidden rounded-2xl border border-primary/15 text-left">
       {/* Header band: alive, not archival. */}
@@ -50,12 +53,10 @@ export function PresenceExpectations() {
             <span className="absolute h-2 w-2 rounded-full bg-primary/60 animate-ping" />
             <span className="relative h-2 w-2 rounded-full bg-primary" />
           </span>
-          Address check active
+          {t('address.presence.badge')}
         </span>
-        <p className="text-sm font-semibold">Your address confirms itself from here</p>
-        <p className="text-xs text-muted-foreground">
-          Nothing else for you to do. Carry on as normal.
-        </p>
+        <p className="text-sm font-semibold">{t('address.presence.title')}</p>
+        <p className="text-xs text-muted-foreground">{t('address.presence.description')}</p>
       </div>
 
       {/* The track: vertical rail on phones, three-up on wider screens. */}

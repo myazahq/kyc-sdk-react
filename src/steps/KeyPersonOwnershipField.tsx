@@ -6,6 +6,7 @@ import { Label } from '../components/ui/label';
 import { cn } from '../lib/utils';
 import type { KeyPersonEntry } from '../context/types';
 import type { KeyPersonRole } from '../types/business';
+import { useText } from '../i18n';
 
 /** Whether the role is an ownership one (% field is only meaningful then). */
 function isOwnerRole(role: KeyPersonRole): boolean {
@@ -29,6 +30,7 @@ export function KeyPersonOwnershipField({
   uboThreshold: number;
   combinedPctError: string | null;
 }) {
+  const t = useText();
   const corp = entry.isCorporate;
   const pct = entry.ownershipPct.trim();
   const pctNum = Number(pct);
@@ -43,7 +45,8 @@ export function KeyPersonOwnershipField({
   return (
     <div className="space-y-2">
       <Label htmlFor="kp-sheet-pct">
-        Ownership % <span className="text-muted-foreground">(optional)</span>
+        {t('keyPeople.form.ownership.label')}{' '}
+        <span className="text-muted-foreground">{t('keyPeople.form.optional')}</span>
       </Label>
       <div className="relative">
         {/* Native spinners hidden: the % suffix takes their corner, and a
@@ -86,13 +89,15 @@ export function KeyPersonOwnershipField({
         data-vaul-no-drag=""
         className="w-full cursor-pointer accent-primary"
       />
-      {pctInvalid && <p className="text-sm text-destructive">Enter a value between 0 and 100.</p>}
+      {pctInvalid && (
+        <p className="text-sm text-destructive">{t('keyPeople.form.ownership.errorRange')}</p>
+      )}
       {!pctInvalid && combinedPctError && (
         <p className="text-sm text-destructive">{combinedPctError}</p>
       )}
       {uboHint && (
         <p className="text-xs text-muted-foreground">
-          At {uboThreshold}% or more, this person counts as a beneficial owner.
+          {t('keyPeople.form.ownership.uboHint', { threshold: uboThreshold })}
         </p>
       )}
       {/* The company fact moved to the form-level callout (KeyPersonForm),

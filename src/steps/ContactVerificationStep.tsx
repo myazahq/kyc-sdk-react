@@ -1,15 +1,12 @@
 'use client';
 
 import React, { useRef, useState } from 'react';
-import { CheckCircle2, Loader2, Mail, Smartphone } from '../components/icons';
+import { CircleCheck, Loader2, Mail, Smartphone } from '../components/icons';
 import { StepHeader } from '../components/StepHeader';
 import { Button } from '../components/ui/button';
-import { ContactChannelPicker } from '../components/ContactChannelPicker';
-import {
-  channelLabel,
-  offeredPhoneChannels,
-  type PhoneOtpChannel,
-} from '../lib/contact-channels';
+import { ContactChannelPicker, channelName } from '../components/ContactChannelPicker';
+import { offeredPhoneChannels, type PhoneOtpChannel } from '../lib/contact-channels';
+import { useText } from '../i18n';
 import { ContactDestinationField } from './ContactDestinationField';
 import { ContactCodePanel } from './ContactCodePanel';
 import { stepAfterContactVerified } from './contact-recovery';
@@ -29,6 +26,7 @@ const DEFAULT_CODE_LENGTH = 6;
 export function ContactVerificationStep({ channel }: { channel: 'email' | 'phone' }) {
   const { state, dispatch } = useKYCContext();
   const config = useKYCConfig();
+  const t = useText();
   const isEmail = channel === 'email';
   const stepConfig = isEmail ? config.emailVerification : config.phoneVerification;
   const required = stepConfig?.required !== false;
@@ -104,7 +102,7 @@ export function ContactVerificationStep({ channel }: { channel: 'email' | 'phone
       setExpiresAt(res.expiresAt ?? null);
       setCode('');
     } catch (err) {
-      setError(describeSendError(err));
+      setError(describeSendError(err, t));
     } finally {
       setBusy(false);
     }
@@ -130,7 +128,7 @@ export function ContactVerificationStep({ channel }: { channel: 'email' | 'phone
       dispatch({ type: 'SET_CONTACT_PROOF', payload: { channel, token: res.token, destination } });
       advance();
     } catch (err) {
-      setError(describeCheckError(err));
+      setError(describeCheckError(err, t));
     } finally {
       setBusy(false);
     }
@@ -141,29 +139,26 @@ export function ContactVerificationStep({ channel }: { channel: 'email' | 'phone
   return (
     <div className="space-y-6 animate-slide-up">
       <StepHeader
-        title={isEmail ? 'Verify your email' : 'Verify your phone number'}
-        description={
-          challengeId
-            ? `Enter the ${codeLength}-digit code we sent to ${destination}${isEmail ? '' : ` by ${channelLabel(via)}`}.`
-            : isEmail
-              ? "We'll send a one-time code to confirm this email belongs to you."
-              : `We'll send a one-time code by ${channelLabel(via)} to confirm this number belongs to you.`
-        }
+        title={t(isEmail ? 'contact.email.title' : 'contact.phone.title')}
+        description={t(
+          `contact.${channel}.${challengeId ? 'codeSent' : 'intro'}`,
+          { codeLength, destination, channel: channelName(via, t) },
+        )}
       />
 
       {recovery && !alreadyVerified && (
         <div className="rounded-xl bg-secondary/15 p-4 text-sm">
-          Your earlier confirmation has expired, so please verify{' '}
-          {isEmail ? 'your email' : 'your number'} once more. Everything else is saved, and we will
-          submit again straight after.
+          {t(`contact.${channel}.recovery`)}
         </div>
       )}
 
       {alreadyVerified ? (
         <div className="flex items-center gap-3 rounded-xl bg-primary/5 p-4">
-          <CheckCircle2 className="h-5 w-5 shrink-0 text-primary" />
+          <CircleCheck className="h-5 w-5 shrink-0 text-primary" />
           <p className="text-sm font-medium">
-            {isEmail ? state.contact.emailAddress : state.contact.phoneNumber} is verified.
+            {t('contact.verified', {
+              destination: isEmail ? state.contact.emailAddress : state.contact.phoneNumber,
+            })}
           </p>
         </div>
       ) : !challengeId ? (
@@ -205,7 +200,7 @@ export function ContactVerificationStep({ channel }: { channel: 'email' | 'phone
       <div className="space-y-3">
         {alreadyVerified ? (
           <Button className="w-full" onClick={advance}>
-            Continue
+            {t('common.continue')}
           </Button>
         ) : (
           <Button
@@ -214,7 +209,7 @@ export function ContactVerificationStep({ channel }: { channel: 'email' | 'phone
             disabled={busy || (challengeId ? code.trim().length < 4 : !canSend)}
           >
             {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {challengeId ? 'Verify code' : 'Send code'}
+            {t(challengeId ? 'contact.verifyCode' : 'contact.sendCode')}
           </Button>
         )}
         {!required && !alreadyVerified && (
@@ -223,14 +218,14 @@ export function ContactVerificationStep({ channel }: { channel: 'email' | 'phone
             className="mx-auto block w-fit text-sm text-muted-foreground hover:text-foreground"
             onClick={advance}
           >
-            Skip for now
+            {t('contact.skip')}
           </button>
         )}
       </div>
 
       <p className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
         <Icon className="h-3 w-3" />
-        {isEmail ? 'We only use this to verify your identity.' : 'Standard message rates may apply.'}
+        {t(`contact.${channel}.footer`)}
       </p>
     </div>
   );

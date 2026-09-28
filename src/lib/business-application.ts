@@ -16,29 +16,18 @@ import type { KYCStep, QuestionnaireConfig, AddressCollectionConfig } from '../t
 import type { KeyPersonEntry } from '../context/types';
 import { hasActiveQuestionnaire } from './questionnaire';
 import { isValidContactEmail } from './business';
+import { defaultText } from '../i18n/translate';
+import type { TextFn } from '../i18n/types';
+import { businessDocumentLabel } from './business-labels';
 
-/** Default display labels per document key (server contract). */
-export const BUSINESS_DOCUMENT_LABELS: Record<BusinessDocumentKey, string> = {
-  incorporation_certificate: 'Certificate of incorporation',
-  memart: 'MEMART / articles of association',
-  proof_of_address: 'Proof of business address',
-  tax_document: 'Tax document',
-  regulatory_license: 'Regulatory license',
-  board_resolution: 'Board resolution',
-  other: 'Other document',
-};
-
-export const KEY_PERSON_ROLE_LABELS: Record<KeyPersonRole, string> = {
-  director: 'Director',
-  beneficial_owner: 'Beneficial owner (UBO)',
-  signatory: 'Signatory',
-  shareholder: 'Shareholder',
-};
-
-export const APPLICANT_ROLE_LABELS: Record<ApplicantRole, string> = {
-  ...KEY_PERSON_ROLE_LABELS,
-  authorized_representative: 'Authorized representative',
-};
+export {
+  APPLICANT_ROLE_LABELS,
+  BUSINESS_DOCUMENT_LABELS,
+  KEY_PERSON_ROLE_LABELS,
+  applicantRoleLabel,
+  businessDocumentLabel,
+  keyPersonRoleLabel,
+} from './business-labels';
 
 /** UI cap on applicant-entered key-people rows (server accepts ≤20). */
 export const MAX_KEY_PEOPLE_ROWS = 10;
@@ -74,6 +63,7 @@ export interface ResolvedBusinessDocumentType {
  */
 export function resolveBusinessDocumentTypes(
   business: WorkflowBusinessConfig | undefined,
+  t: TextFn = defaultText,
 ): ResolvedBusinessDocumentType[] {
   if (!hasBusinessDocumentsStep(business)) return [];
   const types = business?.documents?.types;
@@ -81,15 +71,15 @@ export function resolveBusinessDocumentTypes(
     return [
       {
         key: 'incorporation_certificate',
-        label: BUSINESS_DOCUMENT_LABELS.incorporation_certificate,
+        label: businessDocumentLabel('incorporation_certificate', t),
         required: true,
       },
     ];
   }
-  return types.map((t) => ({
-    key: t.key,
-    label: t.label ?? BUSINESS_DOCUMENT_LABELS[t.key] ?? t.key,
-    required: t.required === true,
+  return types.map((type) => ({
+    key: type.key,
+    label: type.label ?? businessDocumentLabel(type.key, t),
+    required: type.required === true,
   }));
 }
 

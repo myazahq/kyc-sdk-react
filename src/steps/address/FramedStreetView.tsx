@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2 } from '../../components/icons';
 import { Button } from '../../components/ui/button';
 import { StickyActions } from '../../components/StickyActions';
+import { useText } from '../../i18n';
 import {
   buildStreetViewFrameSrc,
   frameOriginOf,
@@ -46,6 +47,7 @@ export function FramedStreetView({
   /** No coverage, no grant, or no page — fall back to the photo. */
   onUnavailable: () => void;
 }) {
+  const t = useText();
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const frame = useRef<HTMLDivElement>(null);
   const viewport = useRef<HTMLDivElement>(null);
@@ -134,25 +136,23 @@ export function FramedStreetView({
               aria-hidden
             />
             <span className="absolute -top-10 left-1/2 z-20 -translate-x-1/2 whitespace-nowrap rounded-full bg-black/65 px-3 py-1.5 text-xs font-medium text-white backdrop-blur-sm">
-              Fit your entrance in the frame
+              {t('address.entrance.framePill')}
             </span>
           </div>
         )}
       </div>
       {status === 'ready' && (
-        <p className="text-center text-xs text-muted-foreground">
-          Drag to look around until your gate or front door sits inside the frame.
-        </p>
+        <p className="text-center text-xs text-muted-foreground">{t('address.entrance.frameHint')}</p>
       )}
       <StickyActions>
         <div className="flex gap-2">
           {!hideSkip && (
             <Button variant="outline" onClick={onSkip} className="h-11 flex-1 rounded-xl">
-              Skip
+              {t('common.skip')}
             </Button>
           )}
           <Button onClick={capture} disabled={status !== 'ready'} className="h-11 flex-1 rounded-xl">
-            Use this view
+            {t('address.entrance.useView')}
           </Button>
         </div>
       </StickyActions>

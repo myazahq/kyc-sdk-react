@@ -2,31 +2,24 @@
 
 import { useState } from "react";
 import { Check, ImageUp, RotateCcw, X, ZoomIn } from '../components/icons';
-
 import { Button } from "../components/ui/button";
+import { useText } from "../i18n";
+import { retakeLabelKey, type CaptureSide } from "../lib/document-capture-check";
 import { cn } from "../lib/utils";
 
 // ─── Document review ──────────────────────────────────────────────────────────
-//
-// What the user sees once their document is captured.
-//
-// The two-sided version used to stack the sides full-width with a retake button
-// under each, which on a phone pushed the back image AND the Continue button
-// below the fold — people reported not realising there was anything more to do.
-// A review screen whose primary action you have to discover by scrolling is a
-// dead end, so the layout is now:
-//
-//   • both sides SIDE BY SIDE at every breakpoint, so "both captured" is
-//     apparent at a glance rather than by scrolling;
-//   • retake as a NAMED button under each thumbnail — it was briefly an icon
-//     on the image, which is both below a usable tap target and unreadable as
-//     a button; the photo carries labels, the actions carry words;
-//   • the action bar PINNED to the bottom of the step, so Continue is visible
-//     no matter how tall the content gets;
-//   • tap a thumbnail to enlarge it — side by side means smaller, and checking
+// What the user sees once their document is captured. Stacking the sides
+// full-width pushed the back image AND Continue below the fold on a phone, and
+// people did not realise there was more to do. So the layout is now:
+//   • both sides SIDE BY SIDE at every breakpoint, "both captured" at a glance;
+//   • retake as a NAMED button under each thumbnail (an icon on the image was
+//     below a usable tap target); the photo carries labels, actions carry words;
+//   • the action bar PINNED to the bottom, so Continue is always visible;
+//   • tap a thumbnail to enlarge it: side by side means smaller, and checking
 //     a capture is legible is the whole point of this screen.
 
 interface Side {
+	side: CaptureSide;
 	src: string;
 	label: string;
 	onRetake: () => void;
@@ -56,15 +49,22 @@ export function DocumentReview({
 	source = "camera",
 	children,
 }: DocumentReviewProps) {
+	const t = useText();
 	const [zoomed, setZoomed] = useState<Side | null>(null);
 	const uploaded = source === "upload";
 	const ActionIcon = uploaded ? ImageUp : RotateCcw;
+	const actionLabel = t(uploaded ? "uploadDocument.replace" : "common.retake");
 
 	const sides: Side[] = [
-		{ src: front, label: "Front", onRetake: onRetakeFront },
-		...(back ? [{ src: back, label: "Back", onRetake: onRetakeBack }] : []),
+		{ side: "front", src: front, label: t("uploadDocument.review.front"), onRetake: onRetakeFront },
+		...(back ? [{ side: "back" as const, src: back, label: t("uploadDocument.review.back"), onRetake: onRetakeBack }] : []),
 	];
 	const isTwoSided = sides.length > 1;
+	const confirmation = t(
+		isTwoSided ?
+			uploaded ? "uploadDocument.review.bothAdded" : "uploadDocument.review.bothCaptured"
+		: uploaded ? "uploadDocument.review.photoAdded" : "uploadDocument.review.photoCaptured",
+	);
 
 	return (
 		<div className='relative flex min-h-0 flex-1 flex-col'>
@@ -74,7 +74,7 @@ export function DocumentReview({
 				<span className='flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/15'>
 					<Check className='h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400' />
 				</span>
-				{`${isTwoSided ? "Both sides" : "Photo"} ${uploaded ? "added" : "captured"}`}
+				{confirmation}
 			</p>
 
 			<div className='min-h-0 flex-1 overflow-y-auto'>
@@ -86,7 +86,7 @@ export function DocumentReview({
 						isTwoSided ? "grid-cols-2" : "grid-cols-1",
 					)}>
 					{sides.map((side) => (
-						<figure key={side.label} className='space-y-1'>
+						<figure key={side.side} className='space-y-1'>
 							{/* The frame hugs the photo (`w-fit`) instead of the column.
 							    A capped image inside a full-width frame letterboxes, which
 							    on a wide desktop modal means large grey bars and badges
@@ -133,14 +133,14 @@ export function DocumentReview({
 								disabled={isBusy}
 								className='flex h-9 w-full items-center justify-center gap-1.5 rounded-lg text-sm font-medium text-primary transition-colors hover:bg-primary/10 disabled:opacity-40'>
 								<ActionIcon className='h-3.5 w-3.5' />
-								{uploaded ? "Replace" : "Retake"}
+								{actionLabel}
 							</button>
 						</figure>
 					))}
 				</div>
 
 				<p className='mt-1 text-center text-xs text-muted-foreground'>
-					Tap a photo to see it larger.
+					{t("uploadDocument.review.tapToEnlarge")}
 				</p>
 			</div>
 
@@ -191,7 +191,7 @@ export function DocumentReview({
 							retake();
 						}}>
 						<ActionIcon className='h-4 w-4' />
-						{uploaded ? "Replace" : "Retake"} {zoomed.label.toLowerCase()}
+						{t(retakeLabelKey(zoomed.side, uploaded))}
 					</Button>
 				</div>
 			)}

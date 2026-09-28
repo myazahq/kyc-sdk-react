@@ -1,6 +1,7 @@
 import { ScanLine, Loader2 } from '../icons';
 import { CountryFlag } from '../CountryFlag';
 import { cn } from '../../lib/utils';
+import { useText } from '../../i18n';
 
 // The atoms both viewfinders are built from. Extracted so the full-screen and
 // inline layouts differ only in ARRANGEMENT — a desktop capture that drew its
@@ -24,6 +25,7 @@ export function SideBadge({
   className?: string;
   style?: React.CSSProperties;
 }) {
+  const t = useText();
   return (
     <div
       className={cn(
@@ -33,7 +35,7 @@ export function SideBadge({
       )}
       style={{ backgroundColor: primaryColor, ...style }}
     >
-      {side}
+      {t(side === 'back' ? 'uploadDocument.camera.sideBack' : 'uploadDocument.camera.sideFront')}
     </div>
   );
 }

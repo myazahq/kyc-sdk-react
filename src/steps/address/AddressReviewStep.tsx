@@ -11,8 +11,9 @@ import { cn } from '../../lib/utils';
 import { useKYCContext } from '../../context/KYCContext';
 import { useKYCConfig } from '../../context/KYCConfigContext';
 import { useAddressFlow } from './use-address-flow';
-import { ADDRESS_LINE_PENDING, ADDRESS_LINE_UNAVAILABLE, displayAddressLine } from './flow-steps';
-import { ADDRESS_FIELD_LABELS, missingRequiredAddressFields } from './address-field-modes';
+import { ADDRESS_LINE_PENDING, displayAddressLine } from './flow-steps';
+import { missingAddressFieldsMessage, missingRequiredAddressFields } from './address-field-modes';
+import { useText } from '../../i18n';
 import { AddressSandboxOutcome } from './AddressSandboxOutcome';
 
 /**
@@ -25,6 +26,7 @@ import { AddressSandboxOutcome } from './AddressSandboxOutcome';
 export function AddressReviewStep() {
   const { state, dispatch } = useKYCContext();
   const config = useKYCConfig();
+  const t = useText();
   const flow = useAddressFlow();
   const { pin } = flow;
 
@@ -122,8 +124,8 @@ export function AddressReviewStep() {
   return (
     <div className="space-y-4 animate-slide-up">
       <StepHeader
-        title={flow.isBusiness ? 'Confirm the premises' : 'Confirm your address'}
-        description="Check everything is right before you continue."
+        title={t(flow.isBusiness ? 'address.review.title.business' : 'address.review.title')}
+        description={t('address.review.description')}
         onBack={() => flow.goBack('address-review')}
       />
 
@@ -187,7 +189,7 @@ export function AddressReviewStep() {
             <div className="min-w-0 space-y-1">
               <span className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider text-primary">
                 <MapPin className="h-3 w-3" />
-                {flow.isBusiness ? 'Pinned premises' : 'Pinned address'}
+                {t(flow.isBusiness ? 'address.review.badge.business' : 'address.review.badge')}
               </span>
               {/* One shared line with the pin summary + the server's composed
                   address (displayAddressLine) — typed number replaces a
@@ -196,13 +198,13 @@ export function AddressReviewStep() {
                 {/* Never coordinates: an unread pin shows a skeleton line
                     while its address is still coming. */}
                 {!state.address ? (
-                  'No pin placed'
+                  t('address.review.noPin')
                 ) : displayAddressLine(state.address) ? (
                   displayAddressLine(state.address)
                 ) : flow.labelling ? (
                   <LineSkeleton label={ADDRESS_LINE_PENDING} size="base" width="70%" />
                 ) : (
-                  ADDRESS_LINE_UNAVAILABLE
+                  t('address.line.unavailable')
                 )}
               </p>
               {directions && (
@@ -214,7 +216,7 @@ export function AddressReviewStep() {
               onClick={() => edit('address-collection')}
               className="shrink-0 text-sm text-primary underline-offset-4 hover:underline"
             >
-              Edit
+              {t('address.review.edit')}
             </button>
           </div>
         </div>
@@ -225,9 +227,9 @@ export function AddressReviewStep() {
       {flow.error && <p className="text-sm text-destructive">{flow.error}</p>}
       {missingRequired.length > 0 && (
         <p className="text-sm text-destructive">
-          This flow needs: {missingRequired.map((k) => ADDRESS_FIELD_LABELS[k].toLowerCase()).join(', ')}.{' '}
+          {missingAddressFieldsMessage(missingRequired, t)}{' '}
           <button type="button" className="underline underline-offset-2" onClick={() => edit('address-collection')}>
-            Add them
+            {t('address.missingFields.add')}
           </button>
         </p>
       )}
@@ -237,7 +239,7 @@ export function AddressReviewStep() {
         disabled={!pin || flow.confirming || missingRequired.length > 0}
         className="h-12 w-full rounded-xl text-base font-medium"
       >
-        {flow.confirming ? 'Confirming…' : 'Confirm address'}
+        {flow.confirming ? t('address.confirming') : t('address.review.confirm')}
       </Button>
 
       {flow.address?.requirePin !== true && (
@@ -246,7 +248,7 @@ export function AddressReviewStep() {
           onClick={flow.exitForward}
           className="mx-auto block w-fit text-sm text-muted-foreground underline-offset-2 hover:underline"
         >
-          Skip for now
+          {t('address.skip')}
         </button>
       )}
     </div>

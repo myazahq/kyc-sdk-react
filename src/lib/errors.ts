@@ -10,6 +10,8 @@ import { KYCApiError } from '../services/api';
 import { KYCError, type KYCErrorCode } from '../types/verification';
 import { BUSINESS_DOCUMENT_LABELS } from './business-application';
 import type { BusinessDocumentKey } from '../types/business';
+import { defaultText } from '../i18n/translate';
+import type { TextFn } from '../i18n/types';
 
 /** Which operation failed — picks the fallback code for non-HTTP failures. */
 export type ErrorContext = 'upload' | 'verify';
@@ -49,39 +51,15 @@ function toNum(v: unknown): number | undefined {
  * the generic status-code branches so e.g. a 500 `pricing_not_configured`
  * doesn't read as a transient server blip.
  */
-const CODED_ERRORS: Record<string, { code: KYCErrorCode; message: string }> = {
-  workflow_not_found: {
-    code: 'invalid_workflow',
-    message: 'This verification workflow is unavailable. It may have been unpublished — please reload and try again.',
-  },
-  workflow_subject_mismatch: {
-    code: 'invalid_workflow',
-    message: 'This workflow cannot accept a business submission. Contact the organization that sent you here.',
-  },
-  business_verifications_disabled: {
-    code: 'feature_disabled',
-    message: 'Business verification is not enabled for this organization. Contact your administrator to request access.',
-  },
-  country_mismatch: {
-    code: 'invalid_workflow',
-    message: "The submitted country doesn't match this workflow's configuration. Please reload and try again.",
-  },
-  product_unsupported: {
-    code: 'invalid_workflow',
-    message: 'The selected verification product is not offered by this workflow. Please reload and try again.',
-  },
-  registration_name_required: {
-    code: 'unknown',
-    message: 'Please enter the registered business name to continue.',
-  },
-  only_test_ids_allowed: {
-    code: 'unknown',
-    message: 'Sandbox mode accepts only published test registration numbers (e.g. RC0000001 or RC0000002).',
-  },
-  pricing_not_configured: {
-    code: 'unknown',
-    message: 'Verification pricing has not been configured for this organization. Please contact support.',
-  },
+const CODED_ERRORS: Record<string, { code: KYCErrorCode; key: string }> = {
+  workflow_not_found: { code: 'invalid_workflow', key: 'general.error.workflowNotFound' },
+  workflow_subject_mismatch: { code: 'invalid_workflow', key: 'general.error.workflowSubjectMismatch' },
+  business_verifications_disabled: { code: 'feature_disabled', key: 'general.error.businessVerificationsDisabled' },
+  country_mismatch: { code: 'invalid_workflow', key: 'general.error.countryMismatch' },
+  product_unsupported: { code: 'invalid_workflow', key: 'general.error.productUnsupported' },
+  registration_name_required: { code: 'unknown', key: 'general.error.registrationNameRequired' },
+  only_test_ids_allowed: { code: 'unknown', key: 'general.error.onlyTestIdsAllowed' },
+  pricing_not_configured: { code: 'unknown', key: 'general.error.pricingNotConfigured' },
 };
 
 /**
@@ -89,8 +67,9 @@ const CODED_ERRORS: Record<string, { code: KYCErrorCode; message: string }> = {
  * with a user-facing message. `context` selects the fallback code when the
  * failure isn't a specific HTTP status (e.g. a bare network failure during an
  * upload becomes `upload_failed`, during verify becomes `network_error`).
+ * The messages come from the text catalogue (`general.error.*`) through `t`.
  */
-export function mapToKycError(err: unknown, context: ErrorContext): KYCError {
+export function mapToKycError(err: unknown, context: ErrorContext, t: TextFn = defaultText): KYCError {
   if (err instanceof KYCApiError) {
     // 422 missing_documents carries the missing doc keys — name them so the
     // user knows exactly which required business documents to go back for.
@@ -102,16 +81,16 @@ export function mapToKycError(err: unknown, context: ErrorContext): KYCError {
       return new KYCError(
         'unknown',
         labels.length > 0
-          ? `Required business documents are missing: ${labels.join(', ')}. Please go back and upload them.`
-          : 'Some required business documents are missing. Please go back and upload them.',
+          ? t('general.error.missingDocumentsNamed', { documents: labels.join(', ') })
+          : t('general.error.missingDocuments'),
       );
     }
     const coded = err.code ? CODED_ERRORS[err.code] : undefined;
     if (coded) {
-      return new KYCError(coded.code, coded.message);
+      return new KYCError(coded.code, t(coded.key));
     }
     if (err.statusCode === 401) {
-      return new KYCError('invalid_api_key', 'Invalid API key. Please contact support.');
+      return new KYCError('invalid_api_key', t('general.error.invalidApiKey'));
     }
     if (err.statusCode === 402) {
       const body = err.body ?? {};
@@ -120,26 +99,26 @@ export function mapToKycError(err: unknown, context: ErrorContext): KYCError {
       const currency = typeof body.currency === 'string' ? body.currency : undefined;
       const message =
         required !== undefined && balance !== undefined
-          ? `Insufficient credits. Required: $${required.toFixed(2)}, Available: $${balance.toFixed(2)}`
-          : 'Insufficient credits to process this verification.';
+          ? t('general.error.insufficientCreditsAmounts', { required: required.toFixed(2), balance: balance.toFixed(2) })
+          : t('general.error.insufficientCredits');
       return new KYCError('insufficient_credits', message, { required, balance, currency });
     }
     if (err.statusCode === 403) {
       const feature = typeof err.body?.feature === 'string' ? err.body.feature : null;
       const message =
         err.code === 'id_type_not_allowed'
-          ? "This ID type isn't enabled for your organization. Contact your administrator to request access."
+          ? t('general.error.idTypeNotAllowed')
           : feature === 'document_verification'
-            ? 'Document verification is currently disabled for your organization.'
+            ? t('general.error.documentVerificationDisabled')
             : feature === 'gov_db_check'
-              ? 'Government database verification is currently disabled for your organization.'
-              : err.message || 'This verification feature is currently disabled for your organization.';
+              ? t('general.error.govDbCheckDisabled')
+              : err.message || t('general.error.featureDisabled');
       return new KYCError('feature_disabled', message);
     }
     if (err.statusCode >= 500 || err.statusCode === 0) {
       // Transient server error that survived retries.
       const code: KYCErrorCode = context === 'upload' ? 'upload_failed' : 'network_error';
-      return new KYCError(code, 'A server error occurred. Please try again in a moment.');
+      return new KYCError(code, t('general.error.server'));
     }
     // Other 4xx — pass the server message through under the context's code.
     const code: KYCErrorCode = context === 'upload' ? 'upload_failed' : 'unknown';
@@ -147,11 +126,8 @@ export function mapToKycError(err: unknown, context: ErrorContext): KYCError {
   }
   // fetch() throws a TypeError on network failure (offline / DNS / CORS).
   if (err instanceof TypeError) {
-    return new KYCError(
-      'network_error',
-      'Network error. Please check your connection and try again.',
-    );
+    return new KYCError('network_error', t('general.error.network'));
   }
   const code: KYCErrorCode = context === 'upload' ? 'upload_failed' : 'unknown';
-  return new KYCError(code, err instanceof Error ? err.message : 'Something went wrong. Please try again.');
+  return new KYCError(code, err instanceof Error ? err.message : t('general.error.unknown'));
 }

@@ -7,12 +7,14 @@ import { pickedAddressState } from '../address-helpers';
 import { useAddressFlow } from './use-address-flow';
 import { useAddressIntroGate } from './AddressIntroGate';
 import { SearchScreen } from './SearchScreen';
+import { useText } from '../../i18n';
 
 /** Step 1 of the address flow: find the address as words. Every path — a
  *  picked suggestion, the current location, or "place a pin instead" — lands
  *  on the pin step. */
 export function AddressSearchStep() {
   const { state, dispatch } = useKYCContext();
+  const t = useText();
   const flow = useAddressFlow();
   const gate = useAddressIntroGate('address-search', flow.steps[0]!);
 
@@ -32,8 +34,8 @@ export function AddressSearchStep() {
   return (
     <div className="space-y-5 animate-slide-up">
       <StepHeader
-        title="Find your address"
-        description="Search it, use your current location, or place a pin on the map."
+        title={t('address.search.title')}
+        description={t('address.search.description')}
         onBack={() => flow.goBack('address-search')}
       />
       <SearchScreen
@@ -85,7 +87,7 @@ export function AddressSearchStep() {
           onClick={flow.exitForward}
           className="mx-auto block w-fit text-sm text-muted-foreground underline-offset-2 hover:underline"
         >
-          Skip for now
+          {t('address.skip')}
         </button>
       )}
     </div>

@@ -3,6 +3,11 @@
 import React from 'react';
 import { MapPinned } from '../../components/icons';
 import { Button } from '../../components/ui/button';
+import { useText } from '../../i18n';
+
+// Stands in for the label while the sentence is translated, so the label can
+// be drawn in its own weight wherever the translation puts it.
+const SLOT = '\u0001';
 
 interface LabelDecisionRowProps {
   /** The picked address line under question. */
@@ -18,6 +23,8 @@ interface LabelDecisionRowProps {
  * on the pin step only while the question is open (shouldAskLabelDecision).
  */
 export function LabelDecisionRow({ label, onKeep, onAdopt }: LabelDecisionRowProps) {
+  const t = useText();
+  const [before, after = ''] = t('address.labelDecision.body', { label: SLOT }).split(SLOT);
   return (
     <div className="space-y-3 rounded-xl border border-primary/25 bg-primary/[0.05] px-3.5 py-3">
       <div className="flex items-start gap-3">
@@ -25,19 +32,20 @@ export function LabelDecisionRow({ label, onKeep, onAdopt }: LabelDecisionRowPro
           <MapPinned className="h-4 w-4 text-primary" />
         </span>
         <div className="min-w-0">
-          <p className="text-sm font-semibold">You moved the pin</p>
+          <p className="text-sm font-semibold">{t('address.labelDecision.title')}</p>
           <p className="text-xs leading-snug text-muted-foreground">
-            Keep <span className="font-medium text-foreground">{label}</span> as your address, or
-            update it to match the new spot?
+            {before}
+            <span className="font-medium text-foreground">{label}</span>
+            {after}
           </p>
         </div>
       </div>
       <div className="flex gap-2 pl-11">
         <Button onClick={onKeep} className="h-8 rounded-lg px-3 text-xs font-medium">
-          Keep this address
+          {t('address.labelDecision.keep')}
         </Button>
         <Button variant="outline" onClick={onAdopt} className="h-8 rounded-lg px-3 text-xs font-medium">
-          Use the pin&rsquo;s address
+          {t('address.labelDecision.adopt')}
         </Button>
       </div>
     </div>

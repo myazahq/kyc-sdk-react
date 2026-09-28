@@ -12,6 +12,7 @@ import { randomId } from '../../lib/random-id';
 import { useDropdownAnchor } from '../../lib/use-dropdown-anchor';
 import { useKYCConfig } from '../../context/KYCConfigContext';
 import type { PlaceSuggestion } from '../../services/api';
+import { useText } from '../../i18n';
 
 // Screen 1: find the address the way a person holds it — as words. Places
 // autocomplete when the platform has it (as-you-type, debounced, one session
@@ -55,6 +56,7 @@ export function SearchScreen({
   onPinInstead: () => void;
 }) {
   const config = useKYCConfig();
+  const t = useText();
   const autocomplete = config.serverConfig?.addressSearchMode === 'autocomplete';
   const [query, setQuery] = useState('');
   const [busy, setBusy] = useState(false);
@@ -134,7 +136,7 @@ export function SearchScreen({
             <Input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search your address, e.g. 12 Adeola Odeku Street"
+              placeholder={t('address.search.placeholder')}
               className="h-12 rounded-xl pl-9"
               aria-label="Search your address"
               autoFocus
@@ -149,9 +151,7 @@ export function SearchScreen({
               >
                 <div className="overflow-y-auto overscroll-contain" style={{ maxHeight: anchor.maxHeight }}>
                   {suggestions.length === 0 ? (
-                    <p className="px-3 py-2.5 text-sm text-muted-foreground">
-                      No matches. Use your location or place the pin by hand.
-                    </p>
+                    <p className="px-3 py-2.5 text-sm text-muted-foreground">{t('address.search.noMatches')}</p>
                   ) : (
                     suggestions.map((s) => (
                       <button
@@ -188,7 +188,7 @@ export function SearchScreen({
         onClick={onPinInstead}
         className="mx-auto block w-fit text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
       >
-        Place a pin on the map instead
+        {t('address.search.pinInstead')}
       </button>
     </div>
   );

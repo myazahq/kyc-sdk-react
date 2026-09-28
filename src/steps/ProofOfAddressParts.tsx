@@ -1,11 +1,12 @@
 'use client';
 
 import React from 'react';
-import { CheckCircle2, Loader2, Upload, X } from '../components/icons';
+import { CircleCheck, Loader2, Upload, X } from '../components/icons';
 import { UploadedFileThumb } from '../components/UploadedFilePreview';
 import { CountryFlag } from '../components/CountryFlag';
 import { regionCountryName } from '../lib/regions';
-import { UPLOAD_HINT } from '../lib/upload-limits';
+import { useText, type TextFn } from '../i18n';
+import type { PoaDocumentType } from '../types/config';
 
 // Proof of Address — the two states of the attachment area, split out of the
 // step (200-line rule; mirrors RN's ProofOfAddressParts and Flutter's
@@ -17,6 +18,27 @@ import { UPLOAD_HINT } from '../lib/upload-limits';
 // the document kind on the uploaded row, so a person on a multi-market flow
 // sees which market the paper is being read against. Null when the flow does
 // not know it yet (the address scope before a pick) — nothing is invented.
+
+/** Each kind's segment in its `proofOfAddress.kind.*` and `.upload.*` keys. */
+const KIND_KEYS: Record<PoaDocumentType, string> = {
+  utility_bill: 'utilityBill',
+  bank_statement: 'bankStatement',
+  tenancy_agreement: 'tenancyAgreement',
+  government_document: 'governmentDocument',
+  other: 'other',
+};
+
+/** A kind's name. The org's own name for 'other' (otherLabel) wins, as before. */
+export function poaKindLabel(type: PoaDocumentType, otherLabel: string | null, t: TextFn): string {
+  return t(`proofOfAddress.kind.${KIND_KEYS[type]}`, undefined, type === 'other' ? otherLabel : null);
+}
+
+/** The drop zone's call to action for a kind, e.g. "Upload your utility bill". */
+export function poaKindCta(type: PoaDocumentType, otherLabel: string | null, t: TextFn): string {
+  return type === 'other' && otherLabel
+    ? t('proofOfAddress.upload.custom', { document: otherLabel.toLowerCase() })
+    : t(`proofOfAddress.upload.${KIND_KEYS[type]}`);
+}
 
 function Flag({ country, className }: { country: string | null; className: string }) {
   if (!country) return null;
@@ -36,15 +58,16 @@ export function PoaUploadedRow({
   country: string | null;
   onRemove: () => void;
 }) {
+  const t = useText();
   return (
     <div className="flex items-center gap-3 rounded-xl border border-border bg-muted/30 p-4">
       {pickedFile ? (
         <UploadedFileThumb file={pickedFile} label={typeLabel} />
       ) : (
-        <CheckCircle2 className="h-5 w-5 shrink-0 text-[var(--kyc-success,#0DA211)]" />
+        <CircleCheck className="h-5 w-5 shrink-0 text-[var(--kyc-success,#0DA211)]" />
       )}
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium">{fileName || 'Document uploaded'}</p>
+        <p className="truncate text-sm font-medium">{fileName || t('proofOfAddress.uploaded')}</p>
         <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <Flag country={country} className="h-4 w-4 shrink-0" />
           <span className="truncate">{typeLabel}</span>
@@ -65,15 +88,17 @@ export function PoaUploadedRow({
 /** The DASHED drop zone that NAMES the document being asked for. */
 export function PoaDropzone({
   uploading,
-  typeLabel,
+  cta,
   country,
   onPress,
 }: {
   uploading: boolean;
-  typeLabel: string;
+  /** "Upload your utility bill": the call to action naming the kind. */
+  cta: string;
   country: string | null;
   onPress: () => void;
 }) {
+  const t = useText();
   return (
     <button
       type="button"
@@ -88,9 +113,10 @@ export function PoaDropzone({
       )}
       <span className="flex items-center gap-2 text-sm font-medium">
         <Flag country={country} className="h-5 w-5 shrink-0" />
-        {uploading ? 'Uploading…' : `Upload your ${typeLabel.toLowerCase()}`}
+        {uploading ? t('proofOfAddress.uploading') : cta}
       </span>
-      <span className="text-xs text-muted-foreground">{UPLOAD_HINT}</span>
+      {/* Defaults to UPLOAD_HINT, the one constant every drop zone shares. */}
+      <span className="text-xs text-muted-foreground">{t('proofOfAddress.uploadHint')}</span>
     </button>
   );
 }

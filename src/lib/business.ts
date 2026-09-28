@@ -8,6 +8,8 @@
 // ---------------------------------------------------------------------------
 
 import type { KeyPersonRole, SubjectType, WorkflowBusinessConfig } from '../types/business';
+import { defaultText } from '../i18n/translate';
+import type { TextFn } from '../i18n/types';
 
 export interface BusinessProductDef {
   key: string;
@@ -126,13 +128,14 @@ export function businessCountryName(code: string): string {
 
 // Continent per supported registry country — display grouping only (the server
 // owns the real catalogue; unknown codes land in "Other"). Africa first.
-const REGIONS: Array<{ label: string; codes: string[] }> = [
-  { label: 'Africa', codes: ['CI', 'KE', 'MA', 'NG', 'TN', 'TZ', 'YT', 'ZA'] },
-  { label: 'Europe', codes: ['BE', 'BG', 'BY', 'CH', 'CY', 'CZ', 'DE', 'DK', 'EE', 'FI', 'FR', 'GB', 'GG', 'GR', 'IE', 'LV', 'MD', 'MT', 'NL', 'NO', 'PL', 'RO', 'SI', 'SK', 'UA'] },
-  { label: 'Asia', codes: ['AE', 'IL', 'IN', 'JP', 'KZ', 'NP', 'SA', 'TR', 'UZ'] },
-  { label: 'North America', codes: ['CA', 'PR', 'US'] },
-  { label: 'South America', codes: ['AR'] },
-  { label: 'Oceania', codes: ['AU', 'NZ'] },
+// `textKey` is the text key of the continent's heading.
+const REGIONS: Array<{ textKey: string; codes: string[] }> = [
+  { textKey: 'business.country.region.africa', codes: ['CI', 'KE', 'MA', 'NG', 'TN', 'TZ', 'YT', 'ZA'] },
+  { textKey: 'business.country.region.europe', codes: ['BE', 'BG', 'BY', 'CH', 'CY', 'CZ', 'DE', 'DK', 'EE', 'FI', 'FR', 'GB', 'GG', 'GR', 'IE', 'LV', 'MD', 'MT', 'NL', 'NO', 'PL', 'RO', 'SI', 'SK', 'UA'] },
+  { textKey: 'business.country.region.asia', codes: ['AE', 'IL', 'IN', 'JP', 'KZ', 'NP', 'SA', 'TR', 'UZ'] },
+  { textKey: 'business.country.region.northAmerica', codes: ['CA', 'PR', 'US'] },
+  { textKey: 'business.country.region.southAmerica', codes: ['AR'] },
+  { textKey: 'business.country.region.oceania', codes: ['AU', 'NZ'] },
 ];
 
 export interface BusinessCountryGroup {
@@ -141,7 +144,10 @@ export interface BusinessCountryGroup {
 }
 
 /** Group offered registry countries by continent, names A→Z within a group. */
-export function groupBusinessCountries(codes: string[]): BusinessCountryGroup[] {
+export function groupBusinessCountries(
+  codes: string[],
+  t: TextFn = defaultText,
+): BusinessCountryGroup[] {
   const entries = codes.map((code) => ({ code: code.toUpperCase(), name: businessCountryName(code) }));
   const groups: BusinessCountryGroup[] = [];
   const placed = new Set<string>();
@@ -150,10 +156,10 @@ export function groupBusinessCountries(codes: string[]): BusinessCountryGroup[] 
       .filter((e) => region.codes.includes(e.code))
       .sort((a, b) => a.name.localeCompare(b.name));
     countries.forEach((c) => placed.add(c.code));
-    if (countries.length > 0) groups.push({ label: region.label, countries });
+    if (countries.length > 0) groups.push({ label: t(region.textKey), countries });
   }
   const other = entries.filter((e) => !placed.has(e.code)).sort((a, b) => a.name.localeCompare(b.name));
-  if (other.length > 0) groups.push({ label: 'Other', countries: other });
+  if (other.length > 0) groups.push({ label: t('business.country.region.other'), countries: other });
   return groups;
 }
 

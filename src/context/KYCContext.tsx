@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useReducer, useMemo, useEffect, type ReactNode } from 'react';
 import { recordStep } from '../lib/step-log';
 import { normalizeRestoredKeyPeople } from '../lib/key-person-normalize';
+import { withoutUnrecordedSelfie } from '../lib/liveness-resume';
 import { primeDeviceHints } from '../utils/device-metadata';
 import type { KYCState, KYCAction } from './types';
 import { IDLE_SELFIE_UPLOAD } from '../lib/selfie-upload-wait';
@@ -17,6 +18,7 @@ export const initialKYCState: KYCState = {
   status: 'idle',
   isOpen: false,
   sessionId: null,
+  resumedApplication: null,
   selectedCountry: null,
   countryAutoPicked: false,
   selectedIdType: null,
@@ -60,13 +62,22 @@ export function kycReducer(state: KYCState, action: KYCAction): KYCState {
     case 'SET_SESSION_ID':
       return { ...state, sessionId: action.payload };
 
+    case 'SET_RESUMED_APPLICATION':
+      return { ...state, resumedApplication: action.payload };
+
     // Rehydrate a resumed attempt. Merged field-by-field rather than spread
     // wholesale: the payload crosses the network, and blindly assigning it could
     // overwrite control state (isOpen, status) with whatever came back.
     // Previews and video blobs are absent by design — a slot with a mediaId
     // counts as captured even though its thumbnail is gone.
     case 'RESTORE_PROGRESS': {
-      const { step, mediaIds, data } = action.payload;
+      // A selfie whose liveness recording did not survive is taken again
+      // (lib/liveness-resume.ts).
+      const { step, mediaIds } = withoutUnrecordedSelfie({
+        step: action.payload.step,
+        mediaIds: action.payload.mediaIds as Record<string, unknown> | undefined,
+      }) as { step: typeof action.payload.step; mediaIds: typeof action.payload.mediaIds };
+      const { data } = action.payload;
       const d = (data ?? {}) as Partial<KYCState>;
       return {
         ...state,

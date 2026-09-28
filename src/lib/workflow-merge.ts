@@ -25,9 +25,11 @@ const WORKFLOW_KEYS = [
   'enableLiveness',
   'livenessMode',
   'flashSequenceLength',
+  'livenessBrightScreen',
   'deviceIntelligence',
   'deviceHandoff',
   'consentStep',
+  'silentCapture',
   'biometric',
   'requireMobileDevice',
   'voiceGuidance',
@@ -38,6 +40,8 @@ const WORKFLOW_KEYS = [
   'appearance',
   'consent',
   'success',
+  // Custom copy by language then key (see i18n/). Replaced wholesale, like consent.
+  'texts',
   'emailVerification',
   'phoneVerification',
   'questionnaire',
@@ -123,6 +127,7 @@ const APPLICANT_LEG_KEYS = [
   'enableLiveness',
   'livenessMode',
   'flashSequenceLength',
+  'livenessBrightScreen',
   'nfc',
 ] as const;
 

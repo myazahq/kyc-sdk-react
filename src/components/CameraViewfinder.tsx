@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Camera, SwitchCamera, AlertCircle } from './icons';
+import { Camera, SwitchCamera, CircleAlert } from './icons';
 import { Button } from './ui/button';
 import { cn } from '../lib/utils';
 
@@ -40,7 +40,7 @@ export function CameraViewfinder({
         )}
         style={{ aspectRatio: isSelfie ? '3/4' : '16/10' }}
       >
-        <AlertCircle className="h-10 w-10 text-destructive" />
+        <CircleAlert className="h-10 w-10 text-destructive" />
         <p className="text-sm">{error}</p>
         {onRetry && (
           <Button variant="outline" size="sm" onClick={onRetry} className="text-white border-white/30">

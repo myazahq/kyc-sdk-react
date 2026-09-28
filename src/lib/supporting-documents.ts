@@ -105,6 +105,29 @@ export function verifiedIdsFor(input: {
   return [...new Set(ids.map((id) => idComposite(country, id)))];
 }
 
+/**
+ * Whether the flow may ask for a supporting document AT ALL.
+ *
+ * The CONSENT screen's question, deliberately not the step order's.
+ * `hasSupportingDocumentsStep` resolves against the VERIFIED IDS, and consent
+ * runs before an ID is picked — so every SCOPED document answers "nothing to
+ * ask for" there, and a slip scoped to one ID (the commonest case there is)
+ * would go undisclosed.
+ *
+ * Consent is a DISCLOSURE of what MAY be collected: an applicant seeing a
+ * bullet for paperwork they are never asked for is the cheap error, and being
+ * asked for undisclosed paperwork is the real one.
+ *
+ * Still not a raw field check — a disabled step and a nameless entry each
+ * promise nothing, the same two gates the resolver applies.
+ */
+export function mayAskSupportingDocuments(
+  config: SupportingDocumentsConfig | undefined | null,
+): boolean {
+  if (!config?.enabled) return false;
+  return (config.types ?? []).some((entry) => (entry.label ?? '').trim().length > 0);
+}
+
 /** Whether the step has anything to ask for on this attempt. */
 export function hasSupportingDocumentsStep(
   config: SupportingDocumentsConfig | undefined | null,

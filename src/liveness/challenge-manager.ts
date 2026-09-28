@@ -5,6 +5,7 @@
 import {
   CHALLENGE_POOL,
   FLASH_CHALLENGE,
+  HOLD_CHALLENGE,
   type ChallengeConfig,
   type LivenessChallenge,
   type LivenessConfig,
@@ -44,6 +45,8 @@ export function pickChallenges(config: Partial<LivenessConfig> = {}): ChallengeC
 
   // Flash-only mode: no gestures — the single flash challenge IS the check.
   if (merged.mode === 'flash') return [{ ...FLASH_CHALLENGE }];
+  // Passive: no gestures and no flash — hold still while the clip records.
+  if (merged.mode === 'passive') return [{ ...HOLD_CHALLENGE }];
 
   // Filter pool if a subset is specified
   let pool = CHALLENGE_POOL;
@@ -55,12 +58,19 @@ export function pickChallenges(config: Partial<LivenessConfig> = {}): ChallengeC
   const count = Math.min(merged.challengeCount, pool.length);
   const shuffled = shuffle(pool);
 
-  // Greedily pick challenges that aren't similar to already-picked ones
+  // 3D Active Motion: a head TURN is always one of the prompts (wherever it
+  // falls in the random order), because the server's shape-from-movement test
+  // needs one: a turn swings the nose across the face, which a flat picture
+  // cannot do. The rest stay random.
   const picked: ChallengeConfig[] = [];
+  const turn = shuffled.find((c) => c.type === 'turn');
+  if (turn && count > 0) picked.push({ ...turn, timeoutSeconds: merged.timeoutPerChallenge });
+
+  // Greedily pick challenges that aren't similar to already-picked ones
   for (const candidate of shuffled) {
     if (picked.length >= count) break;
     const hasSimilar = picked.some((p) => areSimilar(p.type, candidate.type));
-    if (!hasSimilar) {
+    if (!hasSimilar && !picked.some((p) => p.type === candidate.type)) {
       picked.push({ ...candidate, timeoutSeconds: merged.timeoutPerChallenge });
     }
   }
@@ -75,11 +85,21 @@ export function pickChallenges(config: Partial<LivenessConfig> = {}): ChallengeC
     }
   }
 
+  // The turn went first to guarantee it; shuffle so its position stays random.
+  const ordered = shuffle(picked);
+  picked.length = 0;
+  picked.push(...ordered);
+
   // 'both' mode: the flash challenge always runs LAST (after gestures), so the
   // face is settled and the reflection windows are clean.
   if (merged.mode === 'both') picked.push({ ...FLASH_CHALLENGE });
 
   return picked;
+}
+
+/** Gesture challenges to run when a flash-only check could not be measured. */
+export function pickFallbackGestures(config: Partial<LivenessConfig> = {}): ChallengeConfig[] {
+  return pickChallenges({ ...config, mode: 'gestures' });
 }
 
 // ---------------------------------------------------------------------------
@@ -135,6 +155,11 @@ export class ChallengeTracker {
     if (this._currentIndex < this.entries.length) {
       this.entries[this._currentIndex].progress = 'failed';
     }
+  }
+
+  /** Add challenges after the current ones (the gesture fallback for a flash). */
+  append(challenges: ChallengeConfig[]): void {
+    for (const config of challenges) this.entries.push({ config, progress: 'pending' });
   }
 
   advance(): boolean {

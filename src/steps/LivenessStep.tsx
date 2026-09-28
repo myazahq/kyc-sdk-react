@@ -6,10 +6,12 @@ import { Check, Loader2, RotateCcw } from '../components/icons';
 import { cn } from '../lib/utils';
 import { StepHeader } from '../components/StepHeader';
 import { useSetCaptureLight } from '../components/capture-light';
+import { useReportLivenessCamera } from '../components/liveness-camera';
+import { flashOverlayColor } from '../liveness/flash-overlay';
 import { Button } from '../components/ui/button';
 import { CameraPermissionPrimer } from '../components/CameraPermissionPrimer';
 import { ReadyPrimer } from '../components/ReadyPrimer';
-import { READY_LIVENESS } from '../components/ready-primer-content';
+import { READY_LIVENESS, READY_LIVENESS_PASSIVE } from '../components/ready-primer-content';
 import { LivenessAvatar } from './LivenessAvatar';
 import { useKYCContext } from '../context/KYCContext';
 import { useKYCConfig } from '../context/KYCConfigContext';
@@ -23,16 +25,19 @@ import { useImageCompress } from '../hooks/useImageCompress';
 import { useLiveness } from '../hooks/useLiveness';
 import { useLightLevel } from '../hooks/useLightLevel';
 import { primeSpeech } from '../liveness/speech';
-import { recordLivenessSignals } from '../lib/integrity-signals';
+import { recordLivenessSignals, recordRecorderFailure } from '../lib/integrity-signals';
 import { withRetry } from '../lib/retry';
 import { mapToKycError, safeReportError } from '../lib/errors';
 import { KYCError } from '../types/verification';
 import {
   LIVENESS_VIDEO_BITRATE,
   createVideoRecorder,
+  pickVideoMimeType,
   logCaptureSize,
 } from '../lib/capture-settings';
 import type { ChallengeEntry } from '../liveness/challenge-manager';
+import { challengeInstruction } from '../liveness/types';
+import { useText, type TextFn } from '../i18n';
 import { usePortalHost } from '../lib/sdk-frame-context';
 import { CaptureRing } from '../components/CaptureRing';
 import { LivenessHandover, useSelfieAutoAdvance } from './liveness-handover';
@@ -47,6 +52,7 @@ import { verifiedIdsFromState } from '../lib/supporting-documents';
 export function LivenessStep() {
   const { state: kycState, dispatch } = useKYCContext();
   const config = useKYCConfig();
+  const t = useText();
   const portalHost = usePortalHost();
   const [preview, setPreview] = useState<string | null>(kycState.selfieImage);
   // The fresh capture measured soft. A notice on the review, never a gate:
@@ -119,6 +125,17 @@ export function LivenessStep() {
     return () => setCaptureLight(null);
   }, [livenessMode, liveness.flashing, setCaptureLight]);
 
+  // Bright screen: tell the modal once the CAMERA screen is showing (not the
+  // primers before it), so it holds the flow light from here to the step's end.
+  useReportLivenessCamera(
+    !preview && !restoredSelfie && !camera.permissionDenied && !showReadyPrimer && !needsPrimer,
+  );
+
+  // What the flash overlay paints: the colour, or BLACK between colours while
+  // the sequence runs, so the check's baseline stays dark even on the light
+  // palette (liveness/flash-overlay.ts). No overlay outside the sequence.
+  const overlayColor = flashOverlayColor(liveness.flashing, liveness.flashColor);
+
   // Measure the preview while a flash is on screen. The overlay lives at body
   // level, so these are plain viewport coordinates. Re-measured on scroll and
   // resize; the circle does not move otherwise, and the colour changes every
@@ -130,8 +147,9 @@ export function LivenessStep() {
     setFlashHole({ cx: r.left + r.width / 2, cy: r.top + r.height / 2, r: r.width / 2 });
   }, []);
 
+  const overlayShown = overlayColor !== null;
   useLayoutEffect(() => {
-    if (!liveness.flashColor) return undefined;
+    if (!overlayShown) return undefined;
     measureHole();
     window.addEventListener('resize', measureHole);
     window.addEventListener('scroll', measureHole, true);
@@ -139,7 +157,7 @@ export function LivenessStep() {
       window.removeEventListener('resize', measureHole);
       window.removeEventListener('scroll', measureHole, true);
     };
-  }, [liveness.flashColor, measureHole]);
+  }, [overlayShown, measureHole]);
 
   // Record the mode once for the submit's integrity metadata (flash results
   // are recorded by the hook when the sequence runs).
@@ -156,7 +174,12 @@ export function LivenessStep() {
 
     livenessChunksRef.current = [];
     const created = createVideoRecorder(camera.stream, LIVENESS_VIDEO_BITRATE);
-    if (!created) return;
+    if (!created) {
+      // Report WHY there will be no recording (lib/integrity-signals.ts).
+      recordRecorderFailure(pickVideoMimeType() ? 'recorder_start_failed' : 'recorder_unsupported');
+      return;
+    }
+    recordRecorderFailure(null);
     const { recorder, mimeType } = created;
     livenessMimeRef.current = mimeType;
 
@@ -164,6 +187,7 @@ export function LivenessStep() {
       if (e.data.size > 0) livenessChunksRef.current.push(e.data);
     };
     recorder.onstop = () => {
+      if (livenessChunksRef.current.length === 0) recordRecorderFailure('recording_empty');
       if (livenessChunksRef.current.length > 0) {
         const blob = new Blob(livenessChunksRef.current, { type: livenessMimeRef.current });
         logCaptureSize('liveness video', blob);
@@ -178,7 +202,8 @@ export function LivenessStep() {
       recorder.start(200);
     } catch {
       // Stream became unusable between the live-track check and start() — skip
-      // recording rather than crashing the liveness step.
+      // recording rather than crashing the liveness step, and say so.
+      recordRecorderFailure('recorder_start_failed');
       return;
     }
     livenessRecorderRef.current = recorder;
@@ -405,11 +430,11 @@ export function LivenessStep() {
     return (
       <div className="space-y-5 animate-slide-up">
         <StepHeader
-          title="Selfie Captured"
+          title={t('presence.review.title')}
           description={
             preview
-              ? 'Review your selfie before continuing.'
-              : 'Your selfie from earlier is saved. Continue, or retake it if you prefer.'
+              ? t('presence.review.description')
+              : t('presence.review.restoredDescription')
           }
           onBack={handleBack}
         />
@@ -424,14 +449,14 @@ export function LivenessStep() {
               <span className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/15">
                 <Check className="h-7 w-7 text-primary" />
               </span>
-              <span className="px-6 text-center text-xs text-muted-foreground">Selfie already captured</span>
+              <span className="px-6 text-center text-xs text-muted-foreground">{t('presence.review.restoredBadge')}</span>
             </div>
           )}
         </div>
 
         {retryInfo && isUploading && (
           <p className="text-center text-xs text-amber-700 dark:text-amber-400">
-            Upload failed. Retrying ({retryInfo.attempt}/{retryInfo.total})…
+            {t('presence.review.retrying', { attempt: retryInfo.attempt, total: retryInfo.total })}
           </p>
         )}
 
@@ -448,16 +473,14 @@ export function LivenessStep() {
               <path d="M12 9v4" />
               <path d="M12 17h.01" />
             </svg>
-            <span>
-              This photo looks blurry. For the best chance of a match, retake it holding the phone steady until your face is sharp.
-            </span>
+            <span>{t('presence.review.blurry')}</span>
           </div>
         )}
 
         <div className="flex gap-3">
           <Button variant="outline" className="flex-1 gap-2" onClick={handleRetake} disabled={isCompressing || isUploading}>
             <RotateCcw className="h-4 w-4" />
-            Retake
+            {t('common.retake')}
           </Button>
           <Button
             className="flex-1 gap-2"
@@ -469,11 +492,11 @@ export function LivenessStep() {
             ) : (
               <Check className="h-4 w-4" />
             )}
-            {uploadError ? 'Retry Upload' : 'Continue'}
+            {uploadError ? t('presence.review.retryUpload') : t('common.continue')}
           </Button>
         </div>
 
-        {isCompressing && <p className="text-center text-xs text-muted-foreground">Compressing image...</p>}
+        {isCompressing && <p className="text-center text-xs text-muted-foreground">{t('presence.review.compressing')}</p>}
       </div>
     );
   }
@@ -485,15 +508,15 @@ export function LivenessStep() {
   if (camera.permissionDenied) {
     return (
       <div className="space-y-5 animate-slide-up">
-        <StepHeader title="Liveness Check" description="Camera access is required." onBack={handleBack} />
+        <StepHeader title={t('presence.title')} description={t('presence.permissionDenied.description')} onBack={handleBack} />
         <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-5 text-center space-y-2">
-          <p className="text-sm font-medium text-destructive">Camera access was denied</p>
+          <p className="text-sm font-medium text-destructive">{t('presence.permissionDenied.heading')}</p>
           <p className="text-xs text-muted-foreground">
-            Liveness verification requires camera access. Please allow camera access in your browser settings and try again.
+            {t('presence.permissionDenied.body')}
           </p>
         </div>
         <Button className="w-full" onClick={() => camera.restart('user')}>
-          Try Again
+          {t('presence.tryAgainButton')}
         </Button>
       </div>
     );
@@ -507,12 +530,12 @@ export function LivenessStep() {
     return (
       <div className="space-y-5 animate-slide-up">
         <StepHeader
-          title="Liveness Check"
-          description="We'll use your camera to verify you're a real person."
+          title={t('presence.title')}
+          description={t('presence.intro.description')}
           onBack={handleBack}
         />
         <ReadyPrimer
-          {...READY_LIVENESS}
+          {...(livenessMode === 'passive' ? READY_LIVENESS_PASSIVE : READY_LIVENESS)}
           onReady={() => {
             // Speech needs a user gesture to start — prime it on this tap, the
             // same way the permission primer does.
@@ -528,12 +551,12 @@ export function LivenessStep() {
     return (
       <div className="space-y-5 animate-slide-up">
         <StepHeader
-          title="Liveness Check"
-          description="We'll use your camera to verify you're a real person."
+          title={t('presence.title')}
+          description={t('presence.intro.description')}
           onBack={handleBack}
         />
         <CameraPermissionPrimer
-          bodyText="When prompted, allow camera access to continue your verification."
+          bodyText={t('presence.permission.body')}
           onGrant={() => {
             // Speech needs a user gesture to start — prime it here.
             primeSpeech();
@@ -549,7 +572,9 @@ export function LivenessStep() {
   // ---------------------------------------------------------------------------
 
   const isFlashChallenge = activeChallenge?.type === 'flash';
-  const showAvatar = (phase === 'challenge' || phase === 'challenge_passed') && !isFlashChallenge;
+  // Neither the flash nor the passive hold has a gesture to demonstrate.
+  const showAvatar =
+    (phase === 'challenge' || phase === 'challenge_passed') && !isFlashChallenge && activeChallenge?.type !== 'hold';
   const avatarGesture = activeChallenge?.type ?? lastGestureRef.current;
 
   // Show the gray loading overlay only while the camera stream hasn't started yet.
@@ -564,13 +589,13 @@ export function LivenessStep() {
   const hasPositionWarning = challengeWarning && !hasWrongGesture;
 
   // 'multiple_faces' is a sentinel — render the friendly guidance, not the code.
-  const warningText = hasMultipleFaces ? 'Make sure only your face is visible' : challengeWarning;
+  const warningText = hasMultipleFaces ? t('presence.position.multipleFaces') : challengeWarning;
 
   const instructionText = isFaceMeshLoading
-    ? 'Preparing face detection...'
+    ? t('presence.camera.preparingDetection')
     : hasPositionWarning
       ? warningText
-      : getInstructionText(liveness.state);
+      : getInstructionText(liveness.state, t);
 
   // The ring is on the frame from positioning to the shutter, so for that whole
   // stretch the border is its TRACK — the same faint primary the review screen's
@@ -612,13 +637,13 @@ export function LivenessStep() {
           Under SdkFrame the same reasoning routes it to the shadow portal
           frame instead: also untransformed, directly under the body, and —
           unlike the raw body — styled by the SDK's own sheet. */}
-      {liveness.flashColor && typeof document !== 'undefined' &&
+      {overlayColor && typeof document !== 'undefined' &&
         createPortal(
           <div
             aria-hidden
             className="pointer-events-none fixed inset-0 z-[100]"
             style={{
-              backgroundColor: liveness.flashColor,
+              backgroundColor: overlayColor,
               opacity: 0.96,
               transition: 'background-color 120ms linear',
               // Punch out the preview so the user still sees their face. The
@@ -636,8 +661,8 @@ export function LivenessStep() {
         )}
 
       <StepHeader
-        title="Liveness Check"
-        description={isLoading ? 'Preparing your camera for verification.' : 'Follow the instructions below to verify you are a real person.'}
+        title={t('presence.title')}
+        description={isLoading ? t('presence.camera.preparingDescription') : t('presence.camera.description')}
         onBack={handleBack}
       />
 
@@ -652,7 +677,7 @@ export function LivenessStep() {
           phase === 'failed' ? 'text-destructive' :
           'text-foreground',
         )}>
-          {isLoading ? 'Setting up...' : hasWrongGesture ? 'Wrong gesture' : instructionText}
+          {isLoading ? t('presence.camera.settingUp') : hasWrongGesture ? t('presence.challenge.wrongGesture') : instructionText}
         </p>
 
         {/* Circular camera view. z-[95] keeps it ABOVE the flash overlay
@@ -756,9 +781,7 @@ export function LivenessStep() {
               <path d="M9 18h6M10 22h4"/>
             </svg>
             <span>
-              {isBright
-                ? 'Too bright — reduce glare or move away from direct light for better detection.'
-                : 'It looks dark here. Move to a brighter area or near a light source for better detection.'}
+              {isBright ? t('presence.lighting.brightNotice') : t('presence.lighting.darkNotice')}
             </span>
           </div>
         )}
@@ -789,20 +812,10 @@ export function LivenessStep() {
         {phase === 'failed' && (
           <div className="w-full space-y-3">
             <p className="text-center text-sm text-destructive">
-              {liveness.state.reason === 'timeout'
-                ? "Time's up. Let's try again."
-                : liveness.state.reason === 'face_lost'
-                  ? 'Face lost. Please try again.'
-                  : liveness.state.reason === 'load_error'
-                    ? 'Failed to load liveness detection. Check your connection and try again.'
-                    : liveness.state.reason === 'flash_failed'
-                      ? "We couldn't verify the screen reflection. Hold still, face the screen, and try again."
-                      : liveness.state.reason === 'face_swap'
-                        ? "We couldn't verify face continuity. Keep your face steady in the frame and try again."
-                        : 'Something went wrong.'}
+              {t(FAILURE_TEXT_KEYS[liveness.state.reason] ?? 'presence.failed.generic')}
             </p>
             <Button className="w-full" onClick={liveness.retry}>
-              Try Again
+              {t('presence.tryAgainButton')}
             </Button>
           </div>
         )}
@@ -845,18 +858,27 @@ function ProgressDot({ entry, index }: { entry: ChallengeEntry; index: number })
 // Instruction text helper
 // ---------------------------------------------------------------------------
 
-function getInstructionText(state: ReturnType<typeof useLiveness>['state']): string {
+/** The catalogue key of each failure's message; anything else reads the generic one. */
+const FAILURE_TEXT_KEYS: Partial<Record<string, string>> = {
+  timeout: 'presence.failed.timeout',
+  face_lost: 'presence.failed.faceLost',
+  load_error: 'presence.failed.loadError',
+  flash_failed: 'presence.failed.flash',
+  face_swap: 'presence.failed.faceSwap',
+};
+
+function getInstructionText(state: ReturnType<typeof useLiveness>['state'], t: TextFn): string {
   switch (state.phase) {
     case 'loading':
-      return 'Loading...';
+      return t('presence.camera.loading');
     case 'positioning':
       return state.guidance;
     case 'challenge':
-      return state.challenge.instruction;
+      return challengeInstruction(state.challenge.type, t);
     case 'challenge_passed':
-      return 'Great!';
+      return t('presence.challenge.passed');
     case 'capturing':
-      return state.guidance ?? 'Kindly hold still...';
+      return state.guidance ?? t('presence.capture.holdStill');
     case 'complete':
       // No line at all. The ring closing green on the same frame as the shutter
       // IS the completion signal, and the review follows within the beat —

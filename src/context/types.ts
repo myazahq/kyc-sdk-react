@@ -204,6 +204,13 @@ export interface KYCState {
    * session already) and in preview.
    */
   sessionId: string | null;
+  /**
+   * A KYB application whose business half already committed, resumed before
+   * the applicant's own verification went through (lib/resumed-application.ts).
+   * The submitting screen replays the business submission under its original
+   * request id instead of sending a new one the server would refuse.
+   */
+  resumedApplication: import('../lib/resumed-application').ResumedApplication | null;
 
   // Step 1b – country selection (multi-region flows; null = use config default)
   selectedCountry: AnyCountry | null;
@@ -398,6 +405,7 @@ export interface KYCState {
 export type KYCAction =
   | { type: 'OPEN_MODAL' }
   | { type: 'SET_SESSION_ID'; payload: string }
+  | { type: 'SET_RESUMED_APPLICATION'; payload: import('../lib/resumed-application').ResumedApplication | null }
   | {
       type: 'RESTORE_PROGRESS';
       payload: {

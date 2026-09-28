@@ -3,7 +3,8 @@
 import React, { useState } from 'react';
 import { BadgeCheck, Building2, Check, Link2 } from '../components/icons';
 import { CountryFlag } from '../components/CountryFlag';
-import { APPLICANT_ROLE_LABELS } from '../lib/business-application';
+import { applicantRoleLabel } from '../lib/business-application';
+import { useText } from '../i18n';
 import { cn } from '../lib/utils';
 import type { KeyPersonRole } from '../types/business';
 
@@ -29,13 +30,13 @@ export interface AwaitRow {
   isCorporate?: boolean;
 }
 
-/** Section order + headers, mirroring the grouped "Awaiting users" design. */
+/** Section order + header text keys, mirroring the grouped "Awaiting users" design. */
 const SECTIONS: Array<{ role: string; label: string }> = [
-  { role: 'beneficial_owner', label: 'UBOs' },
-  { role: 'director', label: 'Directors' },
-  { role: 'signatory', label: 'Signatories' },
-  { role: 'shareholder', label: 'Shareholders' },
-  { role: 'authorized_representative', label: 'Representatives' },
+  { role: 'beneficial_owner', label: 'keyPeople.await.group.ubos' },
+  { role: 'director', label: 'keyPeople.await.group.directors' },
+  { role: 'signatory', label: 'keyPeople.await.group.signatories' },
+  { role: 'shareholder', label: 'keyPeople.await.group.shareholders' },
+  { role: 'authorized_representative', label: 'keyPeople.await.group.representatives' },
 ];
 
 const KNOWN_ROLES = new Set(SECTIONS.map((s) => s.role));
@@ -48,18 +49,20 @@ function countryName(code: string): string {
   }
 }
 
+/** Status pill per state: `label` is its text key. */
 const STATUS: Record<AwaitRow['status'], { label: string; className: string }> = {
-  verified: { label: 'Verified', className: 'bg-[var(--kyc-success)]/10 text-[var(--kyc-success)]' },
-  submitted: { label: 'Submitted', className: 'bg-[var(--kyc-success)]/10 text-[var(--kyc-success)]' },
-  pending: { label: 'KYC pending', className: 'bg-primary/10 text-primary' },
+  verified: { label: 'keyPeople.await.status.verified', className: 'bg-[var(--kyc-success)]/10 text-[var(--kyc-success)]' },
+  submitted: { label: 'keyPeople.await.status.submitted', className: 'bg-[var(--kyc-success)]/10 text-[var(--kyc-success)]' },
+  pending: { label: 'keyPeople.await.status.kycPending', className: 'bg-primary/10 text-primary' },
   // Their invite was voided because the application itself ended. Nothing is
   // pending; it was called off, and saying "pending" sent people chasing links
   // that no longer worked.
-  not_needed: { label: 'Not needed', className: 'bg-muted text-muted-foreground' },
-  failed: { label: 'Check failed', className: 'bg-destructive/10 text-destructive' },
+  not_needed: { label: 'keyPeople.await.status.notNeeded', className: 'bg-muted text-muted-foreground' },
+  failed: { label: 'keyPeople.await.status.failed', className: 'bg-destructive/10 text-destructive' },
 };
 
 export function KeyPeopleAwaitList({ rows }: { rows: AwaitRow[] }) {
+  const t = useText();
   if (rows.length === 0) return null;
 
   // Anything whose role we have no section for still has to appear. Grouping by
@@ -67,11 +70,11 @@ export function KeyPeopleAwaitList({ rows }: { rows: AwaitRow[] }) {
   // a screen whose whole job is "who still owes a check" is the worst failure it
   // could have.
   const groups: Array<{ label: string; rows: AwaitRow[] }> = SECTIONS.map(({ role, label }) => ({
-    label,
+    label: t(label),
     rows: rows.filter((r) => r.role === role),
   })).filter((g) => g.rows.length > 0);
   const others = rows.filter((r) => !KNOWN_ROLES.has(r.role as string));
-  if (others.length > 0) groups.push({ label: 'Other people', rows: others });
+  if (others.length > 0) groups.push({ label: t('keyPeople.await.group.other'), rows: others });
 
   const outstanding = rows.filter((r) => r.status === 'pending' || r.status === 'failed').length;
 
@@ -88,9 +91,7 @@ export function KeyPeopleAwaitList({ rows }: { rows: AwaitRow[] }) {
           count. A screening-only signatory has no link and nothing anybody can
           do for them, and naming them here made a task list read as a roster. */}
       <p className="text-center text-sm text-muted-foreground">
-        {outstanding === 0
-          ? 'Everyone on this application has completed their identity check.'
-          : 'To complete the review, the people below must verify their identity with a KYC check. Anyone with an email on file has already been sent their link.'}
+        {outstanding === 0 ? t('keyPeople.await.allDone') : t('keyPeople.await.intro')}
       </p>
 
       {groups.map((group) => (
@@ -105,18 +106,20 @@ export function KeyPeopleAwaitList({ rows }: { rows: AwaitRow[] }) {
       ))}
 
       {outstanding > 0 && (
-        <p className="text-center text-xs text-muted-foreground">Links are valid for 14 days.</p>
+        <p className="text-center text-xs text-muted-foreground">{t('keyPeople.await.linkValidity')}</p>
       )}
     </div>
   );
 }
 
 function AwaitCard({ row, entranceDelayMs = 0 }: { row: AwaitRow; entranceDelayMs?: number }) {
+  const t = useText();
   const [copied, setCopied] = useState(false);
   const status = STATUS[row.status];
   // A company is not doing a KYC: it receives its own KYB application, so the
   // pending pill must not promise a check that will never run under that name.
-  const statusLabel = row.isCorporate && row.status === 'pending' ? 'KYB pending' : status.label;
+  const kyb = row.isCorporate && row.status === 'pending';
+  const statusLabel = t(kyb ? 'keyPeople.await.status.kybPending' : status.label);
 
   const copy = async () => {
     if (!row.inviteUrl) return;
@@ -125,12 +128,11 @@ function AwaitCard({ row, entranceDelayMs = 0 }: { row: AwaitRow; entranceDelayM
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      window.prompt(`Copy ${row.name}'s verification link:`, row.inviteUrl);
+      window.prompt(t('keyPeople.await.copyPrompt', { name: row.name }), row.inviteUrl);
     }
   };
 
-  const roleLabel =
-    APPLICANT_ROLE_LABELS[row.role as keyof typeof APPLICANT_ROLE_LABELS] ?? 'Key person';
+  const roleLabel = applicantRoleLabel(row.role, t) ?? t('keyPeople.await.roleFallback');
   const meta = [roleLabel, ...(row.pct ? [`${row.pct}%`] : [])].join(' · ');
 
   return (
@@ -145,13 +147,13 @@ function AwaitCard({ row, entranceDelayMs = 0 }: { row: AwaitRow; entranceDelayM
           <p className="truncate text-base font-semibold">
             {row.name}
             {row.isApplicant && (
-              <span className="ml-1.5 text-xs font-normal text-muted-foreground">(you)</span>
+              <span className="ml-1.5 text-xs font-normal text-muted-foreground">{t('keyPeople.await.you')}</span>
             )}
             {row.isCorporate && (
               // Readability over subtlety: foreground text on a bordered chip.
               // The muted-on-muted version disappeared on dark org themes.
               <span className="ml-1.5 inline-flex translate-y-[-1px] items-center gap-1 rounded-full border border-border bg-background px-2 py-0.5 align-middle text-xs font-semibold normal-case text-foreground">
-                <Building2 className="h-3.5 w-3.5" /> Company
+                <Building2 className="h-3.5 w-3.5" /> {t('keyPeople.await.company')}
               </span>
             )}
           </p>
@@ -188,11 +190,11 @@ function AwaitCard({ row, entranceDelayMs = 0 }: { row: AwaitRow; entranceDelayM
         >
           {copied ? (
             <>
-              <Check className="h-4 w-4" /> Link copied
+              <Check className="h-4 w-4" /> {t('keyPeople.await.linkCopied')}
             </>
           ) : (
             <>
-              <Link2 className="h-4 w-4" /> Copy verification link
+              <Link2 className="h-4 w-4" /> {t('keyPeople.await.copyLink')}
             </>
           )}
         </button>

@@ -34,6 +34,7 @@ import {
   FlashOffIcon as HugeFlashOffIcon,
   FlaskConicalIcon as HugeFlaskConicalIcon,
   FolderOpenIcon as HugeFolderOpenIcon,
+  GlassesIcon as HugeGlassesIcon,
   HelpCircleIcon as HugeHelpCircleIcon,
   House as HugeHouse,
   IdentityCardIcon as HugeIdentityCardIcon,
@@ -68,6 +69,7 @@ import {
   SlidersHorizontalIcon as HugeSlidersHorizontalIcon,
   Smartphone as HugeSmartphone,
   Stamp as HugeStamp,
+  SparklesIcon as HugeSparklesIcon,
   SunIcon as HugeSunIcon,
   SwitchCamera as HugeSwitchCamera,
   TimerIcon as HugeTimerIcon,
@@ -95,8 +97,9 @@ export type { AppIconComponent, AppIconProps, AppIconSize } from './app-icon';
  * glyph for a name, that exact choice is repeated here — one icon, one
  * identity, wherever it appears in the product.
  */
-export const AlertCircle = createAppIcon(HugeAlertCircleIcon, 'AlertCircle');
-export const AlertTriangle = createAppIcon(HugeAlertTriangle, 'AlertTriangle');
+export const CircleAlert = createAppIcon(HugeAlertCircleIcon, 'CircleAlert');
+export const Glasses = createAppIcon(HugeGlassesIcon, 'Glasses');
+export const TriangleAlert = createAppIcon(HugeAlertTriangle, 'TriangleAlert');
 export const ArrowLeft = createAppIcon(HugeArrowLeftIcon, 'ArrowLeft');
 export const ArrowRight = createAppIcon(HugeArrowRightIcon, 'ArrowRight');
 export const BadgeCheck = createAppIcon(HugeBadgeCheckIcon, 'BadgeCheck');
@@ -107,7 +110,7 @@ export const Calendar = createAppIcon(HugeCalendarIcon, 'Calendar');
 export const Camera = createAppIcon(HugeCameraIcon, 'Camera');
 export const Car = createAppIcon(HugeCarIcon, 'Car');
 export const Check = createAppIcon(HugeCheckIcon, 'Check');
-export const CheckCircle2 = createAppIcon(HugeCheckmarkCircle02Icon, 'CheckCircle2');
+export const CircleCheck = createAppIcon(HugeCheckmarkCircle02Icon, 'CircleCheck');
 export const ChevronDown = createAppIcon(HugeChevronDownIcon, 'ChevronDown');
 export const ChevronLeft = createAppIcon(HugeChevronLeftIcon, 'ChevronLeft');
 export const ChevronRight = createAppIcon(HugeChevronRightIcon, 'ChevronRight');
@@ -126,7 +129,7 @@ export const Flash = createAppIcon(HugeFlashIcon, 'Flash');
 export const FlashOff = createAppIcon(HugeFlashOffIcon, 'FlashOff');
 export const FlaskConical = createAppIcon(HugeFlaskConicalIcon, 'FlaskConical');
 export const FolderOpen = createAppIcon(HugeFolderOpenIcon, 'FolderOpen');
-export const HelpCircle = createAppIcon(HugeHelpCircleIcon, 'HelpCircle');
+export const CircleHelp = createAppIcon(HugeHelpCircleIcon, 'CircleHelp');
 export const House = createAppIcon(HugeHouse, 'House');
 export const IdCard = createAppIcon(HugeIdentityCardIcon, 'IdCard');
 export const ImageUp = createAppIcon(HugeImageUp, 'ImageUp');
@@ -181,6 +184,7 @@ export const ShieldCheck = createAppIcon(HugeShieldCheck, 'ShieldCheck');
 export const SlidersHorizontal = createAppIcon(HugeSlidersHorizontalIcon, 'SlidersHorizontal');
 export const Smartphone = createAppIcon(HugeSmartphone, 'Smartphone');
 export const Stamp = createAppIcon(HugeStamp, 'Stamp');
+export const Sparkles = createAppIcon(HugeSparklesIcon, 'Sparkles');
 export const Sun = createAppIcon(HugeSunIcon, 'Sun');
 export const SwitchCamera = createAppIcon(HugeSwitchCamera, 'SwitchCamera');
 export const Timer = createAppIcon(HugeTimerIcon, 'Timer');
@@ -191,6 +195,6 @@ export const UserRoundPlus = createAppIcon(HugeUserAdd01Icon, 'UserRoundPlus');
 export const UsersRound = createAppIcon(HugeUserGroupIcon, 'UsersRound');
 export const Video = createAppIcon(HugeVideoIcon, 'Video');
 export const X = createAppIcon(HugeX, 'X');
-export const XCircle = createAppIcon(HugeXCircle, 'XCircle');
+export const CircleX = createAppIcon(HugeXCircle, 'CircleX');
 export const Zap = createAppIcon(HugeZapIcon, 'Zap');
 export const ZoomIn = createAppIcon(HugeZoomIn, 'ZoomIn');

@@ -4,6 +4,7 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { Check, X, Crop } from './icons';
 import { Button } from './ui/button';
 import { cn } from '../lib/utils';
+import { useText } from '../i18n';
 
 // ISO/IEC 7810 ID-1 standard dimensions: 85.6 mm × 53.98 mm
 const ID_ASPECT_RATIO = 85.6 / 53.98; // ≈ 1.5858
@@ -57,6 +58,7 @@ export interface ImageCropperProps {
 }
 
 export function ImageCropper({ src, onConfirm, onCancel }: ImageCropperProps) {
+  const t = useText();
   const containerRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
 
@@ -255,8 +257,8 @@ export function ImageCropper({ src, onConfirm, onCancel }: ImageCropperProps) {
       <div className="flex items-center gap-2 border-b border-border px-3 py-2.5 shrink-0">
         <Crop className="h-4 w-4 text-primary shrink-0" />
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-foreground leading-none">Crop to ID Card</p>
-          <p className="text-xs text-muted-foreground mt-0.5">Drag to reposition · corner handles to resize</p>
+          <p className="text-sm font-semibold text-foreground leading-none">{t('uploadDocument.crop.heading')}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">{t('uploadDocument.crop.hint')}</p>
         </div>
       </div>
 
@@ -366,7 +368,7 @@ export function ImageCropper({ src, onConfirm, onCancel }: ImageCropperProps) {
       <div className="flex gap-3 border-t border-border px-3 py-3 shrink-0">
         <Button variant="outline" size="sm" className="flex-1 gap-1.5" onClick={onCancel}>
           <X className="h-3.5 w-3.5" />
-          Cancel
+          {t('common.cancel')}
         </Button>
         <Button
           size="sm"
@@ -375,7 +377,7 @@ export function ImageCropper({ src, onConfirm, onCancel }: ImageCropperProps) {
           disabled={!cropBox || !imgBounds}
         >
           <Check className="h-3.5 w-3.5" />
-          Crop &amp; Use
+          {t('uploadDocument.crop.confirm')}
         </Button>
       </div>
     </div>

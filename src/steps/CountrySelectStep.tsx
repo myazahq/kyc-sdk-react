@@ -11,6 +11,7 @@ import { CountryRegionPicker } from '../components/CountryRegionPicker';
 import { businessCountryName, isBusinessFlow } from '../lib/business';
 import { applicantCountryOptions } from '../lib/business-application';
 import type { AnyCountry } from '../types/config';
+import { useText } from '../i18n';
 
 // Above this many offered countries, the flat button list becomes unusable, so
 // we switch to the searchable, region-grouped picker (Global Documents can
@@ -29,6 +30,7 @@ const SEARCH_THRESHOLD = 5;
 export function CountrySelectStep() {
   const { state, dispatch } = useKYCContext();
   const config = useKYCConfig();
+  const t = useText();
 
   // Multi-region flows (and a mapped applicant workflow's overlay) carry
   // `countries`; a plain KYB applicant leg does not, so it falls back to the
@@ -47,8 +49,8 @@ export function CountrySelectStep() {
     // its own scroll — the modal's height is unchanged; only the list grows.
     <div className="flex min-h-0 flex-1 flex-col gap-6 animate-slide-up">
       <StepHeader
-        title="Where was your ID issued?"
-        description="Choose the country that issued your identity document."
+        title={t('selectDocument.country.title')}
+        description={t('selectDocument.country.description')}
         // In the KYB applicant leg this step sits after applicant-role, not
         // after consent.
         onBack={() =>

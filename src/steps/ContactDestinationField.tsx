@@ -4,6 +4,7 @@ import React from 'react';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { PhoneNumberInput } from '../components/PhoneNumberInput';
+import { useText } from '../i18n';
 
 /**
  * The "where should we send it" field on the contact-verification step: a plain
@@ -30,16 +31,17 @@ export function ContactDestinationField({
   geoCountry?: string | null;
   disabled?: boolean;
 }) {
+  const t = useText();
   if (isEmail) {
     return (
       <div className="space-y-2">
-        <Label htmlFor="contact-destination">Email address</Label>
+        <Label htmlFor="contact-destination">{t('contact.email.label')}</Label>
         <Input
           id="contact-destination"
           type="email"
           inputMode="email"
           autoComplete="email"
-          placeholder="you@example.com"
+          placeholder={t('contact.email.placeholder')}
           value={email}
           onChange={(e) => onEmailChange(e.target.value)}
           disabled={disabled}
@@ -50,7 +52,7 @@ export function ContactDestinationField({
 
   return (
     <div className="space-y-2">
-      <Label>Phone number</Label>
+      <Label>{t('contact.phone.label')}</Label>
       <PhoneNumberInput
         defaultCountry={defaultCountry}
         geoCountry={geoCountry}

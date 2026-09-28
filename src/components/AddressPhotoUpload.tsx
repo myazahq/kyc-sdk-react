@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Camera, CheckCircle2, Loader2, RefreshCcw, X } from './icons';
+import { Camera, CircleCheck, Loader2, RefreshCcw, X } from './icons';
+import { useText } from '../i18n';
 
 // The entrance-photo capture as the HERO of its screen (redesign 2026-08-29):
 // a tall dropzone while empty — the screen is about one decision, so the zone
@@ -25,6 +26,7 @@ interface AddressPhotoUploadProps {
 }
 
 export function AddressPhotoUpload({ required, uploaded, uploading, onPick, onRemove }: AddressPhotoUploadProps) {
+  const t = useText();
   const inputRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<string | null>(null);
 
@@ -67,16 +69,16 @@ export function AddressPhotoUpload({ required, uploaded, uploading, onPick, onRe
           ) : (
             // A restored session holds the uploaded mediaId but not the bytes.
             <div className="flex h-[300px] w-full flex-col items-center justify-center gap-2 bg-muted/30 sm:h-[340px]">
-              <CheckCircle2 className="h-8 w-8 text-[var(--kyc-success,#0DA211)]" />
-              <p className="text-sm font-semibold">Entrance photo added</p>
+              <CircleCheck className="h-8 w-8 text-[var(--kyc-success,#0DA211)]" />
+              <p className="text-sm font-semibold">{t('address.photo.added')}</p>
             </div>
           )}
           <span className="absolute left-3 top-3 inline-flex items-center gap-1.5 rounded-full bg-background/90 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider text-primary shadow backdrop-blur-sm">
-            <CheckCircle2 className="h-3 w-3" /> Entrance photo
+            <CircleCheck className="h-3 w-3" /> {t('address.photo.badge')}
           </span>
           <div className="absolute bottom-3 right-3 flex gap-2">
             <button type="button" onClick={() => inputRef.current?.click()} className={overlayPill}>
-              <RefreshCcw className="h-3.5 w-3.5" /> Replace
+              <RefreshCcw className="h-3.5 w-3.5" /> {t('address.photo.replace')}
             </button>
             <button
               type="button"
@@ -90,7 +92,7 @@ export function AddressPhotoUpload({ required, uploaded, uploading, onPick, onRe
               className={overlayPill}
               aria-label="Remove photo"
             >
-              <X className="h-3.5 w-3.5" /> Remove
+              <X className="h-3.5 w-3.5" /> {t('address.photo.remove')}
             </button>
           </div>
         </div>
@@ -106,17 +108,17 @@ export function AddressPhotoUpload({ required, uploaded, uploading, onPick, onRe
           </span>
           <span className="space-y-1">
             <span className="block text-base font-semibold">
-              {uploading ? 'Uploading photo…' : 'Take or upload a photo'}
+              {uploading ? t('address.photo.uploading') : t('address.photo.cta')}
             </span>
             {!uploading && (
               <span className="block text-sm text-muted-foreground">
-                The gate, front door or the building itself{required ? '' : '. Optional'}.
+                {t(required ? 'address.photo.hint' : 'address.photo.hint.optional')}
               </span>
             )}
           </span>
           {!uploading && (
             <span className="rounded-full bg-muted px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
-              JPEG · PNG · WebP
+              {t('address.photo.formats')}
             </span>
           )}
         </button>

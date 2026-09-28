@@ -4,6 +4,7 @@ import React from 'react';
 import { FlaskConical } from './icons';
 
 import { useKYCConfig } from '../context/KYCConfigContext';
+import { useText } from '../i18n';
 
 /**
  * "You are not in production" strip, shown above the modal chrome.
@@ -25,6 +26,7 @@ import { useKYCConfig } from '../context/KYCConfigContext';
  */
 export function SandboxBanner() {
   const { serverConfig } = useKYCConfig();
+  const t = useText();
   const env = serverConfig.environment;
   if (env !== 'SANDBOX' && env !== 'DEVELOPMENT') return null;
 
@@ -40,10 +42,10 @@ export function SandboxBanner() {
     >
       <FlaskConical className="h-3.5 w-3.5 shrink-0 text-amber-700 dark:text-amber-400" aria-hidden />
       <span className="text-[11px] font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-400">
-        {sandbox ? 'Sandbox' : 'Development'}
+        {sandbox ? t('general.sandboxBanner.sandbox') : t('general.sandboxBanner.development')}
       </span>
       <span className="text-[11px] text-amber-700/80 dark:text-amber-400/80">
-        {sandbox ? 'Test data only, no real checks run' : 'Test environment, results are not live'}
+        {sandbox ? t('general.sandboxBanner.sandboxNote') : t('general.sandboxBanner.developmentNote')}
       </span>
     </div>
   );

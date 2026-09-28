@@ -4,6 +4,7 @@ import { DocumentGhost } from './DocumentGhost';
 import { DocumentPill, HintPill, SCRIM, SideBadge, Shutter } from './parts';
 import type { DocumentFraming } from '../../lib/document-framing-gate';
 import { cn } from '../../lib/utils';
+import { useText } from '../../i18n';
 
 // Everything drawn over the full-screen camera, laid out to match the Flutter
 // document-capture screen: back control top-left, FRONT/BACK badge top-right,
@@ -55,6 +56,7 @@ export function ImmersiveOverlay({
   onUpload: (() => void) | null;
   primaryColor: string;
 }) {
+  const t = useText();
   const top = 'calc(env(safe-area-inset-top) + 0.75rem)';
 
   return (
@@ -108,7 +110,7 @@ export function ImmersiveOverlay({
             className="pointer-events-auto inline-flex items-center gap-2 text-sm font-medium text-white/90 focus-visible:outline-none focus-visible:underline"
           >
             <Upload className="h-4 w-4" />
-            Upload a photo instead
+            {t('uploadDocument.camera.uploadInstead')}
           </button>
         )}
 

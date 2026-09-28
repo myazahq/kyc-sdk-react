@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { Checkbox } from '../components/ui/checkbox';
+import { useText } from '../i18n';
 
 /**
  * The FATF fallback, attested: some companies genuinely have no natural
@@ -21,6 +22,7 @@ export function KeyPeopleUboExemption({
   hasUbos: boolean;
   onChange: (checked: boolean) => void;
 }) {
+  const t = useText();
   return (
     <div className="space-y-1.5">
       <label
@@ -36,16 +38,10 @@ export function KeyPeopleUboExemption({
           onCheckedChange={(value) => onChange(value === true)}
           className="mt-0.5"
         />
-        <span className="text-sm text-muted-foreground">
-          UBOs cannot be identified due to public share structures, complex trusts or nominee
-          arrangements.
-        </span>
+        <span className="text-sm text-muted-foreground">{t('keyPeople.exemption.label')}</span>
       </label>
       {checked && !hasUbos && (
-        <p className="pl-7 text-xs text-muted-foreground">
-          We will record this with the application; a senior person is still identified through
-          the applicant&apos;s own verification.
-        </p>
+        <p className="pl-7 text-xs text-muted-foreground">{t('keyPeople.exemption.note')}</p>
       )}
     </div>
   );

@@ -8,6 +8,11 @@
 //
 // Mirrored word for word by the React Native (`lib/documentCaptureCheck.ts`) and
 // Flutter (`config/document_capture_check.dart`) SDKs. Pure; unit-tested.
+// The words live in the text catalogue (`uploadDocument.check.*`), so a
+// workflow can replace them; pass the flow's `t` to get its copy.
+
+import { defaultText } from '../i18n/translate';
+import type { TextFn } from '../i18n/types';
 
 export type CaptureSide = 'front' | 'back';
 
@@ -24,14 +29,13 @@ export interface CaptureProblem {
   kind: CaptureProblemKind;
 }
 
+/** The English defaults; the screen reads `uploadDocument.check.title` and `common.continueAnyway`. */
 export const CAPTURE_CHECK_TITLE = 'Check your photos';
 export const CAPTURE_CHECK_CONTINUE_ANYWAY = 'Continue anyway';
 
-const MESSAGES: Record<CaptureProblemKind, string> = {
-  no_face:
-    "We couldn't see the face in the photo on the front of your ID. Retake it in good light, with the ID out of any plastic cover and no glare over the photo.",
-  no_barcode:
-    "We couldn't read the barcode on the back of your ID. Retake it with the ID out of any plastic cover, flat, filling the frame and with no glare over the barcode.",
+const MESSAGE_KEYS: Record<CaptureProblemKind, string> = {
+  no_face: 'uploadDocument.check.noFace',
+  no_barcode: 'uploadDocument.check.noBarcode',
 };
 
 /** What to fix, front before back and the face before the barcode. */
@@ -47,13 +51,13 @@ export function captureCheckProblems(results: Array<DocumentCaptureCheckResult |
   return problems;
 }
 
-export function captureProblemMessage(kind: CaptureProblemKind): string {
-  return MESSAGES[kind];
+export function captureProblemMessage(kind: CaptureProblemKind, t: TextFn = defaultText): string {
+  return t(MESSAGE_KEYS[kind]);
 }
 
 /** One sentence per kind of problem, in the order found. */
-export function captureProblemMessages(problems: CaptureProblem[]): string[] {
-  return [...new Set(problems.map((p) => p.kind))].map(captureProblemMessage);
+export function captureProblemMessages(problems: CaptureProblem[], t: TextFn = defaultText): string[] {
+  return [...new Set(problems.map((p) => p.kind))].map((kind) => captureProblemMessage(kind, t));
 }
 
 /** The sides to offer a retake for, front first. */
@@ -62,7 +66,12 @@ export function captureProblemSides(problems: CaptureProblem[]): CaptureSide[] {
 }
 
 /** A photo picked from the device is replaced, not retaken. */
-export function captureRetakeLabel(side: CaptureSide, uploadOnly: boolean): string {
-  const verb = uploadOnly ? 'Replace' : 'Retake';
-  return `${verb} ${side}`;
+export function captureRetakeLabel(side: CaptureSide, uploadOnly: boolean, t: TextFn = defaultText): string {
+  return t(retakeLabelKey(side, uploadOnly));
+}
+
+/** The catalogue key for retaking (or replacing) one side. */
+export function retakeLabelKey(side: CaptureSide, uploadOnly: boolean): string {
+  if (uploadOnly) return side === 'front' ? 'uploadDocument.replaceFront' : 'uploadDocument.replaceBack';
+  return side === 'front' ? 'uploadDocument.retakeFront' : 'uploadDocument.retakeBack';
 }

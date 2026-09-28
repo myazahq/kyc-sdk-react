@@ -1,12 +1,11 @@
 "use client";
 
-import { AlertTriangle, ImageUp, RotateCcw } from '../components/icons';
+import { TriangleAlert, ImageUp, RotateCcw } from '../components/icons';
 import { Alert, AlertDescription, AlertTitle } from "../components/ui/alert";
 import { Button } from "../components/ui/button";
 import { cn } from "../lib/utils";
+import { useText } from "../i18n";
 import {
-	CAPTURE_CHECK_CONTINUE_ANYWAY,
-	CAPTURE_CHECK_TITLE,
 	captureProblemMessages,
 	captureProblemSides,
 	captureRetakeLabel,
@@ -32,17 +31,18 @@ export function DocumentCaptureWarning({
 	onRetake: (side: CaptureSide) => void;
 	onContinueAnyway: () => void;
 }) {
+	const t = useText();
 	const sides = captureProblemSides(problems);
 	const RetakeIcon = uploadOnly ? ImageUp : RotateCcw;
 
 	return (
 		<div className='space-y-3 motion-safe:animate-slide-up'>
 			<Alert className='border-amber-300 bg-amber-50 text-amber-950 dark:border-amber-500/40 dark:bg-amber-950/40 dark:text-amber-50 [&>svg]:text-amber-700 dark:[&>svg]:text-amber-300'>
-				<AlertTriangle className='h-4 w-4' aria-hidden />
-				<AlertTitle>{CAPTURE_CHECK_TITLE}</AlertTitle>
+				<TriangleAlert className='h-4 w-4' aria-hidden />
+				<AlertTitle>{t("uploadDocument.check.title")}</AlertTitle>
 				<AlertDescription>
 					<ul className='space-y-1'>
-						{captureProblemMessages(problems).map((message) => (
+						{captureProblemMessages(problems, t).map((message) => (
 							<li key={message}>{message}</li>
 						))}
 					</ul>
@@ -58,7 +58,7 @@ export function DocumentCaptureWarning({
 						onClick={() => onRetake(side)}
 						disabled={isBusy}>
 						<RetakeIcon className='h-4 w-4' aria-hidden />
-						{captureRetakeLabel(side, uploadOnly)}
+						{captureRetakeLabel(side, uploadOnly, t)}
 					</Button>
 				))}
 			</div>
@@ -68,7 +68,7 @@ export function DocumentCaptureWarning({
 				className='w-full'
 				onClick={onContinueAnyway}
 				disabled={isBusy}>
-				{CAPTURE_CHECK_CONTINUE_ANYWAY}
+				{t("common.continueAnyway")}
 			</Button>
 		</div>
 	);

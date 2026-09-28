@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { Loader2 } from '../components/icons';
+import { useText } from '../i18n';
 
 /**
  * Held while the register is reconciled against what the applicant typed.
@@ -42,6 +43,7 @@ function GhostCard({ withLink, delayMs }: { withLink?: boolean; delayMs?: number
 }
 
 export function KeyPeoplePending() {
+  const t = useText();
   return (
     <div className="w-full space-y-4 text-left animate-fade-in motion-reduce:animate-none">
       <div
@@ -51,12 +53,12 @@ export function KeyPeoplePending() {
       >
         <span className="flex items-center gap-2 text-sm font-medium text-foreground">
           <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary motion-reduce:animate-none" aria-hidden />
-          Working out who else needs to verify
+          {t('keyPeople.pending.title')}
         </span>
         {/* Naming the authority is the reassurance: the pause is the official
             register being consulted, not the app hanging. */}
         <span className="text-xs text-muted-foreground">
-          We are checking the official register for the company's directors and owners.
+          {t('keyPeople.pending.body')}
         </span>
       </div>
 

@@ -6,6 +6,7 @@ import {
   type SelfieUploadState,
   type SelfieUploadWait,
 } from '../lib/selfie-upload-wait';
+import { useText } from '../i18n';
 
 // ─── The submitted step's wait on the selfie upload ─────────────────────────
 //
@@ -23,8 +24,15 @@ export function useSelfieUploadGate(opts: {
   selfieMediaId: string | undefined;
 }): SelfieUploadGate {
   const { enabled, selfieUpload, selfieMediaId } = opts;
+  const t = useText();
   const [timedOut, setTimedOut] = useState(false);
-  const settled = enabled ? selfieUploadSettled({ selfieUpload, selfieMediaId }) : { ok: true as const };
+  const raw = enabled ? selfieUploadSettled({ selfieUpload, selfieMediaId }) : { ok: true as const };
+  // The library's own fallback message is SDK copy: read it from the catalogue.
+  // An upload error's own message (from the server or network) passes through.
+  const settled =
+    raw && !raw.ok && raw.message === SELFIE_UPLOAD_TIMED_OUT
+      ? { ok: false as const, message: t('presence.upload.failed') }
+      : raw;
 
   useEffect(() => {
     if (!enabled || settled) return;
@@ -36,9 +44,9 @@ export function useSelfieUploadGate(opts: {
 
   return useMemo<SelfieUploadGate>(() => {
     if (settled) return settled;
-    if (timedOut) return { ok: false, message: SELFIE_UPLOAD_TIMED_OUT };
+    if (timedOut) return { ok: false, message: t('presence.upload.failed') };
     return 'waiting';
     // A settled object is rebuilt per render; key the memo on its fields.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settled?.ok, settled && !settled.ok ? settled.message : null, timedOut]);
+  }, [settled?.ok, settled && !settled.ok ? settled.message : null, timedOut, t]);
 }

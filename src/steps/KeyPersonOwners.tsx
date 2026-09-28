@@ -6,6 +6,7 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import type { KeyPersonOwnerEntry } from '../context/types';
+import { useText } from '../i18n';
 
 const MAX_OWNERS = 10;
 
@@ -33,6 +34,8 @@ export function KeyPersonOwners({
   onChange: (owners: KeyPersonOwnerEntry[]) => void;
   companyName: string;
 }) {
+  const t = useText();
+  const company = companyName.trim();
   const patch = (index: number, next: Partial<KeyPersonOwnerEntry>) =>
     onChange(owners.map((o, i) => (i === index ? { ...o, ...next } : o)));
 
@@ -40,18 +43,18 @@ export function KeyPersonOwners({
     <div className="space-y-2 rounded-xl border border-border p-3">
       <div className="space-y-1">
         <Label>
-          Who owns {companyName.trim() || 'this company'}?{' '}
-          <span className="text-muted-foreground">(optional)</span>
+          {company
+            ? t('keyPeople.form.owners.title', { company })
+            : t('keyPeople.form.owners.titleUnnamed')}{' '}
+          <span className="text-muted-foreground">{t('keyPeople.form.optional')}</span>
         </Label>
-        <p className="text-xs text-muted-foreground">
-          A company cannot verify an identity, so tell us the people behind it if you know them.
-        </p>
+        <p className="text-xs text-muted-foreground">{t('keyPeople.form.owners.description')}</p>
       </div>
 
       {owners.map((owner, index) => (
         <div key={index} className="flex items-start gap-2">
           <Input
-            placeholder="Full name"
+            placeholder={t('keyPeople.form.owners.namePlaceholder')}
             aria-label={`Owner ${index + 1} name`}
             value={owner.name}
             onChange={(e) => patch(index, { name: e.target.value })}
@@ -97,7 +100,7 @@ export function KeyPersonOwners({
           onClick={() => onChange([...owners, { ...EMPTY }])}
         >
           <Plus className="mr-1.5 h-3.5 w-3.5" />
-          {owners.length === 0 ? 'Add an owner' : 'Add another'}
+          {t(owners.length === 0 ? 'keyPeople.form.owners.add' : 'keyPeople.form.owners.addAnother')}
         </Button>
       )}
     </div>

@@ -3,6 +3,7 @@
 import React from 'react';
 import { ChevronRight, Loader2, LocateFixed, MapPin } from '../../components/icons';
 import { cn } from '../../lib/utils';
+import { useText } from '../../i18n';
 
 /**
  * "Use my current location" as a proper row, not a button pretending to be
@@ -21,6 +22,7 @@ export function CurrentLocationRow({
   locating: boolean;
   onClick: () => void;
 }) {
+  const t = useText();
   return (
     <button
       type="button"
@@ -42,9 +44,9 @@ export function CurrentLocationRow({
         )}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block text-sm font-semibold">Use my current location</span>
+        <span className="block text-sm font-semibold">{t('address.currentLocation.title')}</span>
         <span className="mt-0.5 block truncate text-xs text-muted-foreground">
-          {hint ?? (locating ? 'Finding your location…' : 'Lands the pin right where you are')}
+          {hint ?? (locating ? t('address.currentLocation.finding') : t('address.currentLocation.hint'))}
         </span>
       </span>
       <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
@@ -62,6 +64,7 @@ export function CurrentLocationRow({
  * yanked a confirmed address to wherever the phone was.
  */
 export function LocateFab({ locating, onClick }: { locating: boolean; onClick: () => void }) {
+  const t = useText();
   return (
     <button
       type="button"
@@ -76,7 +79,7 @@ export function LocateFab({ locating, onClick }: { locating: boolean; onClick: (
         <LocateFixed className="h-4 w-4 shrink-0 text-primary" />
       )}
       <span className="text-xs font-semibold">
-        {locating ? 'Finding you…' : 'Use my location'}
+        {locating ? t('address.locate.finding') : t('address.locate.button')}
       </span>
     </button>
   );

@@ -7,7 +7,7 @@ import {
 	Check,
 	Loader2,
 	Camera,
-	AlertTriangle,
+	TriangleAlert,
 	CreditCard,
 	ArrowLeft,
 	ImageUp,
@@ -25,6 +25,8 @@ import { useKYCConfig } from "../context/KYCConfigContext";
 import { stepAfterCapture } from "../lib/post-capture";
 import { multiIdPlan } from "../lib/multi-id";
 import { useCamera } from "../hooks/useCamera";
+import { useSilentCapture } from "../hooks/useSilentCapture";
+import { DOCUMENT_FRAME_DELAY_MS } from "../lib/silent-capture";
 import { useCameraPrimer } from "../hooks/useCameraPrimer";
 import {
 	useDocumentDetection,
@@ -65,6 +67,7 @@ import {
 	logCaptureSize,
 } from "../lib/capture-settings";
 import { verifiedIdsFromState } from '../lib/supporting-documents';
+import { useText } from "../i18n";
 
 // Scan phases:
 //   front         — camera open for front side
@@ -119,6 +122,7 @@ function grabFrameSnapshot(
 export function DocumentCaptureStep() {
 	const { state, dispatch } = useKYCContext();
 	const config = useKYCConfig();
+	const t = useText();
 
 	// How the user may supply each side: scanned live with the camera, picked
 	// from the device (gallery / file picker / drag-and-drop), or either. Both
@@ -136,7 +140,8 @@ export function DocumentCaptureStep() {
 	const idTypeDef = state.selectedIdType
 		? config.getIdTypeDefinition(state.selectedIdType)
 		: null;
-	const idTypeLabel = idTypeDef?.label ?? state.selectedIdType ?? "ID Document";
+	const idTypeLabel =
+		idTypeDef?.label ?? state.selectedIdType ?? t("uploadDocument.documentFallback");
 
 	const scanSides = idTypeDef?.scanSides ?? "front_only";
 	const isTwoSided = scanSides === "front_and_back";
@@ -387,6 +392,17 @@ export function DocumentCaptureStep() {
 	useEffect(() => {
 		setMirrorPreview(isFrontFacingStream(camera.stream));
 	}, [camera.stream]);
+
+	// Silent capture (lib/silent-capture.ts), which runs on this step only:
+	// when the document camera is a FRONT one (a laptop webcam), it is also
+	// looking at the person, so one unposed frame is taken shortly after each
+	// side's camera goes live. A phone's rear camera sees only the document and
+	// takes nothing.
+	useSilentCapture({
+		videoRef: camera.videoRef,
+		active: cameraActive && camera.isReady && mirrorPreview,
+		delayMs: DOCUMENT_FRAME_DELAY_MS,
+	});
 
 	// ---------------------------------------------------------------------------
 	// Video recording — starts when camera stream is available
@@ -879,45 +895,41 @@ export function DocumentCaptureStep() {
 		</div>
 	);
 
-	const title =
+	// Each case is its own catalogue entry, so a workflow can reword it whole.
+	const doc = { document: idTypeLabel };
+	const titleKey =
 		phase === "front" ?
-			isTwoSided ? `${uploadOnly ? "Upload" : "Scan"} Front of Your ${idTypeLabel}`
-			:	`${uploadOnly ? "Upload" : "Capture"} Your ${idTypeLabel}`
-		: phase === "front-preview" ? (uploadOnly ? "Front Side Added" : "Front Side Captured")
-		: phase === "back" ? `${uploadOnly ? "Upload" : "Scan"} Back of Your ${idTypeLabel}`
-		: `Review Your ${idTypeLabel}`;
-
-	const cameraDescription =
-		phase === "front" ?
-			isTwoSided ? `Place the FRONT of your ${idTypeLabel} within the frame.`
-			:	`Photograph your ${idTypeLabel} — position it within the frame and hold steady.`
+			isTwoSided ?
+				uploadOnly ? "uploadDocument.title.uploadFront" : "uploadDocument.title.scanFront"
+			: uploadOnly ? "uploadDocument.title.upload"
+			: "uploadDocument.title.capture"
 		: phase === "front-preview" ?
-			"Looks good? Tap Next to flip the card and scan the back side."
+			uploadOnly ? "uploadDocument.title.frontAdded" : "uploadDocument.title.frontCaptured"
 		: phase === "back" ?
-			`Now place the BACK of your ${idTypeLabel} within the frame.`
-		: isTwoSided ? "Both sides captured. Tap Continue to proceed."
-		: "Looks good? Tap Continue to proceed.";
+			uploadOnly ? "uploadDocument.title.uploadBack" : "uploadDocument.title.scanBack"
+		: "uploadDocument.title.review";
+	const title = t(titleKey, doc);
 
 	// Upload-only copy: the same beats, with the camera's words taken out.
-	const uploadDescription =
+	const descriptionKey =
 		phase === "front" ?
-			isTwoSided ? `Choose a clear photo of the FRONT of your ${idTypeLabel}.`
-			:	`Choose a clear photo of your ${idTypeLabel}.`
-		: phase === "front-preview" ? "Looks good? Tap Next to add the back."
-		: phase === "back" ? `Now choose a clear photo of the BACK of your ${idTypeLabel}.`
-		: isTwoSided ? "Both sides added. Tap Continue to proceed."
-		: "Looks good? Tap Continue to proceed.";
-
-	const description = uploadOnly ? uploadDescription : cameraDescription;
+			isTwoSided ?
+				uploadOnly ? "uploadDocument.description.uploadFront" : "uploadDocument.description.scanFront"
+			: uploadOnly ? "uploadDocument.description.upload"
+			: "uploadDocument.description.capture"
+		: phase === "front-preview" ?
+			uploadOnly ? "uploadDocument.description.frontAdded" : "uploadDocument.description.frontCaptured"
+		: phase === "back" ?
+			uploadOnly ? "uploadDocument.description.uploadBack" : "uploadDocument.description.scanBack"
+		: isTwoSided ?
+			uploadOnly ? "uploadDocument.description.reviewBothAdded" : "uploadDocument.description.reviewBoth"
+		: "uploadDocument.description.review";
+	const description = t(descriptionKey, doc);
 
 	const stepProgress =
-		phase === "front" ?
-			isTwoSided ? "Step 1 of 2"
-			:	null
-		: phase === "front-preview" ?
-			isTwoSided ? "Step 1 of 2"
-			:	null
-		: phase === "back" ? "Step 2 of 2"
+		isTwoSided && (phase === "front" || phase === "front-preview") ?
+			t("uploadDocument.progress", { current: 1, total: 2 })
+		: phase === "back" ? t("uploadDocument.progress", { current: 2, total: 2 })
 		: null;
 
 	// ---------------------------------------------------------------------------
@@ -932,10 +944,10 @@ export function DocumentCaptureStep() {
 		return (
 			<div className='space-y-4 animate-slide-up'>
 				<StepHeader
-					title={
-						phase === "back" ? "Crop Back of Document" : "Crop Your Document"
-					}
-					description='Position the frame so your ID card fills it edge-to-edge.'
+					title={t(
+						phase === "back" ? "uploadDocument.crop.titleBack" : "uploadDocument.crop.title",
+					)}
+					description={t("uploadDocument.crop.description")}
 					onBack={cancelCrop}
 				/>
 				<ImageCropper
@@ -985,11 +997,17 @@ export function DocumentCaptureStep() {
 							showFlipBanner && "animate-card-flip",
 						)}
 					/>
-					<span className='font-medium shrink-0'>Required:</span>
+					<span className='font-medium shrink-0'>
+						{t("uploadDocument.badge.required")}
+					</span>
 					<span className='min-w-0 wrap-break-word'>{idTypeLabel}</span>
 					{isTwoSided && phase !== "review" && (
 						<span className='shrink-0 rounded-full bg-primary/15 px-2 py-0.5 text-xs font-semibold'>
-							{phase === "back" ? "Back Side" : "Front Side"}
+							{t(
+								phase === "back" ?
+									"uploadDocument.badge.backSide"
+								:	"uploadDocument.badge.frontSide",
+							)}
 						</span>
 					)}
 				</div>
@@ -1005,7 +1023,7 @@ export function DocumentCaptureStep() {
 			{showFlipBanner && (
 				<div className='flex items-center justify-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-4 py-3 text-sm font-medium text-primary animate-fade-in'>
 					<CreditCard className='h-4 w-4 animate-card-flip' />
-					Great! Now flip your card over to scan the back.
+					{t("uploadDocument.flipBanner")}
 				</div>
 			)}
 
@@ -1042,16 +1060,17 @@ export function DocumentCaptureStep() {
 							{uploadOnly ?
 								<ImageUp className='h-4 w-4' />
 							:	<RotateCcw className='h-4 w-4' />}
-							{uploadOnly ? "Replace" : "Retake"}
+							{t(uploadOnly ? "uploadDocument.replace" : "common.retake")}
 						</Button>
 						<Button
 							className='flex-1 gap-2'
 							onClick={proceedToBack}
 							disabled={isBusy}>
-							{backPreview ?
-								"Continue to Review"
-							: uploadOnly ? "Next: Upload Back"
-							: "Next: Scan Back"}
+							{t(
+								backPreview ? "uploadDocument.frontPreview.continueToReview"
+								: uploadOnly ? "uploadDocument.frontPreview.nextUploadBack"
+								: "uploadDocument.frontPreview.nextScanBack",
+							)}
 						</Button>
 					</div>
 				</div>
@@ -1071,7 +1090,10 @@ export function DocumentCaptureStep() {
 					source={uploadOnly ? "upload" : "camera"}>
 					{retryInfo && isUploading && (
 						<p className='mb-2 text-center text-xs text-amber-700 dark:text-amber-400'>
-							Upload failed. Retrying ({retryInfo.attempt}/{retryInfo.total})…
+							{t("uploadDocument.review.retrying", {
+								attempt: retryInfo.attempt,
+								total: retryInfo.total,
+							})}
 						</p>
 					)}
 
@@ -1086,15 +1108,15 @@ export function DocumentCaptureStep() {
 					: uploadError ?
 						<div className='space-y-3'>
 							<Alert variant='destructive'>
-								<AlertTriangle className='h-4 w-4' />
-								<AlertTitle>Upload Failed</AlertTitle>
+								<TriangleAlert className='h-4 w-4' />
+								<AlertTitle>{t("uploadDocument.review.uploadFailed")}</AlertTitle>
 								<AlertDescription>{uploadError}</AlertDescription>
 							</Alert>
 							<Button
 								className='w-full gap-2'
 								onClick={handleContinue}
 								disabled={isBusy}>
-								Try Again
+								{t("uploadDocument.tryAgain")}
 							</Button>
 						</div>
 					:	<Button
@@ -1104,7 +1126,7 @@ export function DocumentCaptureStep() {
 							{isUploading ?
 								<Loader2 className='h-4 w-4 animate-spin' />
 							:	<Check className='h-4 w-4' />}
-							Continue
+							{t("common.continue")}
 						</Button>
 					}
 				</DocumentReview>
@@ -1119,7 +1141,7 @@ export function DocumentCaptureStep() {
 
 			{needsPrimer && !showFlipBanner && (
 				<CameraPermissionPrimer
-					bodyText="When prompted, allow camera access to photograph your document."
+					bodyText={t("primer.camera.bodyDocument")}
 					onGrant={() => setPrimed(true)}
 				/>
 			)}
@@ -1180,7 +1202,7 @@ export function DocumentCaptureStep() {
 								guideAspect={guideAspect}
 								framing={guidance.framing}
 								progress={dwell}
-								hint={documentHintText(guidance.hint, idTypeLabel)}
+								hint={documentHintText(guidance.hint, idTypeLabel, t)}
 								busy={isCompressing}
 								mirrored={mirrorPreview}
 								onCapture={handleManualCapture}
@@ -1197,7 +1219,7 @@ export function DocumentCaptureStep() {
 								guideAspect={guideAspect}
 								framing={guidance.framing}
 								progress={dwell}
-								hint={documentHintText(guidance.hint, idTypeLabel)}
+								hint={documentHintText(guidance.hint, idTypeLabel, t)}
 								busy={isCompressing}
 								mirrored={mirrorPreview}
 								torch={torch.torch}
@@ -1239,14 +1261,14 @@ export function DocumentCaptureStep() {
 								{camera.permissionDenied ?
 									<>
 										<p className='text-sm font-medium'>
-											Camera access was denied
+											{t("uploadDocument.camera.denied")}
 										</p>
 										<p className='text-xs text-white/80'>
-											Allow camera access in your browser/site settings and tap
-											Try Again
-											{showUploadFallback ?
-												" — or upload a photo of your document instead."
-											:	"."}
+											{t(
+												showUploadFallback ?
+													"uploadDocument.camera.deniedHintUpload"
+												:	"uploadDocument.camera.deniedHint",
+											)}
 										</p>
 									</>
 								:	<p className='text-sm'>{camera.error}</p>}
@@ -1256,7 +1278,7 @@ export function DocumentCaptureStep() {
 										size='sm'
 										onClick={() => camera.restart("environment")}
 										className='border-white/30 text-white'>
-										Try Again
+										{t("uploadDocument.tryAgain")}
 									</Button>
 									{showUploadFallback && (
 										<Button
@@ -1264,7 +1286,7 @@ export function DocumentCaptureStep() {
 											size='sm'
 											onClick={openUpload}
 											className='border-white/30 text-white gap-1'>
-											<Upload className='h-3.5 w-3.5' /> Upload
+											<Upload className='h-3.5 w-3.5' /> {t("common.upload")}
 										</Button>
 									)}
 								</div>
@@ -1284,7 +1306,7 @@ export function DocumentCaptureStep() {
 					    hint line, and the upload link becomes its gallery control. */}
 					{!immersive && (
 						<p className='text-center text-xs text-muted-foreground'>
-							Card detected automatically · or tap the button to capture manually
+							{t("uploadDocument.camera.autoCaption")}
 						</p>
 					)}
 
@@ -1305,23 +1327,24 @@ export function DocumentCaptureStep() {
 								<path d='M9 18h6M10 22h4' />
 							</svg>
 							<span>
-								{isBright ?
-									"Too bright — reduce glare or move away from direct light for a clearer capture."
-								:	"It looks dark here. Move to a brighter area for a clearer capture."
-								}
+								{t(
+									isBright ?
+										"uploadDocument.camera.tooBright"
+									:	"uploadDocument.camera.tooDark",
+								)}
 							</span>
 						</div>
 					)}
 
 					{allowUpload && !immersive && (
 						<div className='flex items-center justify-center gap-1.5 text-xs text-muted-foreground'>
-							<span>Having trouble?</span>
+							<span>{t("uploadDocument.camera.havingTrouble")}</span>
 							<button
 								type='button'
 								onClick={openUpload}
 								className='inline-flex items-center gap-1 font-medium text-primary underline-offset-2 hover:underline'>
 								<Upload className='h-3 w-3' />
-								Upload a photo instead
+								{t("uploadDocument.camera.uploadInstead")}
 							</button>
 						</div>
 					)}
@@ -1338,7 +1361,7 @@ export function DocumentCaptureStep() {
 						style={{ aspectRatio: "16/10" }}>
 						<Loader2 className='h-6 w-6 animate-spin text-primary' />
 						<p className='text-sm text-muted-foreground'>
-							Opening photo picker…
+							{t("uploadDocument.camera.openingPicker")}
 						</p>
 						<Button
 							variant='outline'
@@ -1346,7 +1369,7 @@ export function DocumentCaptureStep() {
 							onClick={cancelUpload}
 							className='gap-1.5'>
 							<Camera className='h-3.5 w-3.5' />
-							Back to camera
+							{t("uploadDocument.camera.backToCamera")}
 						</Button>
 					</div>
 				</div>
@@ -1354,7 +1377,7 @@ export function DocumentCaptureStep() {
 
 			{isCompressing && (
 				<p className='text-center text-xs text-muted-foreground'>
-					Compressing image…
+					{t("uploadDocument.compressing")}
 				</p>
 			)}
 		</div>

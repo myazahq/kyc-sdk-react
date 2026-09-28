@@ -3,7 +3,7 @@
 import React, { useRef } from 'react';
 import { Check, FileText, Loader2, Upload, X } from '../components/icons';
 import { UploadedFileThumb } from '../components/UploadedFilePreview';
-import { UPLOAD_HINT } from '../lib/upload-limits';
+import { useText } from '../i18n';
 import { BUSINESS_DOC_ACCEPTED_MIMES } from './BusinessDocumentSlot';
 
 interface SupportingDocumentCardProps {
@@ -49,6 +49,7 @@ export function SupportingDocumentCard({
   onPick,
   onRemove,
 }: SupportingDocumentCardProps) {
+  const t = useText();
   const inputRef = useRef<HTMLInputElement>(null);
   const uploaded = fileName !== null;
   const errorId = `supporting-doc-error-${position}`;
@@ -103,14 +104,14 @@ export function SupportingDocumentCard({
               required ? 'bg-destructive/10 text-destructive' : 'bg-background text-muted-foreground'
             }`}
           >
-            {required ? 'Required' : 'Optional'}
+            {t(required ? 'supportingDocuments.card.required' : 'supportingDocuments.card.optional')}
           </span>
         </div>
 
         {reads.length > 0 && (
           <div className="rounded-xl bg-background px-3 py-2.5">
             <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              What we read from it
+              {t('supportingDocuments.card.reads')}
             </p>
             <ul className="mt-2 flex flex-wrap gap-1.5">
               {reads.map((read) => (
@@ -137,7 +138,7 @@ export function SupportingDocumentCard({
               className="min-h-11 rounded-lg px-2 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
               onClick={() => inputRef.current?.click()}
             >
-              Replace
+              {t('supportingDocuments.card.replace')}
             </button>
             <button
               type="button"
@@ -163,9 +164,11 @@ export function SupportingDocumentCard({
             )}
             <span className="min-w-0 flex-1">
               <span className="block text-sm font-medium">
-                {uploading ? 'Uploading…' : `Upload ${label.toLowerCase()}`}
+                {uploading
+                  ? t('supportingDocuments.card.uploading')
+                  : t('supportingDocuments.card.upload', { document: label.toLowerCase() })}
               </span>
-              <span className="block text-[11px] text-muted-foreground">{UPLOAD_HINT}</span>
+              <span className="block text-[11px] text-muted-foreground">{t('supportingDocuments.card.uploadHint')}</span>
             </span>
           </button>
         )}

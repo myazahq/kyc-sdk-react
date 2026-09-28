@@ -11,6 +11,7 @@ import { StreetViewFramer } from './StreetViewFramer';
 import { FramedStreetView } from './FramedStreetView';
 import { streetViewFrameUrlOf } from '../../lib/map-frame';
 import { Landmark } from '../../components/icons';
+import { useText } from '../../i18n';
 
 /**
  * The entrance step: Street View FIRST — it opens automatically wherever
@@ -22,6 +23,7 @@ import { Landmark } from '../../components/icons';
  */
 export function AddressEntranceStep() {
   const { state, dispatch } = useKYCContext();
+  const t = useText();
   const flow = useAddressFlow();
   const svFrameUrl = !flow.googleKey && flow.mapsFrameUrl ? streetViewFrameUrlOf(flow.mapsFrameUrl) : null;
   const svRequired = flow.address?.streetView === 'required';
@@ -53,12 +55,10 @@ export function AddressEntranceStep() {
   return (
     <div className="space-y-4 animate-slide-up">
       <StepHeader
-        title="Show the entrance"
-        description={
-          mode === 'framing'
-            ? 'Frame your entrance in the street imagery. No camera needed.'
-            : 'A picture of the gate or front door makes the address findable.'
-        }
+        title={t('address.entrance.title')}
+        description={t(
+          mode === 'framing' ? 'address.entrance.description.framing' : 'address.entrance.description.photo',
+        )}
         onBack={() => flow.goBack('address-entrance')}
       />
 
@@ -83,11 +83,11 @@ export function AddressEntranceStep() {
                     }}
                     className="h-11 flex-1 rounded-xl"
                   >
-                    Skip
+                    {t('common.skip')}
                   </Button>
                 )}
                 <Button onClick={() => flow.goNext('address-entrance')} className="h-11 flex-1 rounded-xl">
-                  Use this view
+                  {t('address.entrance.useView')}
                 </Button>
               </div>
             </StickyActions>
@@ -130,9 +130,7 @@ export function AddressEntranceStep() {
       ) : (
         <>
           {skipped && (
-            <p className="text-sm text-muted-foreground">
-              No problem. A quick photo of the entrance works just as well.
-            </p>
+            <p className="text-sm text-muted-foreground">{t('address.entrance.skipped')}</p>
           )}
           <AddressPhotoUpload
             required={flow.photoMode === 'required'}
@@ -149,7 +147,9 @@ export function AddressEntranceStep() {
             disabled={!canContinue}
             className="h-12 w-full rounded-xl text-base font-medium"
           >
-            {photoUploaded ? 'Continue' : flow.photoMode === 'required' ? 'Continue' : 'Continue without a photo'}
+            {photoUploaded || flow.photoMode === 'required'
+              ? t('common.continue')
+              : t('address.entrance.continueWithoutPhoto')}
           </Button>
         </>
       )}

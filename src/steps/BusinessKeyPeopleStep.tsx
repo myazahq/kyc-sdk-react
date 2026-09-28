@@ -27,6 +27,7 @@ import { KeyPeopleHints } from './KeyPeopleHints';
 import type { KeyPersonEntry } from '../context/types';
 import { prefillKeyPeople, shouldPrefill } from '../lib/key-people-prefill';
 import { defaultCountry as resolveCountry } from '../lib/country-default';
+import { useText } from '../i18n';
 
 type SheetState = { mode: 'add' | 'edit'; section: SectionKey; index?: number } | null;
 
@@ -42,6 +43,7 @@ type SheetState = { mode: 'add' | 'edit'; section: SectionKey; index?: number } 
 export function BusinessKeyPeopleStep() {
   const { state, dispatch } = useKYCContext();
   const config = useKYCConfig();
+  const t = useText();
   const rows = state.businessApplication.keyPeople;
   const uboUnidentifiable = state.businessApplication.uboUnidentifiable;
   const [sheet, setSheet] = useState<SheetState>(null);
@@ -89,7 +91,7 @@ export function BusinessKeyPeopleStep() {
   const overAllocated = totalPct > 100;
   const canContinue = meetsMinimum && invalidRows.length === 0 && !overAllocated;
 
-  const sections = keyPeopleSectionList(config.business, threshold);
+  const sections = keyPeopleSectionList(config.business, threshold, t);
   const canAdd = rows.length < MAX_KEY_PEOPLE_ROWS;
 
   const editEntry = sheet?.mode === 'edit' && sheet.index != null ? rows[sheet.index] : undefined;
@@ -124,8 +126,8 @@ export function BusinessKeyPeopleStep() {
   return (
     <div className="space-y-6 animate-slide-up">
       <StepHeader
-        title="Key people"
-        description="Add the company's directors, shareholders and beneficial owners."
+        title={t('keyPeople.title')}
+        description={t('keyPeople.description')}
         onBack={() =>
           dispatch({ type: 'SET_STEP', payload: prevBusinessStep('business-key-people', config) })
         }
@@ -149,14 +151,14 @@ export function BusinessKeyPeopleStep() {
 
       {!canAdd && (
         <p className="text-center text-sm text-muted-foreground">
-          You can list up to {MAX_KEY_PEOPLE_ROWS} people here.
+          {t('keyPeople.limit', { count: MAX_KEY_PEOPLE_ROWS })}
         </p>
       )}
 
       <KeyPeopleTotals totalPct={totalPct} overAllocated={overAllocated} />
 
       <Button onClick={handleContinue} disabled={!canContinue} className="w-full">
-        Continue
+        {t('common.continue')}
       </Button>
 
       {sheet && (sheet.mode === 'add' || editEntry) && (

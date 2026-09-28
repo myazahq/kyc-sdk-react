@@ -2,15 +2,39 @@
 // Liveness challenge types & configuration
 // ---------------------------------------------------------------------------
 
+// Straight from translate (not the i18n barrel): the barrel reaches the React
+// context, which imports this module's types, and the pool below reads the
+// defaults at load.
+import { defaultText } from '../i18n/translate';
+import type { TextFn } from '../i18n/types';
+
 export type LivenessChallenge =
   | 'nod'
   | 'turn'
   | 'blink'
   | 'smile'
-  | 'flash';
+  | 'flash'
+  // Passive Liveness: hold still and look at the camera; passes on its own
+  // after a steady moment, and the server's model does the judging.
+  | 'hold';
 
 /** How Presence Intelligence verifies liveness. Configured per workflow. */
-export type LivenessMode = 'gestures' | 'flash' | 'both';
+export type LivenessMode = 'gestures' | 'flash' | 'both' | 'passive';
+
+/** The catalogue key of each challenge's instruction (shown AND spoken). */
+export const CHALLENGE_TEXT_KEYS: Record<LivenessChallenge, string> = {
+  nod: 'presence.challenge.nod',
+  turn: 'presence.challenge.turn',
+  blink: 'presence.challenge.blink',
+  smile: 'presence.challenge.smile',
+  flash: 'presence.challenge.flash',
+  hold: 'presence.challenge.hold',
+};
+
+/** A challenge's instruction in the workflow's copy; the defaults without a `t`. */
+export function challengeInstruction(type: LivenessChallenge, t: TextFn = defaultText): string {
+  return t(CHALLENGE_TEXT_KEYS[type]);
+}
 
 export interface ChallengeConfig {
   type: LivenessChallenge;
@@ -24,7 +48,7 @@ export interface ChallengeConfig {
 export const CHALLENGE_POOL: ChallengeConfig[] = [
   {
     type: 'nod',
-    instruction: 'Kindly nod your head',
+    instruction: challengeInstruction('nod'),
     icon: '↕️',
     avatarAnimation: 'animate-avatar-nod',
     timeoutSeconds: 8,
@@ -32,7 +56,7 @@ export const CHALLENGE_POOL: ChallengeConfig[] = [
   },
   {
     type: 'turn',
-    instruction: 'Kindly turn your head',
+    instruction: challengeInstruction('turn'),
     icon: '↔️',
     avatarAnimation: 'animate-avatar-turn',
     timeoutSeconds: 8,
@@ -40,7 +64,7 @@ export const CHALLENGE_POOL: ChallengeConfig[] = [
   },
   {
     type: 'blink',
-    instruction: 'Kindly blink your eyes',
+    instruction: challengeInstruction('blink'),
     icon: '😉',
     avatarAnimation: 'animate-avatar-blink',
     timeoutSeconds: 6,
@@ -48,7 +72,7 @@ export const CHALLENGE_POOL: ChallengeConfig[] = [
   },
   {
     type: 'smile',
-    instruction: 'Kindly smile',
+    instruction: challengeInstruction('smile'),
     icon: '😊',
     avatarAnimation: 'animate-avatar-smile',
     timeoutSeconds: 6,
@@ -64,12 +88,29 @@ export const CHALLENGE_POOL: ChallengeConfig[] = [
  */
 export const FLASH_CHALLENGE: ChallengeConfig = {
   type: 'flash',
-  instruction: 'Hold still',
+  instruction: challengeInstruction('flash'),
   icon: '✨',
   avatarAnimation: '',
   timeoutSeconds: 12,
   detectionThreshold: 0.5,
 };
+
+/**
+ * Passive Liveness: the ONE prompt. The face holds still in the circle for
+ * `HOLD_FRAMES`; the recording and the selfie go to the server, where the
+ * liveness model decides. Never part of the random gesture pool.
+ */
+export const HOLD_CHALLENGE: ChallengeConfig = {
+  type: 'hold',
+  instruction: challengeInstruction('hold'),
+  icon: '',
+  avatarAnimation: '',
+  timeoutSeconds: 10,
+  detectionThreshold: 0,
+};
+
+/** About two seconds of a steady, centred face at 30 fps. */
+export const HOLD_FRAMES = 60;
 
 // ---------------------------------------------------------------------------
 // State machine
@@ -103,7 +144,7 @@ export interface LivenessConfig {
   timeoutPerChallenge: number;
   enableAvatar: boolean;
   positioningTimeout: number;
-  /** gestures (default) | flash (screen-reflection only) | both (gestures + flash). */
+  /** gestures (default) | flash (screen-reflection only) | both (gestures + flash) | passive (hold still). */
   mode: LivenessMode;
   /** Flash sequence length (colours). Undefined ⇒ the generator default (4). */
   flashSequenceLength?: number;

@@ -10,6 +10,7 @@ import { eventPathIncludes } from '../lib/event-path';
 import { useDropdownAnchor } from '../lib/use-dropdown-anchor';
 import { useKYCConfig } from '../context/KYCConfigContext';
 import type { AddressSearchHit } from '../services/api';
+import { useText } from '../i18n';
 
 // The address step's search box — the OkHi flow's best idea, in our order:
 // type the address you know ("11 bassey street"), pick a candidate, and the
@@ -31,6 +32,7 @@ export function AddressSearchBox({
   onPick: (hit: AddressSearchHit) => void;
 }) {
   const config = useKYCConfig();
+  const t = useText();
   const [query, setQuery] = useState('');
   const [searching, setSearching] = useState(false);
   const [results, setResults] = useState<AddressSearchHit[] | null>(null);
@@ -83,7 +85,7 @@ export function AddressSearchBox({
               void search();
             }
           }}
-          placeholder="Search your address, e.g. 12 Adeola Odeku Street"
+          placeholder={t('address.search.placeholder')}
           className="h-11 rounded-xl"
           aria-label="Search your address"
         />
@@ -106,9 +108,7 @@ export function AddressSearchBox({
           >
             <div className="overflow-y-auto overscroll-contain" style={{ maxHeight: anchor.maxHeight }}>
               {results.length === 0 ? (
-                <p className="px-3 py-2.5 text-sm text-muted-foreground">
-                  No matches. Drag the map to place the pin instead.
-                </p>
+                <p className="px-3 py-2.5 text-sm text-muted-foreground">{t('address.search.noMatches.basic')}</p>
               ) : (
                 results.map((hit, i) => (
                   <button

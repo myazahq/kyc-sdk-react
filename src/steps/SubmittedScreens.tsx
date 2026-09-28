@@ -2,6 +2,7 @@
 
 import { Loader2 } from '../components/icons';
 import { Button } from "../components/ui/button";
+import { useText } from '../i18n';
 
 // ---------------------------------------------------------------------------
 // Presentational screens for SubmittedStep (loading / error / success),
@@ -52,6 +53,7 @@ export function SubmitErrorScreen({
 	onRetry: () => void;
 	onClose: () => void;
 }) {
+	const t = useText();
 	return (
 		<div className='flex flex-col items-center gap-6 py-8 animate-fade-in'>
 			<div className='flex h-20 w-20 items-center justify-center rounded-full bg-destructive/10'>
@@ -71,17 +73,17 @@ export function SubmitErrorScreen({
 
 			<div className='text-center space-y-1'>
 				<h2 className='text-xl font-semibold font-heading'>
-					Submission Failed
+					{t('result.error.title')}
 				</h2>
 				<p className='text-sm text-muted-foreground'>{message}</p>
 			</div>
 
 			<Button className='w-full' onClick={onRetry}>
-				Try Again
+				{t('result.error.tryAgainButton')}
 			</Button>
 
 			<Button variant='ghost' className='w-full' onClick={onClose}>
-				Close
+				{t('common.close')}
 			</Button>
 		</div>
 	);

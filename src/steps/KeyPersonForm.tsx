@@ -22,6 +22,7 @@ import { KeyPersonOwners } from './KeyPersonOwners';
 import { ALL_REGION_CODES } from '../lib/regions';
 import type { KeyPersonEntry } from '../context/types';
 import type { KeyPersonRole } from '../types/business';
+import { useText } from '../i18n';
 
 /**
  * The key-person FIELDS, scoped by the SECTION that opened the sheet: the
@@ -67,9 +68,12 @@ export function KeyPersonForm({
    */
   combinedPctError?: string | null;
 }) {
+  const t = useText();
   const nameInvalid = entry.name !== '' && entry.name.trim().length < 2;
   const emailInvalid = entry.email.trim() !== '' && !isValidContactEmail(entry.email.trim());
   const corp = entry.isCorporate;
+  // Suffix of the texts that differ for a company and a person.
+  const kind = corp ? 'Company' : 'Person';
   const needsEmail = rowNeedsEmail(entry, emailRequiredFor);
   const roles = rolesOf(entry);
   const stake = stakeOf(entry);
@@ -106,18 +110,16 @@ export function KeyPersonForm({
       )}
 
       <div className="space-y-2">
-        <Label htmlFor="kp-sheet-name">{corp ? 'Company name' : 'Full name'}</Label>
+        <Label htmlFor="kp-sheet-name">{t(`keyPeople.form.name.label${kind}`)}</Label>
         <Input
           id="kp-sheet-name"
-          placeholder={corp ? 'e.g. Acme Holdings Ltd' : 'e.g. Bola Owner'}
+          placeholder={t(`keyPeople.form.name.placeholder${kind}`)}
           value={entry.name}
           onChange={(e) => onChange({ name: e.target.value })}
           className={nameInvalid ? 'border-destructive' : ''}
         />
         {nameInvalid && (
-          <p className="text-sm text-destructive">
-            Enter the {corp ? 'registered company name' : 'person’s full name'}.
-          </p>
+          <p className="text-sm text-destructive">{t(`keyPeople.form.name.error${kind}`)}</p>
         )}
       </div>
 
@@ -128,11 +130,12 @@ export function KeyPersonForm({
       {!corp && (
         <div className="space-y-2">
           <Label htmlFor="kp-sheet-title">
-            Position or title <span className="text-muted-foreground">(optional)</span>
+            {t('keyPeople.form.title.label')}{' '}
+            <span className="text-muted-foreground">{t('keyPeople.form.optional')}</span>
           </Label>
           <Input
             id="kp-sheet-title"
-            placeholder="e.g. CFO, Board Member"
+            placeholder={t('keyPeople.form.title.placeholder')}
             value={entry.title ?? ''}
             onChange={(e) => onChange({ title: e.target.value })}
           />
@@ -147,18 +150,19 @@ export function KeyPersonForm({
       />
       {section === 'ubos' && stake != null && stake > 0 && stake < uboThreshold && (
         <p className="text-xs text-muted-foreground">
-          Below {uboThreshold}% they will be recorded as a shareholder.
+          {t('keyPeople.form.ownership.belowThreshold', { threshold: uboThreshold })}
         </p>
       )}
 
       {corp && (
         <div className="space-y-2">
           <Label htmlFor="kp-sheet-rc">
-            Registration number <span className="text-muted-foreground">(optional)</span>
+            {t('keyPeople.form.registrationNumber.label')}{' '}
+            <span className="text-muted-foreground">{t('keyPeople.form.optional')}</span>
           </Label>
           <Input
             id="kp-sheet-rc"
-            placeholder="e.g. RC123456"
+            placeholder={t('keyPeople.form.registrationNumber.placeholder')}
             value={entry.registrationNumber}
             onChange={(e) => onChange({ registrationNumber: e.target.value })}
           />
@@ -175,8 +179,8 @@ export function KeyPersonForm({
           className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
         >
           <ChevronRight className="h-4 w-4" />
-          Add the people who own it
-          <span className="font-normal">(optional)</span>
+          {t('keyPeople.form.owners.toggle')}
+          <span className="font-normal">{t('keyPeople.form.optional')}</span>
         </button>
       )}
       {corp && showOwners && (
@@ -189,9 +193,9 @@ export function KeyPersonForm({
 
       <div className="space-y-2">
         <Label htmlFor="kp-sheet-country">
-          Country{' '}
+          {t('keyPeople.form.country.label')}{' '}
           <span className="text-muted-foreground">
-            {corp ? '(of incorporation)' : '(where their ID was issued)'}
+            {t(corp ? 'keyPeople.form.country.hintCompany' : 'keyPeople.form.country.hintPerson')}
           </span>
         </Label>
         <BusinessCountrySelect
@@ -214,9 +218,7 @@ export function KeyPersonForm({
         <div className="flex items-start gap-2.5 rounded-xl bg-primary/5 p-3 text-sm text-foreground/80">
           <Info aria-hidden className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
           <p>
-            {corporateKyb
-              ? 'This company will need its own KYB verification: it receives a link to a business application of its own, where the people who own it are identified. We also screen it against sanctions lists.'
-              : 'A company is never asked to verify an identity. We check it against sanctions lists, and the people who own it are reviewed separately, so list its owners above if you know them.'}
+            {t(corporateKyb ? 'keyPeople.form.corporate.kyb' : 'keyPeople.form.corporate.screening')}
           </p>
         </div>
       )}

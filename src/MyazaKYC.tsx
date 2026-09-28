@@ -31,9 +31,11 @@ import { resetIntegritySignals } from './lib/integrity-signals';
 import { persistentDeviceId } from './lib/fingerprint';
 import { startSessionOnce } from './lib/start-session-once';
 import { resetStepLog } from './lib/step-log';
+import { resetSilentCaptures } from './lib/silent-capture-store';
 import type { MyazaKYCConfig, MyazaKYCProps, UseMyazaKYCReturn, KYCStep, AnyCountry } from './types/config';
 import type { SubjectType, WorkflowBusinessConfig } from './types/business';
 import { handoffCaptureNeeded } from './lib/handoff-capture';
+import { resumedApplicationFrom } from './lib/resumed-application';
 
 // Lazy-loaded so the QR/handoff code (and qrcode.react) is code-split out of the
 // initial bundle — it only loads when a desktop user actually reaches the gate.
@@ -166,6 +168,7 @@ function KYCInner({
   enableLiveness,
   livenessMode,
   flashSequenceLength,
+  livenessBrightScreen,
   deviceIntelligence,
   voiceGuidance,
   showThemeToggle,
@@ -173,11 +176,13 @@ function KYCInner({
   disableClose,
   deviceHandoff,
   consentStep,
+  silentCapture,
   biometric,
   progressStyle,
   requireMobileDevice,
   defaultOpen,
   previewMode,
+  previewTrustAttribution,
   previewStep,
   serverConfigOverride,
   onStart,
@@ -189,6 +194,8 @@ function KYCInner({
   appearance,
   consent,
   success,
+  texts,
+  language,
   emailVerification,
   phoneVerification,
   questionnaire,
@@ -224,9 +231,11 @@ function KYCInner({
     ...(enableLiveness !== undefined ? { enableLiveness } : {}),
     ...(livenessMode !== undefined ? { livenessMode } : {}),
     ...(flashSequenceLength !== undefined ? { flashSequenceLength } : {}),
+    ...(livenessBrightScreen !== undefined ? { livenessBrightScreen } : {}),
     ...(deviceIntelligence !== undefined ? { deviceIntelligence } : {}),
     ...(deviceHandoff !== undefined ? { deviceHandoff } : {}),
     ...(consentStep !== undefined ? { consentStep } : {}),
+    ...(silentCapture !== undefined ? { silentCapture } : {}),
     ...(biometric ? { biometric } : {}),
     ...(requireMobileDevice !== undefined ? { requireMobileDevice } : {}),
     ...(voiceGuidance !== undefined ? { voiceGuidance } : {}),
@@ -237,6 +246,7 @@ function KYCInner({
     ...(appearance ? { appearance: appearance as Record<string, unknown> } : {}),
     ...(consent ? { consent: consent as Record<string, unknown> } : {}),
     ...(success ? { success: success as Record<string, unknown> } : {}),
+    ...(texts ? { texts } : {}),
     ...(questionnaire ? { questionnaire: questionnaire as { fields: unknown[] } } : {}),
     ...(emailVerification ? { emailVerification } : {}),
     ...(phoneVerification ? { phoneVerification } : {}),
@@ -249,7 +259,7 @@ function KYCInner({
     ...(userData ? { userData } : {}),
     ...(businessPrefill ? { businessPrefill } : {}),
     ...(assetsBasePath ? { assetsBasePath } : {}),
-  }), [country, workflowId, idTypes, countries, multiId, enableSelfie, enableDocumentCapture, allowDocumentUpload, allowDocumentScan, enableLiveness, livenessMode, flashSequenceLength, deviceIntelligence, deviceHandoff, consentStep, biometric, requireMobileDevice, voiceGuidance, showThemeToggle, progressStyle, fullScreen, disableClose, appearance, consent, success, emailVerification, phoneVerification, questionnaire, proofOfAddress, supportingDocuments, addressCollection, nfc, metadata, userId, userData, businessPrefill, assetsBasePath]);
+  }), [country, workflowId, idTypes, countries, multiId, enableSelfie, enableDocumentCapture, allowDocumentUpload, allowDocumentScan, enableLiveness, livenessMode, flashSequenceLength, livenessBrightScreen, deviceIntelligence, deviceHandoff, consentStep, silentCapture, biometric, requireMobileDevice, voiceGuidance, showThemeToggle, progressStyle, fullScreen, disableClose, appearance, consent, success, texts, emailVerification, phoneVerification, questionnaire, proofOfAddress, supportingDocuments, addressCollection, nfc, metadata, userId, userData, businessPrefill, assetsBasePath]);
 
   // Pre-load MediaPipe Face Mesh model as soon as the SDK mounts and apply the
   // voice-guidance config (enabled + language) for the spoken liveness prompts.
@@ -353,7 +363,7 @@ function KYCInner({
       // let each launch mint TWO sessions — the flow adopted one and the other
       // sat on the org's list forever as a "Not started" ghost. Both mounts now
       // share one in-flight request (and therefore one session).
-      const { sessionId, progress } = await startSessionOnce(
+      const started = await startSessionOnce(
         `${apiKey}|${workflowId ?? ''}|${userId ?? metadata?.userId ?? ''}`,
         () =>
           sessionApiRef.current.startSession({
@@ -368,11 +378,15 @@ function KYCInner({
             device: collectWebDeviceMetadata() as unknown as Record<string, unknown>,
           }),
       );
-      dispatch({ type: 'SET_SESSION_ID', payload: sessionId });
+      dispatch({ type: 'SET_SESSION_ID', payload: started.sessionId });
       // Resuming: put the user back where they were. Media references have been
       // pruned server-side of anything that expired, so a restored capture slot
       // is one whose bytes genuinely still exist.
-      if (progress) dispatch({ type: 'RESTORE_PROGRESS', payload: progress });
+      if (started.progress) dispatch({ type: 'RESTORE_PROGRESS', payload: started.progress });
+      // A KYB application whose business half already committed: the
+      // submitting screen replays it rather than sending a second one the
+      // server refuses (lib/resumed-application.ts).
+      dispatch({ type: 'SET_RESUMED_APPLICATION', payload: resumedApplicationFrom(started) });
     } catch {
       /* resuming is a convenience; verifying is not conditional on it */
     }
@@ -381,6 +395,7 @@ function KYCInner({
   const handleOpen = useCallback(async () => {
     resetIntegritySignals(); // fresh capture-integrity slate per session
     resetStepLog(); // fresh step journey per session
+    resetSilentCaptures(); // silent-capture frames belong to one verification
     seedUserData();
     onStart?.();
     void beginSession();
@@ -414,6 +429,7 @@ function KYCInner({
     autoOpenedRef.current = true;
     resetIntegritySignals();
     resetStepLog();
+    resetSilentCaptures();
     seedUserData();
     onStart?.();
     void beginSession();
@@ -471,9 +487,11 @@ function KYCInner({
       enableLiveness={enableLiveness}
       livenessMode={livenessMode}
       flashSequenceLength={flashSequenceLength}
+      livenessBrightScreen={livenessBrightScreen}
       deviceIntelligence={deviceIntelligence}
       deviceHandoff={deviceHandoff}
       consentStep={consentStep}
+      silentCapture={silentCapture}
       biometric={biometric}
       progressStyle={progressStyle}
       requireMobileDevice={requireMobileDevice}
@@ -481,6 +499,8 @@ function KYCInner({
       appearance={appearance}
       consent={consent}
       success={success}
+      texts={texts}
+      language={language}
       emailVerification={emailVerification}
       phoneVerification={phoneVerification}
       questionnaire={questionnaire}
@@ -489,6 +509,7 @@ function KYCInner({
       addressCollection={addressCollection}
       nfc={nfc}
       previewMode={previewMode}
+      previewTrustAttribution={previewTrustAttribution}
       onSubmit={onSubmit}
       onResult={onResult}
       onClose={handleClose}

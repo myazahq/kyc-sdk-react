@@ -1,25 +1,30 @@
 import { KYCApiError } from '../services/api';
+import { defaultText } from '../i18n/translate';
+import type { TextFn } from '../i18n/types';
 
-// User-facing copy for the contact-verification send/check error codes.
+// User-facing copy for the contact-verification send/check error codes. The
+// texts live in the catalogue's `contact` group; this maps codes to keys.
 
 const CHECK_ERRORS: Record<string, string> = {
-  invalid_code: 'That code is not correct. Please try again.',
-  challenge_expired: 'This code has expired. Request a new one.',
-  too_many_attempts: 'Too many incorrect attempts. Request a new code.',
-  challenge_not_found: 'This code is no longer valid. Request a new one.',
+  invalid_code: 'contact.error.invalidCode',
+  challenge_expired: 'contact.error.codeExpired',
+  too_many_attempts: 'contact.error.tooManyAttempts',
+  challenge_not_found: 'contact.error.codeInvalid',
 };
 
 const SEND_ERRORS: Record<string, string> = {
-  invalid_destination: 'That does not look valid. Please check and try again.',
-  send_rate_limited: 'Too many codes requested. Please wait a while and try again.',
-  send_failed: 'We could not send the code. Please try again.',
+  invalid_destination: 'contact.error.invalidDestination',
+  send_rate_limited: 'contact.error.rateLimited',
+  send_failed: 'contact.error.sendFailed',
 };
 
-function describe(err: unknown, map: Record<string, string>): string {
-  if (err instanceof KYCApiError && err.code && map[err.code]) return map[err.code]!;
-  if (err instanceof TypeError) return 'Network error. Check your connection and try again.';
-  return 'Something went wrong. Please try again.';
+function describe(err: unknown, map: Record<string, string>, t: TextFn): string {
+  if (err instanceof KYCApiError && err.code && map[err.code]) return t(map[err.code]!);
+  if (err instanceof TypeError) return t('contact.error.network');
+  return t('contact.error.generic');
 }
 
-export const describeSendError = (err: unknown): string => describe(err, SEND_ERRORS);
-export const describeCheckError = (err: unknown): string => describe(err, CHECK_ERRORS);
+export const describeSendError = (err: unknown, t: TextFn = defaultText): string =>
+  describe(err, SEND_ERRORS, t);
+export const describeCheckError = (err: unknown, t: TextFn = defaultText): string =>
+  describe(err, CHECK_ERRORS, t);

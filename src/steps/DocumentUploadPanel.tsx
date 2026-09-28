@@ -4,6 +4,7 @@ import React, { useId, useState } from "react";
 import { ArrowRight, Check, ImageUp, Loader2 } from '../components/icons';
 import { isDesktopDevice } from "../lib/device";
 import { cn } from "../lib/utils";
+import { useText } from "../i18n";
 
 // ─── Upload-only document capture ─────────────────────────────────────────────
 //
@@ -23,9 +24,9 @@ import { cn } from "../lib/utils";
 // with the picker left closed.
 
 const TIPS = [
-	"Lay the document flat on a plain surface",
-	"Keep all four corners inside the photo",
-	"Avoid glare, shadows and blur",
+	"uploadDocument.upload.tip1",
+	"uploadDocument.upload.tip2",
+	"uploadDocument.upload.tip3",
 ];
 
 export interface DocumentUploadPanelProps {
@@ -42,6 +43,7 @@ export function DocumentUploadPanel({
 	onChoose,
 	onDrop,
 }: DocumentUploadPanelProps) {
+	const t = useText();
 	const [dragging, setDragging] = useState(false);
 	const hintId = useId();
 	// Dragging a file needs a pointer and a file manager beside the browser, so
@@ -51,11 +53,11 @@ export function DocumentUploadPanel({
 	const live = !!onChoose && !busy;
 
 	const title =
-		busy ? "Preparing your photo…"
-		: dragging ? "Drop to add this photo"
-		: desktop ? "Drag a photo here"
-		: "Add a photo from your gallery or files";
-	const action = desktop ? "Or browse your computer" : "Tap to choose a photo";
+		busy ? t("uploadDocument.upload.preparing")
+		: dragging ? t("uploadDocument.upload.dropToAdd")
+		: desktop ? t("uploadDocument.upload.dragHere")
+		: t("uploadDocument.upload.addFromGallery");
+	const action = t(desktop ? "uploadDocument.upload.browseComputer" : "uploadDocument.upload.tapToChoose");
 	const label =
 		desktop ?
 			"Choose a photo from your computer"
@@ -130,7 +132,7 @@ export function DocumentUploadPanel({
 							{title}
 						</span>
 						<span id={hintId} className='block text-sm text-muted-foreground'>
-							Use a clear, well-lit photo. You'll be able to crop it next.
+							{t("uploadDocument.upload.hint")}
 						</span>
 					</span>
 
@@ -157,7 +159,7 @@ export function DocumentUploadPanel({
 							className='mt-0.5 h-3.5 w-3.5 shrink-0 text-primary'
 							aria-hidden='true'
 						/>
-						{tip}
+						{t(tip)}
 					</li>
 				))}
 			</ul>

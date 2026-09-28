@@ -8,6 +8,8 @@ import { cn } from '../../lib/utils';
 import { useKYCContext } from '../../context/KYCContext';
 import { useKYCConfig } from '../../context/KYCConfigContext';
 import type { KYCStep } from '../../types/config';
+import { useText, type TextFn } from '../../i18n';
+import { showsPresencePromise } from '../../lib/presence-promise';
 
 /**
  * The presence "how it works" screen — drawn in the SUCCESS CARD's language
@@ -21,14 +23,9 @@ import type { KYCStep } from '../../types/config';
 // background geofencing on, the "allow all the time" prompt is coming, and
 // OkHi's integration guidance is to say so ONCE, up front, beside the
 // education — not to surprise the person with it after capture.
-const CHECK_IN_CAPTION = {
-  foreground: 'Keep location on; your phone confirms it over the coming days.',
-  background:
-    'Allow location all the time when asked. Your phone then confirms it on its own, even with the app closed.',
-} as const;
-
 const milestonesFor = (
   background: boolean,
+  t: TextFn,
 ): Array<{
   Icon: typeof MapPinCheck;
   stage: string;
@@ -38,23 +35,23 @@ const milestonesFor = (
 }> => [
   {
     Icon: MapPinHouse,
-    stage: 'Your part',
-    title: 'Pin your address',
-    caption: 'Put the pin right on your building. Takes a minute.',
+    stage: t('address.intro.step1.stage'),
+    title: t('address.intro.step1.title'),
+    caption: t('address.intro.step1.caption'),
     state: 'active',
   },
   {
     Icon: Radar,
-    stage: 'After that',
-    title: 'Quiet check-ins',
-    caption: background ? CHECK_IN_CAPTION.background : CHECK_IN_CAPTION.foreground,
+    stage: t('address.intro.step2.stage'),
+    title: t('address.intro.step2.title'),
+    caption: t(background ? 'address.intro.step2.caption.background' : 'address.intro.step2.caption'),
     state: 'ahead',
   },
   {
     Icon: BellRing,
-    stage: 'Then',
-    title: 'Confirmed',
-    caption: "You'll be notified. That is it.",
+    stage: t('address.intro.step3.stage'),
+    title: t('address.intro.step3.title'),
+    caption: t('address.intro.step3.caption'),
     state: 'ahead',
   },
 ];
@@ -62,10 +59,14 @@ const milestonesFor = (
 export function useAddressIntroGate(step: KYCStep, firstStep: KYCStep): React.ReactElement | null {
   const { state, dispatch } = useKYCContext();
   const config = useKYCConfig();
-  const presence = config.addressCollection?.presence?.enabled === true;
-  const background = config.addressCollection?.presence?.background === true;
+  const t = useText();
+  // Only in the builder preview: a browser flow starts no presence watch
+  // (lib/presence-promise.ts), so the primer would promise a check that never runs.
+  const presence = showsPresencePromise(config);
+  // Background monitoring is on unless the workflow turns it off.
+  const background = config.addressCollection?.presence?.background !== false;
   if (step !== firstStep || !presence || state.addressIntroSeen) return null;
-  const MILESTONES = milestonesFor(background);
+  const MILESTONES = milestonesFor(background, t);
 
   return (
     <div className="space-y-4 animate-slide-up">
@@ -74,13 +75,10 @@ export function useAddressIntroGate(step: KYCStep, firstStep: KYCStep): React.Re
         <div className="space-y-1 bg-primary/[0.06] px-4 pb-3 pt-4">
           <span className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider text-primary">
             <MapPinCheck className="h-3 w-3" />
-            Address verification
+            {t('address.intro.badge')}
           </span>
-          <p className="text-base font-semibold">Let&apos;s confirm your address</p>
-          <p className="text-xs text-muted-foreground">
-            This address will be verified over the coming days. Your part takes a minute; the rest
-            happens on its own.
-          </p>
+          <p className="text-base font-semibold">{t('address.intro.title')}</p>
+          <p className="text-xs text-muted-foreground">{t('address.intro.description')}</p>
         </div>
 
         <div className="grid gap-0 px-4 py-5 sm:grid-cols-3 sm:gap-4">
@@ -146,7 +144,7 @@ export function useAddressIntroGate(step: KYCStep, firstStep: KYCStep): React.Re
         onClick={() => dispatch({ type: 'SET_ADDRESS_INTRO_SEEN' })}
         className="h-12 w-full rounded-xl text-base font-medium"
       >
-        Got it, let&apos;s go
+        {t('address.intro.start')}
       </Button>
     </div>
   );

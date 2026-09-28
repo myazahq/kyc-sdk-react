@@ -7,8 +7,9 @@ import type { AnyCountry, AnyIdType, EmailVerificationConfig, IdTypeDefinition, 
 } from '../types/config';
 import type { SubjectType, WorkflowBusinessConfig } from '../types/business';
 import type { KYCSubmission, KYCResult } from '../types/verification';
-import { createKYCApi, KYCApiError, type CompletedSessionSummary, type KYCApi, type SdkConfigIdType, type SdkConfigResponse, type SdkConfigBranding, type WorkflowConfigPayload } from '../services/api';
+import { createKYCApi, KYCApiError, type CompletedSessionSummary, type KYCApi, type SdkConfigIdType, type SdkConfigResponse, type SdkConfigBranding, type SdkTrustAttribution, type WorkflowConfigPayload } from '../services/api';
 import { overlayApplicantWorkflow } from '../lib/workflow-merge';
+import type { WorkflowTexts } from '../i18n/types';
 import { withPreviewMocks } from '../services/preview-mock';
 import { useKYCContext } from './KYCContext';
 import { resolveBaseUrl } from '../lib/resolve-url';
@@ -134,9 +135,11 @@ export interface KYCConfigValue {
   allowDocumentScan?: boolean;
   enableLiveness?: boolean;
   /** Presence Intelligence method: gestures (default) | flash | both. */
-  livenessMode?: 'gestures' | 'flash' | 'both';
+  livenessMode?: 'gestures' | 'flash' | 'both' | 'passive';
   /** Flash-liveness sequence length (colours) for flash/both. 2–5, default 4. */
   flashSequenceLength?: number;
+  /** Light theme while the liveness camera is on. On unless `false`. */
+  livenessBrightScreen?: boolean;
   /** Device Intelligence (device + IP analysis). On by default; false skips it (and its charge). */
   deviceIntelligence?: boolean;
   /**
@@ -151,6 +154,11 @@ export interface KYCConfigValue {
    * flow opens on its first real step. See lib/consent-step.ts.
    */
   consentStep?: boolean;
+  /**
+   * Silent capture of unposed photos during document capture (default on;
+   * `false` switches it off). See lib/silent-capture.ts.
+   */
+  silentCapture?: boolean;
   /** The biometric scopes' flow options (review / delivery / Done). See lib/biometric-options.ts. */
   biometric?: import('../lib/biometric-options').BiometricFlowConfig;
   /**
@@ -177,6 +185,10 @@ export interface KYCConfigValue {
   consent?: KYCConsentContent;
   /** Success (submitted) screen copy overrides. */
   success?: KYCSuccessContent;
+  /** Custom copy by language then key (see i18n/). */
+  texts?: WorkflowTexts;
+  /** The language texts are shown in. Default `en`. */
+  language?: string;
   /** Email OTP possession check (right after consent). */
   emailVerification?: EmailVerificationConfig;
   /** Phone OTP possession check (right after consent / email verification). */
@@ -207,6 +219,8 @@ export interface KYCConfigValue {
   onError?: (error: KYCError) => void;
   /** Preview/mock mode: writes (uploads, verify) are stubbed in the browser. */
   previewMode?: boolean;
+  /** Presentation only; the footer ignores this outside write-free preview mode. */
+  previewTrustAttribution?: SdkTrustAttribution;
   /**
    * Hosted-page mode (set only by MyazaKYCHosted): the flow IS the whole page,
    * so there is no host surface to close back to. The success screen swaps the
@@ -476,14 +490,20 @@ export function KYCConfigProvider({ children, apiOverride, serverConfigOverride,
       config.enableLiveness,
       config.livenessMode,
       config.flashSequenceLength,
+      config.livenessBrightScreen,
       config.deviceIntelligence,
       config.deviceHandoff,
       config.consentStep,
+      config.silentCapture,
       config.biometric,
       config.requireMobileDevice,
       config.assetsBasePath,
       config.appearance,
+      config.previewMode,
+      config.previewTrustAttribution,
       config.consent,
+      config.texts,
+      config.language,
       config.success,
       config.emailVerification,
       config.phoneVerification,

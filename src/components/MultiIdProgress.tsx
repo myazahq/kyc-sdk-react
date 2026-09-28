@@ -9,6 +9,7 @@ import { Check } from './icons';
 import { useKYCConfig } from '../context/KYCConfigContext';
 import { cn } from '../lib/utils';
 import type { MultiIdPlan } from '../lib/multi-id';
+import { useText } from '../i18n';
 
 export function MultiIdProgress({
   plan,
@@ -18,6 +19,7 @@ export function MultiIdProgress({
   slots: Array<{ idType: string }>;
 }) {
   const config = useKYCConfig();
+  const t = useText();
   const labelFor = (idType: string) =>
     config.getIdTypeDefinition(idType)?.label ?? idType.toUpperCase();
 
@@ -53,7 +55,7 @@ export function MultiIdProgress({
                   active ? 'font-medium text-foreground' : 'text-muted-foreground',
                 )}
               >
-                {committed ? labelFor(committed.idType) : `ID ${i + 1}`}
+                {committed ? labelFor(committed.idType) : t('selectDocument.multiId.slot', { number: i + 1 })}
               </span>
             </div>
           );

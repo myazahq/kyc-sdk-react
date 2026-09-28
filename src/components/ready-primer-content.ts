@@ -1,4 +1,4 @@
-import { BellRing, IdCard, LocateFixed, MapPin, MapPinned, ScanFace, ScanLine, Sun, Timer, UserRound } from './icons';
+import { BellRing, Glasses, IdCard, LocateFixed, MapPin, MapPinned, ScanFace, ScanLine, Sparkles, Sun, Timer, UserRound } from './icons';
 import type { ReadyPrimerProps } from './ReadyPrimer';
 
 /**
@@ -9,7 +9,11 @@ import type { ReadyPrimerProps } from './ReadyPrimer';
  * must never drift. Keeping the strings here rather than inline in each step is
  * what makes that guarantee cheap.
  */
-export type ReadyContent = Pick<ReadyPrimerProps, 'icon' | 'title' | 'body' | 'checklist'>;
+export type ReadyContent = Pick<ReadyPrimerProps, 'icon' | 'title' | 'body' | 'checklist' | 'textKeys'>;
+
+// `title`, `body` and the checklist hold the English defaults; `textKeys` name
+// the catalogue entries (`primer.*`) ReadyPrimer shows instead, so a workflow's
+// copy reaches every screen that spreads one of these in.
 
 export const READY_DOCUMENT: ReadyContent = {
   icon: ScanLine,
@@ -20,6 +24,11 @@ export const READY_DOCUMENT: ReadyContent = {
     { icon: Sun, label: 'Find even lighting, avoid glare' },
     { icon: Timer, label: 'Takes about a minute' },
   ],
+  textKeys: {
+    title: 'primer.document.title',
+    body: 'primer.document.body',
+    checklist: ['primer.document.checklist1', 'primer.document.checklist2', 'primer.document.checklist3'],
+  },
 };
 
 export const READY_LIVENESS: ReadyContent = {
@@ -28,9 +37,22 @@ export const READY_LIVENESS: ReadyContent = {
   body: "You'll follow a few short prompts on screen. This proves a real person is present, not a photo or a recording.",
   checklist: [
     { icon: UserRound, label: 'Put your face in the circle' },
-    { icon: Sun, label: 'Find even lighting, remove sunglasses' },
-    { icon: Timer, label: 'Takes about 10 seconds' },
+    { icon: Glasses, label: 'Take off glasses or anything covering your face' },
+    { icon: Sun, label: 'Choose a bright spot, with the light in front of you' },
+    { icon: Sparkles, label: 'Keep glare and shiny reflections off your face' },
   ],
+  textKeys: {
+    title: 'primer.selfie.title',
+    body: 'primer.selfie.body',
+    checklist: ['primer.selfie.checklist1', 'primer.selfie.checklist2', 'primer.selfie.checklist4', 'primer.selfie.checklist5'],
+  },
+};
+
+/** Passive Liveness asks for no prompts, so its description says so. */
+export const READY_LIVENESS_PASSIVE: ReadyContent = {
+  ...READY_LIVENESS,
+  body: "You'll hold still and look at the camera for a moment. This proves a real person is present, not a photo or a recording.",
+  textKeys: { ...READY_LIVENESS.textKeys!, body: 'primer.selfie.bodyPassive' },
 };
 
 export const READY_ADDRESS: ReadyContent = {

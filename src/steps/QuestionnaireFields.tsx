@@ -12,6 +12,7 @@ import { MyazaSelect } from '../components/MyazaSelect';
 import { cn } from '../lib/utils';
 import { useDropdownAnchor } from '../lib/use-dropdown-anchor';
 import type { QuestionnaireAnswerValue, QuestionnaireField as FieldDef } from '../types/config';
+import { useText } from '../i18n';
 
 // ---------------------------------------------------------------------------
 // Amount formatting — typed digits render with thousands separators; money
@@ -100,6 +101,7 @@ export function QuestionField({
   onCurrencyChange?: (currency: string | undefined) => void;
   onDetailChange?: (detail: string | undefined) => void;
 }) {
+  const t = useText();
   const inputId = `kyc-q-${field.key}`;
   const currencies = field.currencies ?? [];
   const currency = currencyValue ?? currencies[0];
@@ -148,7 +150,8 @@ export function QuestionField({
           )}
           <div className="flex-1">
             <AmountInput inputId={inputId} value={value as number | undefined}
-              placeholder={field.placeholder ?? '0.00'} maxDecimals={2} onChange={onChange} />
+              placeholder={field.placeholder ?? t('questionnaire.amountPlaceholder')}
+              maxDecimals={2} onChange={onChange} />
           </div>
         </div>
       )}
@@ -159,7 +162,7 @@ export function QuestionField({
         <MyazaSelect
           id={inputId}
           value={(value as string) || undefined}
-          placeholder={field.placeholder ?? 'Select an option'}
+          placeholder={field.placeholder ?? t('questionnaire.selectPlaceholder')}
           options={(field.options ?? []).map((opt) => ({ value: opt.value, label: opt.label }))}
           onChange={(v) => onChange(v || undefined)}
         />
@@ -196,7 +199,7 @@ export function QuestionField({
       {detailOption && (
         <div className="space-y-1.5 pt-2">
           <Label htmlFor={`${inputId}-other`}>
-            {detailOption.detailLabel || 'Please specify'}
+            {detailOption.detailLabel || t('questionnaire.detailLabel')}
             <span className="text-destructive"> *</span>
           </Label>
           <Input
@@ -204,7 +207,8 @@ export function QuestionField({
             value={detailValue ?? ''}
             maxLength={200}
             placeholder={
-              detailOption.detailPlaceholder || `Tell us more about "${detailOption.label}"`
+              detailOption.detailPlaceholder ||
+              t('questionnaire.detailPlaceholder', { option: detailOption.label })
             }
             onChange={(e) => onDetailChange?.(e.target.value || undefined)}
           />
@@ -213,11 +217,11 @@ export function QuestionField({
 
       {field.type === 'boolean' && (
         <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label={field.label}>
-          {([{ label: 'Yes', v: true }, { label: 'No', v: false }] as const).map((opt) => {
+          {[{ label: t('questionnaire.yes'), v: true }, { label: t('questionnaire.no'), v: false }].map((opt) => {
             const active = value === opt.v;
             return (
               <button
-                key={opt.label}
+                key={String(opt.v)}
                 type="button"
                 role="radio"
                 aria-checked={active}

@@ -9,6 +9,7 @@ import { useKYCContext } from '../context/KYCContext';
 import { useKYCConfig } from '../context/KYCConfigContext';
 import { stepAfterCapture } from '../lib/post-capture';
 import { verifiedIdsFromState } from '../lib/supporting-documents';
+import { useText } from '../i18n';
 
 /**
  * NFC Chip Verification screen — the eMRTD chip read (e-passports & chip
@@ -21,6 +22,7 @@ import { verifiedIdsFromState } from '../lib/supporting-documents';
 export function NfcStep() {
   const { state, dispatch } = useKYCContext();
   const config = useKYCConfig();
+  const t = useText();
 
   const hasLiveness =
     config.enableSelfie !== false &&
@@ -46,22 +48,21 @@ export function NfcStep() {
   return (
     <div className="space-y-6 animate-slide-up">
       <StepHeader
-        title="Scan your document’s chip"
-        description="Hold your ID flat against the back of your phone and keep it still until scanning completes."
+        title={t('nfc.title')}
+        description={t('nfc.description')}
         onBack={() => dispatch({ type: 'SET_STEP', payload: 'document-capture' })}
       />
 
       <NfcScanIllustration />
 
       <p className="animate-pulse text-center text-sm text-muted-foreground">
-        Waiting for your document…
+        {t('nfc.waiting')}
       </p>
 
       {/* Subtle capability note — mirrors the camera note on the capture steps. */}
       <div className="flex items-center justify-center gap-1.5 text-center text-xs text-muted-foreground">
         <Smartphone className="h-3.5 w-3.5 shrink-0" />
-        Chip reading works on NFC-capable mobile devices — desktop and phones without NFC skip this
-        step.
+        {t('nfc.deviceNote')}
       </div>
 
       {/* Skip affordance — shown when the workflow allows it, so a user whose
@@ -74,13 +75,13 @@ export function NfcStep() {
           onClick={advance}
           className="w-full h-11 rounded-xl text-sm font-medium text-muted-foreground"
         >
-          My device can’t scan the chip — skip
+          {t('nfc.skip')}
         </Button>
       )}
 
       {config.previewMode && (
         <Button onClick={advance} className="w-full h-12 rounded-xl text-base font-medium">
-          Continue
+          {t('common.continue')}
         </Button>
       )}
     </div>

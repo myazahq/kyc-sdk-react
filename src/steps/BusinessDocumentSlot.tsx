@@ -1,9 +1,10 @@
 'use client';
 
 import React, { useRef } from 'react';
-import { CheckCircle2, Loader2, Upload, X } from '../components/icons';
+import { CircleCheck, Loader2, Upload, X } from '../components/icons';
 import { UploadedFileThumb } from '../components/UploadedFilePreview';
 import { UPLOAD_HINT } from '../lib/upload-limits';
+import { useText } from '../i18n';
 
 export const BUSINESS_DOC_ACCEPTED_MIMES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
 
@@ -42,6 +43,7 @@ export function BusinessDocumentSlot({
   onPick,
   onRemove,
 }: BusinessDocumentSlotProps) {
+  const t = useText();
   const inputRef = useRef<HTMLInputElement>(null);
   const uploaded = fileName !== null;
 
@@ -64,7 +66,7 @@ export function BusinessDocumentSlot({
           {file ? (
             <UploadedFileThumb file={file} label={label} />
           ) : (
-            <CheckCircle2 className="h-5 w-5 shrink-0 text-[var(--kyc-success,#0DA211)]" />
+            <CircleCheck className="h-5 w-5 shrink-0 text-[var(--kyc-success,#0DA211)]" />
           )}
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium">{fileName}</p>
@@ -75,7 +77,7 @@ export function BusinessDocumentSlot({
             className="text-xs font-medium text-primary hover:underline"
             onClick={() => inputRef.current?.click()}
           >
-            Replace
+            {t('business.documents.replace')}
           </button>
           <button
             type="button"
@@ -107,7 +109,7 @@ export function BusinessDocumentSlot({
               <span className="mt-0.5 block text-xs leading-relaxed text-foreground/70">{description}</span>
             )}
             <span className="block text-xs text-muted-foreground">
-              {uploading ? 'Uploading…' : UPLOAD_HINT}
+              {uploading ? t('business.documents.uploading') : UPLOAD_HINT}
             </span>
           </span>
         </button>

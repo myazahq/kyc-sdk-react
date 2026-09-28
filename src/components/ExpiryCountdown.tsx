@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { useText } from '../i18n';
 
 /**
  * Live "expires in m:ss" ticker for a one-time code. Ticks once a second and
@@ -10,13 +11,14 @@ import React, { useEffect, useState } from 'react';
 export function ExpiryCountdown({
   expiresAt,
   className,
-  expiredLabel = 'The code has expired. Request a new one.',
+  expiredLabel,
 }: {
   /** ISO timestamp from the send response. */
   expiresAt: string;
   className?: string;
   expiredLabel?: string;
 }) {
+  const t = useText();
   const target = new Date(expiresAt).getTime();
   const [remaining, setRemaining] = useState(() => Math.max(0, target - Date.now()));
 
@@ -34,9 +36,9 @@ export function ExpiryCountdown({
   // An unparseable timestamp would render "NaN:aN" — fall back to nothing.
   if (!Number.isFinite(target)) return null;
 
-  if (remaining === 0) return <span className={className}>{expiredLabel}</span>;
+  if (remaining === 0) return <span className={className}>{expiredLabel ?? t('general.codeExpiry.expired')}</span>;
 
   const totalSeconds = Math.ceil(remaining / 1000);
   const label = `${Math.floor(totalSeconds / 60)}:${String(totalSeconds % 60).padStart(2, '0')}`;
-  return <span className={className}>The code expires in {label}</span>;
+  return <span className={className}>{t('general.codeExpiry.countdown', { time: label })}</span>;
 }

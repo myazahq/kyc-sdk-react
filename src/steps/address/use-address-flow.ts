@@ -13,6 +13,7 @@ import { addressFlowOptions, addressFlowSteps, addressVendorsStubbed, nextAddres
 import { usePinActions } from './use-pin-actions';
 import { geoDefaultCountry } from './country-adoption';
 import type { KYCStep } from '../../types/config';
+import { useText } from '../../i18n';
 
 // The address flow's shared brain: every address step mounts this hook and
 // gets the same derived flags, the same step list, and the same actions —
@@ -23,6 +24,7 @@ const REVERSE_DEBOUNCE_MS = 700;
 export function useAddressFlow() {
   const { state, dispatch } = useKYCContext();
   const config = useKYCConfig();
+  const t = useText();
   const address = config.addressCollection;
   const [uploading, setUploading] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -101,11 +103,11 @@ export function useAddressFlow() {
     setError(null);
     setUploading(true);
     try {
-      const mediaId = await uploadAddressPhoto(config.api, file);
+      const mediaId = await uploadAddressPhoto(config.api, file, t);
       dispatch({ type: 'SET_MEDIA_ID', payload: { mediaType: 'addressPhoto', mediaId } });
       dispatch({ type: 'SET_ADDRESS_PHOTO_PREVIEW', payload: URL.createObjectURL(file) });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Upload failed. Please try again.');
+      setError(err instanceof Error ? err.message : t('address.photo.error.generic'));
     } finally {
       setUploading(false);
     }

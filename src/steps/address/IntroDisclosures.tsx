@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useState } from 'react';
-import { ChevronDown, HelpCircle, ShieldCheck, SlidersHorizontal } from '../../components/icons';
+import { ChevronDown, CircleHelp, ShieldCheck, SlidersHorizontal } from '../../components/icons';
 import { cn } from '../../lib/utils';
+import { useText, type TextFn } from '../../i18n';
 
 /**
  * The intro screen's three plain-language disclosures (the OkHi-patterned
@@ -10,30 +11,24 @@ import { cn } from '../../lib/utils';
  * single-open accordion — the grid-rows technique, since native <details>
  * cannot animate height. Split from AddressIntroGate per the 200-line rule.
  */
-const HOW_IT_WORKS = {
-  foreground:
-    'After you finish, your device periodically confirms it is at this address over the coming days. Only day-level summaries ever leave your phone, never your movements.',
-  background:
-    'After you finish, your phone confirms it is at this address over the coming days, even when the app is closed. Only day-level summaries ever leave your phone, never your movements.',
-} as const;
-
 const disclosuresFor = (
   background: boolean,
-): Array<{ Icon: typeof HelpCircle; title: string; body: string }> => [
+  t: TextFn,
+): Array<{ Icon: typeof CircleHelp; title: string; body: string }> => [
   {
-    Icon: HelpCircle,
-    title: 'How it works',
-    body: background ? HOW_IT_WORKS.background : HOW_IT_WORKS.foreground,
+    Icon: CircleHelp,
+    title: t('address.intro.howItWorks.title'),
+    body: t(background ? 'address.intro.howItWorks.body.background' : 'address.intro.howItWorks.body'),
   },
   {
     Icon: SlidersHorizontal,
-    title: 'You stay in control',
-    body: 'You can turn location off at any time in your device settings. An unfinished check simply expires. It never counts against you.',
+    title: t('address.intro.control.title'),
+    body: t('address.intro.control.body'),
   },
   {
     Icon: ShieldCheck,
-    title: 'Your data is protected',
-    body: "Location summaries are used only to confirm this address and are handled under your country's data protection rules.",
+    title: t('address.intro.privacy.title'),
+    body: t('address.intro.privacy.body'),
   },
 ];
 
@@ -43,8 +38,9 @@ export function IntroDisclosures({
   /** The workflow opts into OS geofencing: the copy says the app can be closed. */
   background?: boolean;
 }) {
+  const t = useText();
   const [openIdx, setOpenIdx] = useState<number | null>(null);
-  const DISCLOSURES = disclosuresFor(background);
+  const DISCLOSURES = disclosuresFor(background, t);
   return (
     <div className="overflow-hidden rounded-xl border border-border/60">
       {DISCLOSURES.map(({ Icon, title, body }, i) => {

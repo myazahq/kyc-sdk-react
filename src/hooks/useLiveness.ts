@@ -2,7 +2,8 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { createFaceMesh, type FaceMeshHandle } from '../liveness/face-mesh';
-import { pickChallenges, ChallengeTracker, type ChallengeEntry } from '../liveness/challenge-manager';
+import { pickChallenges, pickFallbackGestures, ChallengeTracker, type ChallengeEntry } from '../liveness/challenge-manager';
+import { flashOutcome, FLASH_RETRY_GUIDANCE } from '../liveness/flash-outcome';
 import {
   detectNod,
   detectHeadTurn,
@@ -12,11 +13,14 @@ import {
   checkFacePosition,
   type BlinkState,
 } from '../liveness/gesture-detector';
-import type {
-  LivenessState,
-  LivenessConfig,
-  NormalizedLandmark,
+import {
+  challengeInstruction,
+  HOLD_FRAMES,
+  type LivenessState,
+  type LivenessConfig,
+  type NormalizedLandmark,
 } from '../liveness/types';
+import { useText, type TextFn } from '../i18n';
 import { generateFlashSequence, runFlashSequence } from '../liveness/flash-detector';
 import { recordLivenessSignals } from '../lib/integrity-signals';
 import { speak, stopSpeaking } from '../liveness/speech';
@@ -29,14 +33,14 @@ import {
   logCaptureSize,
 } from '../lib/capture-settings';
 
-// User-facing guidance shown (and spoken) when a second face enters the frame.
-const MULTI_FACE_GUIDANCE = 'Make sure only your face is visible';
+// The guidance shown (and spoken) when a second face enters the frame is the
+// catalogue text `presence.position.multipleFaces`.
 // Sentinel stored in `warning` during a challenge when >1 face is present.
 const MULTI_FACE_WARNING = 'multiple_faces';
 
-function lightingGuidance(level: LightLevel): string | null {
-  if (level === 'dark') return 'Move to a brighter area';
-  if (level === 'bright') return 'Too bright — reduce glare';
+function lightingGuidance(level: LightLevel, t: TextFn): string | null {
+  if (level === 'dark') return t('presence.lighting.tooDark');
+  if (level === 'bright') return t('presence.lighting.tooBright');
   return null;
 }
 
@@ -146,6 +150,11 @@ export function useLiveness({
   lightLevel = 'ok',
 }: UseLivenessOptions): UseLivenessReturn {
   const [state, setState] = useState<LivenessState>({ phase: 'loading' });
+  // The workflow's copy, read through a ref: the detector loop and setPhase are
+  // stable callbacks, and the texts must not restart them.
+  const t = useText();
+  const tRef = useRef(t);
+  tRef.current = t;
   const [isFaceDetected, setIsFaceDetected] = useState(false);
   const [challenges, setChallenges] = useState<readonly ChallengeEntry[]>([]);
   // Incremented by retry() to re-trigger the FaceMesh initialization effect
@@ -162,6 +171,8 @@ export function useLiveness({
 
   // Gesture detection history buffers
   const nodHistoryRef = useRef<number[]>([]);
+  // Passive Liveness: steady frames counted toward the hold prompt.
+  const holdFramesRef = useRef<number>(0);
   const blinkStateRef = useRef<BlinkState>(createBlinkState());
   const positionStableRef = useRef<number>(0);
   // 0..1 across the WHOLE test, read by the ring on the frame. A REF so the
@@ -192,6 +203,8 @@ export function useLiveness({
   const [flashing, setFlashing] = useState(false);
   const flashSessionRef = useRef(0); // bumped on retry/unmount to abort a running sequence
   const flashRunningRef = useRef(false);
+  // Unmeasurable flashes retried so far this run (flash-outcome.ts).
+  const flashRetriesRef = useRef(0);
   // Consecutive no-face frames during the flash → abort (the user pulled away).
   const flashNoFaceFramesRef = useRef(0);
 
@@ -256,25 +269,25 @@ export function useLiveness({
         break;
       case 'challenge':
         if (next.warning === MULTI_FACE_WARNING) {
-          textToSpeak = MULTI_FACE_GUIDANCE;
+          textToSpeak = tRef.current('presence.position.multipleFaces');
         } else if (next.warning && next.warning !== 'wrong_gesture') {
           textToSpeak = next.warning;
         } else if (!next.warning) {
-          textToSpeak = next.challenge.instruction;
+          textToSpeak = challengeInstruction(next.challenge.type, tRef.current);
         }
         break;
       case 'capturing':
-        textToSpeak = next.guidance ?? 'Kindly hold still';
+        textToSpeak = next.guidance ?? tRef.current('presence.position.holdStill');
         break;
       case 'challenge_passed':
-        textToSpeak = 'Great!';
+        textToSpeak = tRef.current('presence.challenge.passed');
         break;
       case 'complete':
-        textToSpeak = 'Capture complete';
+        textToSpeak = tRef.current('presence.capture.complete');
         break;
       case 'failed':
-        if (next.reason === 'timeout') textToSpeak = "Time's up. Let's try again.";
-        else if (next.reason === 'face_lost') textToSpeak = 'Face lost. Please try again.';
+        if (next.reason === 'timeout') textToSpeak = tRef.current('presence.failed.timeout');
+        else if (next.reason === 'face_lost') textToSpeak = tRef.current('presence.failed.faceLost');
         break;
     }
 
@@ -290,8 +303,12 @@ export function useLiveness({
 
   const initTracker = useCallback(() => {
     const picked = pickChallenges(config);
+    // Which prompts ran rides the claim, so the server knows whether a turn
+    // was asked for (its shape-from-movement verdict depends on it).
+    recordLivenessSignals({ mode: config?.mode ?? 'gestures', challenges: picked.map((c) => c.type) });
     const tracker = new ChallengeTracker(picked);
     trackerRef.current = tracker;
+    flashRetriesRef.current = 0;
     livenessProgressRef.current = 0;
     setChallenges([...tracker.all]);
     return tracker;
@@ -428,6 +445,7 @@ export function useLiveness({
 
       // Reset detection buffers for next challenge
       nodHistoryRef.current = [];
+      holdFramesRef.current = 0;
       blinkStateRef.current = createBlinkState();
       prevFaceSigRef.current = null;
 
@@ -480,8 +498,11 @@ export function useLiveness({
       .then((result) => {
         flashRunningRef.current = false;
         setFlashing(false);
+        const mode = config?.mode ?? 'gestures';
+        const outcome = flashOutcome(result, mode, flashRetriesRef.current);
         recordLivenessSignals({
-          mode: config?.mode ?? 'gestures',
+          // A flash-only check that fell back to gestures ran both.
+          mode: outcome === 'fallback_gestures' ? 'both' : mode,
           flash: {
             passed: result.passed,
             score: result.score,
@@ -492,7 +513,36 @@ export function useLiveness({
           },
         });
         if (!isActive()) return;
-        if (result.passed) {
+        if (outcome === 'retry') {
+          // Unmeasurable: ask the person to move out of bright light, then run
+          // a fresh sequence on the same challenge with a fresh clock.
+          flashRetriesRef.current++;
+          const entry = trackerRef.current?.current;
+          if (!entry) return;
+          setPhase({
+            phase: 'challenge',
+            index: trackerRef.current!.currentIndex,
+            challenge: entry.config,
+            timeRemaining: entry.config.timeoutSeconds,
+            warning: FLASH_RETRY_GUIDANCE,
+          });
+          startChallengeTimer(entry.config.timeoutSeconds);
+          setTimeout(() => {
+            if (isActive()) maybeStartFlash();
+          }, 1500);
+          return;
+        }
+        if (outcome === 'fallback_gestures') {
+          // Still unmeasurable on a flash-only check: prove liveness with
+          // gestures instead of passing on a flash nobody could measure.
+          const fallback = pickFallbackGestures(config ?? {});
+          trackerRef.current?.append(fallback);
+          // The claim lists every prompt that ran, the fallback gestures included.
+          recordLivenessSignals({ mode: 'both', challenges: ['flash', ...fallback.map((c) => c.type)] });
+          passCurrentChallenge();
+          return;
+        }
+        if (outcome === 'pass' || outcome === 'accept_gestures') {
           passCurrentChallenge();
         } else {
           clearChallengeTimer();
@@ -600,7 +650,7 @@ export function useLiveness({
     if (faceCount > 1) {
       if (phase === 'loading' || phase === 'positioning') {
         positionStableRef.current = 0;
-        setPhase({ phase: 'positioning', guidance: MULTI_FACE_GUIDANCE });
+        setPhase({ phase: 'positioning', guidance: tRef.current('presence.position.multipleFaces') });
       } else if (phase === 'challenge' && tracker?.current) {
         // Pause the challenge timer so a second face can't run out the clock.
         if (!multiFacePausedRef.current) {
@@ -632,14 +682,14 @@ export function useLiveness({
     // --- Positioning phase: check face is centered and stable ---
     if (phase === 'loading' || phase === 'positioning') {
       // Block starting challenges in poor light — guide the user to fix it.
-      const light = lightingGuidance(lightLevelRef.current);
+      const light = lightingGuidance(lightLevelRef.current, tRef.current);
       if (light) {
         positionStableRef.current = Math.max(0, positionStableRef.current - 5);
         setPhase({ phase: 'positioning', guidance: light });
         return;
       }
 
-      const pos = checkFacePosition(landmarks);
+      const pos = checkFacePosition(landmarks, tRef.current);
 
       if (pos.isCentered && pos.isCorrectDistance) {
         positionStableRef.current++;
@@ -660,14 +710,14 @@ export function useLiveness({
             maybeStartFlash(); // flash-only mode: the first challenge IS the flash
           }
         } else {
-          setPhase({ phase: 'positioning', guidance: 'Kindly hold still' });
+          setPhase({ phase: 'positioning', guidance: tRef.current('presence.position.holdStill') });
         }
       } else {
         // Decrease instead of resetting to 0 — brief wobbles don't lose all progress
         positionStableRef.current = Math.max(0, positionStableRef.current - 5);
         setPhase({
           phase: 'positioning',
-          guidance: pos.guidance ?? 'Kindly position your face in the circle',
+          guidance: pos.guidance ?? tRef.current('presence.position.placeFace'),
         });
       }
       return;
@@ -717,14 +767,15 @@ export function useLiveness({
       }
 
       // Check if user has moved out of position
-      const pos = checkFacePosition(landmarks);
+      const pos = checkFacePosition(landmarks, tRef.current);
       if (!pos.isCentered || !pos.isCorrectDistance) {
+        holdFramesRef.current = 0; // the hold restarts once the face is back
         setPhase({
           phase: 'challenge',
           index: tracker.currentIndex,
           challenge: current.config,
           timeRemaining: current.config.timeoutSeconds,
-          warning: pos.guidance ?? 'Kindly come back to position',
+          warning: pos.guidance ?? tRef.current('presence.position.comeBack'),
         });
         return;
       }
@@ -767,6 +818,10 @@ export function useLiveness({
             wrongGesture = detectHeadTurn(landmarks) !== 'center';
           }
           break;
+        case 'hold':
+          holdFramesRef.current += 1;
+          detected = holdFramesRef.current >= HOLD_FRAMES;
+          break;
       }
 
       if (detected) {
@@ -794,13 +849,13 @@ export function useLiveness({
     // --- Capturing phase: wait for steady face before taking selfie ---
     if (phase === 'capturing') {
       // Don't auto-capture the selfie while lighting is poor.
-      const light = lightingGuidance(lightLevelRef.current);
+      const light = lightingGuidance(lightLevelRef.current, tRef.current);
       if (light) {
         positionStableRef.current = 0;
         setPhase({ phase: 'capturing', guidance: light });
         return;
       }
-      const pos = checkFacePosition(landmarks);
+      const pos = checkFacePosition(landmarks, tRef.current);
       if (pos.isCentered && pos.isCorrectDistance) {
         positionStableRef.current++;
         // Need ~15 stable frames (~0.5s) for a clear photo
@@ -815,7 +870,7 @@ export function useLiveness({
         positionStableRef.current = Math.max(0, positionStableRef.current - 3);
         // Surface WHY we're not capturing (too far / off-centre) instead of a
         // silent "hold still" the user can't act on.
-        const guidance = pos.guidance ?? 'Kindly hold still';
+        const guidance = pos.guidance ?? tRef.current('presence.position.holdStill');
         if (capturingGuidanceRef.current !== guidance) {
           capturingGuidanceRef.current = guidance;
           setPhase({ phase: 'capturing', guidance });
@@ -875,7 +930,7 @@ export function useLiveness({
   const beginDetection = useCallback(() => {
     if (!faceMeshRef.current || !cameraReadyRef.current || !mountedRef.current) return;
     if (rafRef.current !== 0) return; // loop already running
-    setPhase({ phase: 'positioning', guidance: 'Kindly position your face in the circle' });
+    setPhase({ phase: 'positioning', guidance: tRef.current('presence.position.placeFace') });
     runDetectionLoop();
   }, [runDetectionLoop, setPhase]);
 
@@ -937,6 +992,7 @@ export function useLiveness({
     lastSpokenRef.current = '';
     setVideoBlob(null);
     nodHistoryRef.current = [];
+    holdFramesRef.current = 0;
     blinkStateRef.current = createBlinkState();
     positionStableRef.current = 0;
     processingRef.current = false;

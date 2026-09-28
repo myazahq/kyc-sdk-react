@@ -4,8 +4,8 @@ import React from 'react';
 import { Building2, Pencil, X } from '../components/icons';
 import { CountryFlag } from '../components/CountryFlag';
 import {
-  KEY_PERSON_ROLE_LABELS,
   initialsOf,
+  keyPersonRoleLabel,
   isKeyPersonRowValid,
   rowNeedsEmail,
 } from '../lib/business-application';
@@ -13,6 +13,7 @@ import { regionCountryName } from '../lib/regions';
 import { cn } from '../lib/utils';
 import type { KeyPersonEntry } from '../context/types';
 import type { KeyPersonRole } from '../types/business';
+import { useText } from '../i18n';
 
 /**
  * One saved key person, summarised — monogram avatar with their ID-issuing
@@ -43,8 +44,10 @@ export function KeyPersonCard({
   /** The sectioned step's X: take this person out of that section. */
   onRemove?: () => void;
 }) {
+  const t = useText();
   const corp = entry.isCorporate;
-  const name = entry.name.trim() || (corp ? 'Unnamed company' : 'Unnamed person');
+  const name =
+    entry.name.trim() || t(corp ? 'keyPeople.card.unnamedCompany' : 'keyPeople.card.unnamedPerson');
   const country = entry.country.trim() ? entry.country.trim().toUpperCase() : null;
   const pct = entry.ownershipPct.trim();
   // A row persisted by the old inline UI (or interrupted mid-edit) may be
@@ -55,15 +58,15 @@ export function KeyPersonCard({
   // sends them into the form to work out which.
   const problem =
     rowNeedsEmail(entry, emailRequiredFor) && entry.email.trim() === '' && entry.name.trim().length >= 2
-      ? 'Email required, tap to add'
-      : 'Incomplete, tap to finish';
+      ? t('keyPeople.card.emailRequired')
+      : t('keyPeople.card.incomplete');
 
   const meta = [
     // Says why this row has no verification link beside it, on the row itself.
-    corp ? 'Company' : null,
-    roleLabel ?? KEY_PERSON_ROLE_LABELS[entry.role],
+    corp ? t('keyPeople.card.company') : null,
+    roleLabel ?? keyPersonRoleLabel(entry.role, t),
     (entry.title ?? '').trim() || null,
-    pct ? `${pct}% ownership` : null,
+    pct ? t('keyPeople.card.ownership', { pct }) : null,
   ]
     .filter(Boolean)
     .join(' · ');

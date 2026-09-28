@@ -15,6 +15,7 @@ import { useKYCConfig } from '../context/KYCConfigContext';
 import { useKYCContext } from '../context/KYCContext';
 import { useDeviceHandoff } from '../hooks/useDeviceHandoff';
 import { isDesktopDevice } from '../lib/device';
+import { useText } from '../i18n';
 import type { HandoffSessionSnapshot } from '../services/api';
 
 /**
@@ -26,6 +27,7 @@ import type { HandoffSessionSnapshot } from '../services/api';
 export function MobileHandoffSheet() {
   const config = useKYCConfig();
   const { dispatch } = useKYCContext();
+  const t = useText();
   const [isDesktop, setIsDesktop] = useState(true); // SSR-safe: assume desktop until after mount
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -44,11 +46,12 @@ export function MobileHandoffSheet() {
     ...(config.appearance ? { appearance: config.appearance as Record<string, unknown> } : {}),
     ...(config.consent ? { consent: config.consent as Record<string, unknown> } : {}),
     ...(config.success ? { success: config.success as Record<string, unknown> } : {}),
+    ...(config.texts ? { texts: config.texts } : {}),
     ...(config.metadata ? { metadata: config.metadata } : {}),
   }), [
     config.country, config.idTypes, config.enableSelfie, config.enableDocumentCapture,
     config.allowDocumentUpload, config.allowDocumentScan, config.enableLiveness, config.appearance,
-    config.consent, config.success, config.metadata,
+    config.consent, config.success, config.texts, config.metadata,
   ]);
 
   // Session is only created when the drawer is open (enabled=open).
@@ -90,7 +93,7 @@ export function MobileHandoffSheet() {
         className="inline-flex items-center gap-1.5 text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors hover:underline underline-offset-2"
       >
         <Smartphone className="h-3 w-3" />
-        Continue on a different device
+        {t('handoff.sheet.trigger')}
       </button>
 
       <Drawer open={open} onOpenChange={setOpen}>
@@ -100,9 +103,9 @@ export function MobileHandoffSheet() {
               <div className="flex h-11 w-11 items-center justify-center rounded-full bg-primary/10">
                 <Smartphone className="h-5 w-5 text-primary" />
               </div>
-              <DrawerTitle className="font-heading text-lg">Continue on another device</DrawerTitle>
+              <DrawerTitle className="font-heading text-lg">{t('handoff.sheet.title')}</DrawerTitle>
               <DrawerDescription className="text-xs leading-relaxed max-w-[260px]">
-                Scan the QR code with another device to continue your verification there.
+                {t('handoff.sheet.description')}
               </DrawerDescription>
             </div>
 
@@ -114,17 +117,17 @@ export function MobileHandoffSheet() {
                     <path d="M4 12l5 5L20 6" strokeDasharray="100" strokeDashoffset="100" className="animate-checkmark" />
                   </svg>
                 </div>
-                <p className="text-sm font-medium">Completed on the other device</p>
-                <p className="text-xs text-muted-foreground">Closing this flow…</p>
+                <p className="text-sm font-medium">{t('handoff.sheet.completed.title')}</p>
+                <p className="text-xs text-muted-foreground">{t('handoff.sheet.completed.closing')}</p>
               </div>
             ) : handoff.phase === 'error' ? (
               <div className="flex flex-col items-center gap-3 py-4">
                 <p className="text-xs text-muted-foreground text-center max-w-60">
-                  Couldn't create a handoff link. Check your connection and try again.
+                  {t('handoff.sheet.error')}
                 </p>
                 <Button size="sm" variant="outline" className="gap-2" onClick={handoff.regenerate}>
                   <RefreshCcw className="h-3.5 w-3.5" />
-                  Try again
+                  {t('common.tryAgain')}
                 </Button>
               </div>
             ) : (
@@ -140,11 +143,11 @@ export function MobileHandoffSheet() {
             {/* Short code + copy link — shown while QR is live */}
             {handoff.code && handoff.phase !== 'submitted' && handoff.phase !== 'error' && (
               <div className="flex flex-col items-center gap-2">
-                <span className="text-[10px] uppercase tracking-widest text-muted-foreground">Or enter this code</span>
+                <span className="text-[10px] uppercase tracking-widest text-muted-foreground">{t('handoff.codeLabel')}</span>
                 <span className="font-heading text-lg font-semibold tracking-[0.22em]">{handoff.code}</span>
                 <Button size="sm" variant="outline" className="gap-1.5" onClick={copyLink}>
                   {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-                  {copied ? 'Copied' : 'Copy link'}
+                  {copied ? t('handoff.sheet.copied') : t('handoff.copyLink')}
                 </Button>
               </div>
             )}
@@ -152,13 +155,13 @@ export function MobileHandoffSheet() {
             {handoff.phase === 'opened' && (
               <p className="flex items-center gap-1.5 text-xs text-primary">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                Continuing on the other device…
+                {t('handoff.sheet.opened')}
               </p>
             )}
 
             {handoff.phase !== 'submitted' && (
               <Button variant="ghost" size="sm" className="w-full text-muted-foreground" onClick={() => setOpen(false)}>
-                I'll stay on this device
+                {t('handoff.sheet.stayButton')}
               </Button>
             )}
           </div>

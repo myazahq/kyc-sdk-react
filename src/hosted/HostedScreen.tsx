@@ -6,6 +6,7 @@ import { buildThemeVars } from '../lib/theme';
 import { applyConfiguredTheme } from '../lib/apply-theme';
 import { useThemeRoot } from '../lib/sdk-frame-context';
 import { cn } from '../lib/utils';
+import { useText } from '../i18n';
 import type { KYCAppearance } from '../types/config';
 
 /**
@@ -67,16 +68,17 @@ export function HostedScreen({
 export function HostedLoadingScreen({
   appearance,
   compact,
-  message = 'Loading your verification…',
+  message,
 }: {
   appearance?: KYCAppearance;
   compact?: boolean;
   message?: string;
 }) {
+  const t = useText();
   return (
     <HostedScreen appearance={appearance} compact={compact}>
       <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      <p className="text-sm text-muted-foreground">{message}</p>
+      <p className="text-sm text-muted-foreground">{message ?? t('general.hosted.loading')}</p>
     </HostedScreen>
   );
 }

@@ -118,7 +118,16 @@ export function isFrontFacingStream(stream: MediaStream | null): boolean {
  */
 export function pickVideoMimeType(): string | null {
   if (typeof MediaRecorder === 'undefined') return null;
-  const candidates = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
+  // WebM first (smaller, and what most browsers record); MP4 for Safari, which
+  // records only MP4 before 18.4 — without it no liveness recording was made on
+  // those iPhones at all. The server accepts both.
+  const candidates = [
+    'video/webm;codecs=vp9',
+    'video/webm;codecs=vp8',
+    'video/webm',
+    'video/mp4;codecs=avc1',
+    'video/mp4',
+  ];
   for (const type of candidates) {
     if (MediaRecorder.isTypeSupported(type)) return type;
   }

@@ -16,7 +16,9 @@ export interface CameraIntegrity {
 }
 
 export interface LivenessSignals {
-  mode: 'gestures' | 'flash' | 'both';
+  mode: 'gestures' | 'flash' | 'both' | 'passive';
+  /** The prompts this run used, in order (e.g. ['turn', 'blink']). */
+  challenges?: string[];
   flash?: {
     passed: boolean;
     score: number;
@@ -27,6 +29,25 @@ export interface LivenessSignals {
   };
   /** Face-continuity glitches observed during gesture challenges. */
   faceGlitches?: number;
+  /** Whether the liveness recording reached the server, and why not when it did not. */
+  video?: LivenessVideoReport;
+}
+
+/**
+ * Why the liveness recording is missing. A stable, add-only vocabulary shared
+ * with the React Native and Flutter SDKs; the server stores it verbatim on
+ * `Verification.livenessCapture.failure`.
+ */
+export type LivenessVideoFailure =
+  | 'recorder_unsupported' // this browser cannot record video at all
+  | 'recorder_start_failed' // recording was possible but did not start
+  | 'recording_empty' // the recorder stopped without producing any footage
+  | 'upload_failed' // footage existed but could not be uploaded
+  | 'recording_missing'; // liveness ran and no footage exists, cause unknown
+
+export interface LivenessVideoReport {
+  recorded: boolean;
+  failure?: LivenessVideoFailure;
 }
 
 // Known virtual-camera / feed-injection software names (label substrings).
@@ -47,6 +68,9 @@ const VIRTUAL_CAMERA_MARKERS = [
 
 let cameraIntegrity: CameraIntegrity | null = null;
 let livenessSignals: LivenessSignals | null = null;
+// Why the step could not record, when it could not. Held apart from the claim
+// so it survives the step's own mode write, and settled at submit.
+let recorderFailure: LivenessVideoFailure | null = null;
 
 /** Inspect a just-started camera stream for injection heuristics. Never throws. */
 export function inspectCameraStream(stream: MediaStream): void {
@@ -94,6 +118,24 @@ export function recordLivenessSignals(update: Partial<LivenessSignals> & { mode:
   livenessSignals = { ...livenessSignals, ...update };
 }
 
+/** The liveness step could not record (or recorded nothing). Cleared on a fresh recording. */
+export function recordRecorderFailure(failure: LivenessVideoFailure | null): void {
+  recorderFailure = failure;
+}
+
+/**
+ * Settle the recording's state at submit, once the upload has been attempted.
+ * Only when liveness actually ran (a claim exists): a flow with no liveness
+ * step reports nothing.
+ */
+export function settleLivenessVideo(input: { hadRecording: boolean; uploaded: boolean }): void {
+  if (!livenessSignals) return;
+  const video: LivenessVideoReport = input.uploaded
+    ? { recorded: true }
+    : { recorded: false, failure: input.hadRecording ? 'upload_failed' : (recorderFailure ?? 'recording_missing') };
+  livenessSignals = { ...livenessSignals, video };
+}
+
 /** Snapshot attached to the submit's device metadata (undefined when nothing collected). */
 export function getIntegrityMetadata():
   | { camera?: CameraIntegrity; liveness?: LivenessSignals }
@@ -109,4 +151,5 @@ export function getIntegrityMetadata():
 export function resetIntegritySignals(): void {
   cameraIntegrity = null;
   livenessSignals = null;
+  recorderFailure = null;
 }

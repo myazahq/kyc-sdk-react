@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { BadgeCheck, CircleDashed, ShieldCheck, XCircle, type AppIconComponent } from '../../components/icons';
+import { BadgeCheck, CircleDashed, ShieldCheck, CircleX, type AppIconComponent } from '../../components/icons';
 import { useKYCContext } from '../../context/KYCContext';
 import { useKYCConfig } from '../../context/KYCConfigContext';
 import type { KYCState } from '../../context/types';
@@ -56,7 +56,7 @@ const OPTIONS: Array<{
   {
     value: 'address_mismatch',
     label: 'Mismatch',
-    Icon: XCircle,
+    Icon: CircleX,
     tint: 'text-red-600 dark:text-red-400',
     pill: 'bg-red-600',
   },

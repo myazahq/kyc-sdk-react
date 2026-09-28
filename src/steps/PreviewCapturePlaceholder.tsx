@@ -12,6 +12,7 @@ import { stepAfterCapture } from '../lib/post-capture';
 import { documentCaptureMethods } from '../lib/document-capture-methods';
 import { verifiedIdsFromState } from '../lib/supporting-documents';
 import { DocumentUploadPanel } from './DocumentUploadPanel';
+import { useReportLivenessCamera } from '../components/liveness-camera';
 
 /**
  * Builder-preview stand-in for the camera steps (document capture & liveness).
@@ -33,6 +34,9 @@ export function PreviewCapturePlaceholder({ kind }: { kind: 'document' | 'livene
   // upload screen. The preview shows that screen too, never the camera stand-in.
   const uploadOnlyDocument = kind === 'document' && !documentCaptureMethods(config).scan;
   const showReady = !ready && !uploadOnlyDocument;
+  // Bright screen: the stand-in for the selfie camera holds the flow light,
+  // exactly where the real step does. The ready screen keeps the org's theme.
+  useReportLivenessCamera(kind === 'liveness' && !showReady);
 
   const hasLiveness =
     config.enableSelfie !== false &&

@@ -8,7 +8,9 @@ import { successAction, successDescription, successTitle } from './success-copy'
 import { decidedCopy } from './completed-copy';
 import { biometricCopyFor } from '../lib/biometric-copy';
 import { configScope } from '../lib/scope';
+import { useText } from '../i18n';
 import { PresenceExpectations } from './presence-expectations';
+import { showsPresencePromise } from '../lib/presence-promise';
 import type { AwaitingPersonPayload } from '../services/api';
 
 // The success screen as an applicant sees it when they come BACK to their link.
@@ -43,6 +45,7 @@ export function toAwaitRows(people: AwaitingPersonPayload[]): AwaitRow[] {
 
 export function CompletedStep() {
   const config = useKYCConfig();
+  const t = useText();
   const summary = config.completedSummary;
 
   const isBusiness = summary?.subjectType === 'business';
@@ -67,14 +70,14 @@ export function CompletedStep() {
     scope: configScope(config),
     reason: summary?.reason ?? null,
     words: biometricCopyFor(config),
-  });
+  }, t);
 
   return (
     <SubmitSuccessScreen
       tone={decided?.tone ?? 'success'}
-      title={decided ? decided.title : successTitle(config.success, tokens)}
+      title={decided ? decided.title : successTitle(config.success, tokens, t)}
       description={
-        decided ? decided.description : successDescription(config.success, tokens, isBusiness, configScope(config))
+        decided ? decided.description : successDescription(config.success, tokens, isBusiness, configScope(config), t)
       }
       extra={
         <>
@@ -83,7 +86,7 @@ export function CompletedStep() {
               still applies (keep location on). Only on a success-ish outcome
               and only when the submission really carried a pin. */}
           {(!decided || decided.tone === 'success') &&
-            config.addressCollection?.presence?.enabled === true &&
+            showsPresencePromise(config) &&
             summary?.addressCollected === true && <PresenceExpectations />}
           {rows.length > 0 && <KeyPeopleAwaitList rows={rows} />}
         </>
@@ -93,7 +96,7 @@ export function CompletedStep() {
         hostedMode: config.hostedMode === true,
         tokens,
         onClose: () => config.onClose?.(),
-      })}
+      }, t)}
     />
   );
 }

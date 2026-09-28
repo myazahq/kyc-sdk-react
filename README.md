@@ -119,6 +119,7 @@ export default function VerifyButton() {
 | `enableLiveness`        | `boolean`                                 | `true`              | Run the liveness challenge step. The server can still disable it per ID type.                                        |
 | `livenessMode`          | `'gestures' \| 'flash' \| 'both'`         | `'gestures'`        | How liveness is proven. See [Liveness modes](#liveness-modes).                                                       |
 | `flashSequenceLength`   | `number` (2–5)                            | `4`                 | Number of colours in the flash sequence, for `'flash'` / `'both'`.                                                   |
+| `livenessBrightScreen`  | `boolean`                                 | `true`              | While the selfie camera is on, show the flow in its light theme so the screen lights the face. See [Liveness modes](#liveness-modes). |
 | `voiceGuidance`         | `boolean \| { enabled?, language? }`      | `true`              | Spoken liveness instructions (accessibility, TTS **output** — no microphone). `false` mutes it; pass `{ language: 'fr-FR' }` to set the voice. See [Robustness & error handling](#robustness--error-handling). |
 | `emailVerification`     | `EmailVerificationConfig`                 | off                 | Email OTP step after consent. See [Optional steps](#optional-steps).                                                 |
 | `phoneVerification`     | `PhoneVerificationConfig`                 | off                 | Phone OTP step (SMS or WhatsApp). See [Optional steps](#optional-steps).                                             |
@@ -257,6 +258,16 @@ its own.
 
 `flashSequenceLength` (2–5, default 4) sets how many colours the flash sequence
 uses. Longer is harder to spoof and takes slightly longer.
+
+**Bright screen.** While the selfie camera is on, the flow switches to its light
+theme (your `appearance` colours, never the `dark` overrides) so the display
+lights the person's face, then returns to the theme it was on when the step
+ends. The theme toggle is hidden meanwhile, and the switch is instant for
+anyone who has asked their device for reduced motion. Browsers cannot change
+the screen's brightness, so this is the lever the web has. On by default;
+`livenessBrightScreen={false}` (or the workflow switch) turns it off. During a
+flash sequence the screen shows black between colours whatever this is set to,
+so each colour is measured against a dark baseline.
 
 ## Face re-authentication
 

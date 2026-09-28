@@ -1,4 +1,6 @@
 import type { BusinessProductDef } from './business';
+import { defaultText } from '../i18n/translate';
+import type { TextFn } from '../i18n/types';
 
 // Country-aware guidance for the registration-number input. Nigeria's registry
 // (CAC) prefixes every number by entity type — the provider rejects a number
@@ -17,12 +19,6 @@ export interface RegistrationHint {
 
 const NG_PREFIX_RE = /^(RC|BN|IT|LP|LLP)\d+$/i;
 
-const NG_TIP =
-  'Prefix your registration number with RC for private companies limited by shares, ' +
-  'BN for business names, IT for incorporated trustees, LP for limited partnerships or ' +
-  'LLP for limited liability partnerships — with no space or character between the ' +
-  'prefix and the number, e.g. RC0000000.';
-
 // Countries whose English name takes a definite article ("the United States").
 const THE_COUNTRIES = new Set([
   'US', 'GB', 'AE', 'NL', 'PH', 'CZ', 'GM', 'BS', 'MV', 'CD', 'CF', 'DO', 'KM', 'MH', 'SB', 'CG',
@@ -40,12 +36,13 @@ function countryName(code: string): string {
 export function registrationNumberHint(
   country: string,
   productDef: BusinessProductDef,
+  t: TextFn = defaultText,
 ): RegistrationHint {
   // TIN-keyed products keep their own placeholder/format (not a registry number).
   if (productDef.inputLabel === 'TIN') {
     return {
       placeholder: productDef.placeholder,
-      tip: 'Your tax identification number as issued by the tax authority, e.g. 01234567-0001.',
+      tip: t('business.registration.tipTin'),
       isValidFormat: null,
       formatError: null,
     };
@@ -53,11 +50,10 @@ export function registrationNumberHint(
 
   if (country === 'NG') {
     return {
-      placeholder: 'e.g. RC0000000',
-      tip: NG_TIP,
+      placeholder: t('business.registration.placeholderNigeria'),
+      tip: t('business.registration.tipNigeria'),
       isValidFormat: (value) => NG_PREFIX_RE.test(value.trim()),
-      formatError:
-        'Start with RC, BN, IT, LP or LLP followed by the number, no spaces, e.g. RC0000000.',
+      formatError: t('business.registration.errorNigeria'),
     };
   }
 
@@ -68,11 +64,14 @@ export function registrationNumberHint(
   // format is enforced outside Nigeria.
   const cc = country.toUpperCase();
   const example = COUNTRY_EXAMPLES[cc];
+  const tipKey = COUNTRY_TIPS[cc];
   return {
-    placeholder: example ? `e.g. ${example}` : 'Enter your registration number',
-    tip:
-      COUNTRY_TIPS[cc] ??
-      `Your official company registration number, exactly as issued by the business registry in ${countryName(country)}.`,
+    placeholder: example
+      ? t('business.registration.placeholderExample', { example })
+      : t('business.registration.placeholderGeneric'),
+    tip: tipKey
+      ? t(tipKey)
+      : t('business.registration.tipGeneric', { country: countryName(country) }),
     isValidFormat: null,
     formatError: null,
   };
@@ -83,7 +82,8 @@ const COUNTRY_EXAMPLES: Record<string, string> = {
   ZA: '201133333323',
 };
 
+/** Text keys of the registry-confirmed per-country tips. */
 const COUNTRY_TIPS: Record<string, string> = {
-  KE: 'Your registration number as it appears on your certificate of incorporation, e.g. PVT-JZUA6Z663.',
-  ZA: 'Your CIPC registration number — printed as 2011/333333/23 on your documents; enter it without the slashes, e.g. 201133333323.',
+  KE: 'business.registration.tipKenya',
+  ZA: 'business.registration.tipSouthAfrica',
 };

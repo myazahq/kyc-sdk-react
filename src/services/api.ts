@@ -57,7 +57,10 @@ export type MediaUploadType =
   | 'liveness_video'
   | 'proof_of_address'
   | 'business_document'
-  | 'address_photo';
+  | 'address_photo'
+  // Silent capture: an unposed JPEG of the applicant from the front camera
+  // (lib/silent-capture.ts). Image only.
+  | 'silent_capture';
 
 /** Response from `POST /api/kyc/upload` — the stored mediaId. */
 export interface UploadResponse {
@@ -160,7 +163,7 @@ export interface VerifyRequest {
    * the right per-method component. A published workflow's livenessMode always
    * wins over this server-side. Absent ⇒ gestures.
    */
-  livenessMode?: 'gestures' | 'flash' | 'both';
+  livenessMode?: 'gestures' | 'flash' | 'both' | 'passive';
   flashSequenceLength?: number;
   deviceIntelligence?: boolean;
   /** What kind of proof-of-address document `mediaIds.proofOfAddress` is. */
@@ -218,6 +221,10 @@ export interface VerifyRequest {
     livenessVideo?: string;
     proofOfAddress?: string;
     addressPhoto?: string;
+    /** Silent capture frames, numbered by capture order with no gaps. */
+    silentCapture1?: string;
+    silentCapture2?: string;
+    silentCapture3?: string;
   };
   metadata: {
     requestId: string;
@@ -309,6 +316,14 @@ export interface SdkConfigIdType {
 }
 
 /** Org branding configured server-side, returned with the SDK config. */
+/**
+ * The footer attribution, resolved server-side from the published workflow.
+ * `custom` replaces the Myaza Trust lockup with the organisation's own logo.
+ */
+export type SdkTrustAttribution =
+  | { mode: 'myaza' }
+  | { mode: 'custom'; logo: string; logoDark?: string; companyName?: string };
+
 export interface SdkConfigBranding {
   /** Public URL of the org's logo, if one is configured. */
   logo?: string;
@@ -316,6 +331,8 @@ export interface SdkConfigBranding {
   companyName?: string;
   /** Org brand color (hex). */
   primaryColor?: string;
+  /** Server-resolved footer attribution. Missing on older servers, which means Myaza. */
+  trustAttribution?: SdkTrustAttribution;
 }
 
 export interface SdkConfigResponse {
@@ -444,10 +461,14 @@ export interface WorkflowConfigPayload {
   /** Presence Intelligence method: gestures (default) | flash | both. */
   livenessMode?: string;
   flashSequenceLength?: number;
+  /** Light theme while the liveness camera is on. On unless `false`. */
+  livenessBrightScreen?: boolean;
   /** "Continue on your phone" desktop QR gate. On by default; false disables it. */
   deviceHandoff?: boolean;
   /** The consent (welcome) screen the flow opens on; false skips it. */
   consentStep?: boolean;
+  /** Silent capture of unposed photos from the front camera. On unless false. */
+  silentCapture?: boolean;
   /** The biometric scopes' flow options (review / delivery / Done). */
   biometric?: import('../lib/biometric-options').BiometricFlowConfig;
   /** Device + IP analysis. On by default; false skips it and its charge. */
@@ -463,6 +484,8 @@ export interface WorkflowConfigPayload {
   appearance?: Record<string, unknown>;
   consent?: Record<string, unknown>;
   success?: Record<string, unknown>;
+  /** Custom copy by language then key (see i18n/). */
+  texts?: Record<string, Record<string, string>>;
   /** Contact verification step configurations (email/phone OTP). */
   emailVerification?: { enabled?: boolean; required?: boolean; codeLength?: number; maxAttempts?: number; inputStyle?: 'segmented' | 'text' };
   phoneVerification?: {
@@ -567,10 +590,14 @@ export interface HandoffSessionSnapshot {
   /** Presence Intelligence method: gestures (default) | flash | both. */
   livenessMode?: string;
   flashSequenceLength?: number;
+  /** Light theme while the liveness camera is on. On unless `false`. */
+  livenessBrightScreen?: boolean;
   /** "Continue on your phone" desktop QR gate. On by default; false disables it. */
   deviceHandoff?: boolean;
   /** The consent (welcome) screen the flow opens on; false skips it. */
   consentStep?: boolean;
+  /** Silent capture of unposed photos from the front camera. On unless false. */
+  silentCapture?: boolean;
   /** The biometric scopes' flow options (review / delivery / Done). */
   biometric?: import('../lib/biometric-options').BiometricFlowConfig;
   /** Device + IP analysis. On by default; false skips it and its charge. */
@@ -586,6 +613,8 @@ export interface HandoffSessionSnapshot {
   appearance?: Record<string, unknown>;
   consent?: Record<string, unknown>;
   success?: Record<string, unknown>;
+  /** Custom copy by language then key (see i18n/). */
+  texts?: Record<string, Record<string, string>>;
   /** Contact verification step configurations (email/phone OTP). */
   emailVerification?: { enabled?: boolean; required?: boolean; codeLength?: number; maxAttempts?: number; inputStyle?: 'segmented' | 'text' };
   phoneVerification?: {
@@ -675,6 +704,14 @@ export interface HandoffBootstrapResponse {
   expiresAt: string;
   /** KYB only: the mapped applicant workflow, when configured and resolvable. */
   applicantWorkflow?: ApplicantWorkflowPayload | null;
+  /**
+   * KYB only, when the business half already committed and the applicant's
+   * own verification has not: the applicant KeyPerson, the parent business
+   * verification, and its request id (replayed; lib/resumed-application.ts).
+   */
+  applicantKeyPersonId?: string;
+  parentVerificationId?: string;
+  parentRequestId?: string;
 }
 
 /** One person a submitted KYB application is still waiting on. */
@@ -829,6 +866,11 @@ export function createKYCApi(baseUrl: string, apiKey: string) {
         mediaIds?: Record<string, string>;
         data?: Record<string, unknown>;
       };
+      /** A committed KYB application still waiting on its applicant leg
+       *  (lib/resumed-application.ts). */
+      applicantKeyPersonId?: string;
+      parentVerificationId?: string;
+      parentRequestId?: string;
     }> {
       return request('/session/start', { method: 'POST', body: JSON.stringify(input) });
     },

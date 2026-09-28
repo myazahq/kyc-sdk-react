@@ -98,7 +98,7 @@ export function HostedFlow({
           reducer does not know that, and progress saving keys off the id. Without
           this seed every hosted applicant's work was dropped, and a refresh sent
           them back to the first step. */}
-      <HostedSessionSync sessionId={bootstrap.sessionId} progress={bootstrap.progress} api={api} />
+      <HostedSessionSync sessionId={bootstrap.sessionId} progress={bootstrap.progress} bootstrap={bootstrap} api={api} />
       <HostedLifecycle onStart={onStart} onStepChange={onStepChange} />
       <KYCConfigProvider
         apiKey={`${HANDOFF_TOKEN_PREFIX}${token}`}
@@ -132,20 +132,23 @@ export function HostedFlow({
         allowDocumentUpload={leg.allowDocumentUpload}
         allowDocumentScan={leg.allowDocumentScan}
         enableLiveness={leg.enableLiveness}
-        livenessMode={leg.livenessMode as 'gestures' | 'flash' | 'both' | undefined}
+        livenessMode={leg.livenessMode as 'gestures' | 'flash' | 'both' | 'passive' | undefined}
         flashSequenceLength={leg.flashSequenceLength as number | undefined}
+        livenessBrightScreen={leg.livenessBrightScreen as boolean | undefined}
         deviceIntelligence={snap.deviceIntelligence}
         deviceHandoff={snap.deviceHandoff}
         // The consent screen switch: off, the hosted flow opens on its first
         // real step (user report 2026-09-07: a re-authentication link with
         // consent off still opened on consent, because this list lacked it).
         consentStep={snap.consentStep}
+        silentCapture={snap.silentCapture}
         biometric={snap.biometric}
         progressStyle={snap.progressStyle as ProgressStyle | undefined}
         requireMobileDevice={snap.requireMobileDevice}
         appearance={snap.appearance as KYCAppearance | undefined}
         consent={snap.consent as KYCConsentContent | undefined}
         success={snap.success as KYCSuccessContent | undefined}
+        texts={snap.texts}
         emailVerification={snap.emailVerification as EmailVerificationConfig | undefined}
         phoneVerification={snap.phoneVerification as PhoneVerificationConfig | undefined}
         questionnaire={snap.questionnaire as QuestionnaireConfig | undefined}

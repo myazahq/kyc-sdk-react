@@ -10,6 +10,7 @@ import { groupCountriesByRegion } from '../lib/regions';
 import { useDropdownAnchor } from '../lib/use-dropdown-anchor';
 import { eventPathIncludes } from '../lib/event-path';
 import { DropdownSurface } from './DropdownSurface';
+import { useText } from '../i18n';
 
 /**
  * Registry-country picker for the business (KYB) details step: a searchable
@@ -30,7 +31,7 @@ export function BusinessCountrySelect({
   onChange,
   groupAll = false,
   defaultCode,
-  pinnedLabel = 'Default',
+  pinnedLabel,
   disabled,
 }: {
   id?: string;
@@ -57,6 +58,7 @@ export function BusinessCountrySelect({
   /** Frozen: the register has answered and the workflow locks it. */
   disabled?: boolean;
 }) {
+  const t = useText();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const rootRef = useRef<HTMLDivElement>(null);
@@ -92,8 +94,8 @@ export function BusinessCountrySelect({
     if (groupAll) {
       return groupCountriesByRegion(rest).map((g) => ({ label: g.region, countries: g.countries }));
     }
-    return groupBusinessCountries(rest);
-  }, [countries, query, groupAll, pinned]);
+    return groupBusinessCountries(rest, t);
+  }, [countries, query, groupAll, pinned, t]);
 
   // Close on outside click / Escape; focus the search box when opened.
   useEffect(() => {
@@ -165,7 +167,7 @@ export function BusinessCountrySelect({
                 ref={searchRef}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search countries…"
+                placeholder={t('business.country.searchPlaceholder')}
                 aria-label="Search countries"
                 className="h-11 w-full bg-transparent text-base outline-none placeholder:text-muted-foreground sm:text-sm"
               />
@@ -192,7 +194,7 @@ export function BusinessCountrySelect({
                         not: it is either the country the field arrived holding,
                         or where the visitor appears to be. */}
                     <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                      {pinnedLabel}
+                      {pinnedLabel ?? t('business.country.pinnedDefault')}
                     </span>
                     {pinned === value && (
                       <Check className="ml-auto h-4 w-4 shrink-0 text-primary" aria-hidden />
@@ -202,7 +204,7 @@ export function BusinessCountrySelect({
               )}
               {groups.length === 0 && !pinned ? (
                 <p className="px-3 py-8 text-center text-sm text-muted-foreground">
-                  No countries match.
+                  {t('business.country.noMatch')}
                 </p>
               ) : (
                 groups.map((group) => (

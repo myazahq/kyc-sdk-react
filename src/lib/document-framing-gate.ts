@@ -14,6 +14,9 @@
 //     shot. A document cropped flush to a corner loses characters.
 //   • STABILITY — held steady for a dwell, so the shot isn't taken mid-move.
 
+import { defaultText } from '../i18n/translate';
+import type { TextFn } from '../i18n/types';
+
 /**
  * What to actually tell the user. The gate rejects for several distinct
  * reasons, and collapsing them into one "align your ID" message leaves people
@@ -213,27 +216,23 @@ export class DocumentFramingGate {
   }
 }
 
-/** User-facing instruction for each hint. */
-export function documentHintText(hint: DocumentHint, documentLabel: string): string {
-  switch (hint) {
-    case 'moreLight':
-      return 'Too dark. Move somewhere brighter.';
-    case 'wrongDocument':
-      return `That doesn't look like your ${documentLabel}`;
-    case 'moveCloser':
-      return 'Move closer';
-    case 'moveBack':
-      return 'Move back, the corners are cut off';
-    case 'centre':
-      return 'Centre your document in the frame';
-    case 'showMrz':
-      return 'Show the bottom strip of the page';
-    case 'holdStill':
-      return 'Hold still…';
-    case 'captured':
-      return 'Captured';
-    case 'searching':
-    default:
-      return `Point the camera at your ${documentLabel}`;
-  }
+const HINT_KEYS: Record<DocumentHint, string> = {
+  searching: 'uploadDocument.hint.searching',
+  moreLight: 'uploadDocument.hint.moreLight',
+  wrongDocument: 'uploadDocument.hint.wrongDocument',
+  moveCloser: 'uploadDocument.hint.moveCloser',
+  moveBack: 'uploadDocument.hint.moveBack',
+  centre: 'uploadDocument.hint.centre',
+  showMrz: 'uploadDocument.hint.showMrz',
+  holdStill: 'uploadDocument.hint.holdStill',
+  captured: 'uploadDocument.hint.captured',
+};
+
+/** User-facing instruction for each hint, from the text catalogue. */
+export function documentHintText(
+  hint: DocumentHint,
+  documentLabel: string,
+  t: TextFn = defaultText,
+): string {
+  return t(HINT_KEYS[hint] ?? HINT_KEYS.searching, { document: documentLabel });
 }

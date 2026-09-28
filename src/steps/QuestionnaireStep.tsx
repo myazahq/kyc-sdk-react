@@ -11,6 +11,7 @@ import { isBusinessFlow } from '../lib/business';
 import { nextBusinessStep, prevBusinessStep } from '../lib/business-application';
 import { QuestionField } from './QuestionnaireFields';
 import type { QuestionnaireAnswerValue } from '../types/config';
+import { useText } from '../i18n';
 
 /**
  * Extra-info questionnaire (compliance declarations — income, source of funds,
@@ -22,6 +23,7 @@ import type { QuestionnaireAnswerValue } from '../types/config';
 export function QuestionnaireStep() {
   const { state, dispatch } = useKYCContext();
   const config = useKYCConfig();
+  const t = useText();
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const questionnaire = config.questionnaire;
@@ -65,7 +67,7 @@ export function QuestionnaireStep() {
       const empty =
         value === undefined || value === '' || (Array.isArray(value) && value.length === 0);
       if (field.required && empty) {
-        nextErrors[field.key] = 'This field is required.';
+        nextErrors[field.key] = t('questionnaire.error.required');
         continue;
       }
       // An "Other" choice obliges a description. Required whenever the flagged
@@ -78,18 +80,20 @@ export function QuestionnaireStep() {
       if (detailOption) {
         const detail = answers[`${field.key}_other`];
         if (typeof detail !== 'string' || !detail.trim()) {
-          nextErrors[field.key] = `Tell us more about "${detailOption.label}".`;
+          nextErrors[field.key] = t('questionnaire.error.detailRequired', { option: detailOption.label });
           continue;
         }
       }
       if ((field.type === 'number' || field.type === 'money') && !empty) {
         const num = Number(value);
         if (!Number.isFinite(num) || (field.type === 'money' && num < 0)) {
-          nextErrors[field.key] = field.type === 'money' ? 'Enter a valid amount.' : 'Enter a valid number.';
+          nextErrors[field.key] = t(
+            field.type === 'money' ? 'questionnaire.error.invalidAmount' : 'questionnaire.error.invalidNumber',
+          );
         } else if (field.min !== undefined && num < field.min) {
-          nextErrors[field.key] = `Must be at least ${field.min.toLocaleString()}.`;
+          nextErrors[field.key] = t('questionnaire.error.min', { min: field.min.toLocaleString() });
         } else if (field.max !== undefined && num > field.max) {
-          nextErrors[field.key] = `Must be at most ${field.max.toLocaleString()}.`;
+          nextErrors[field.key] = t('questionnaire.error.max', { max: field.max.toLocaleString() });
         }
       }
     }
@@ -121,11 +125,8 @@ export function QuestionnaireStep() {
   return (
     <div className="space-y-6 animate-slide-up">
       <StepHeader
-        title={questionnaire?.title ?? 'A few more questions'}
-        description={
-          questionnaire?.description ??
-          'This information is required for compliance and helps keep your account safe.'
-        }
+        title={t('questionnaire.title', undefined, questionnaire?.title)}
+        description={t('questionnaire.description', undefined, questionnaire?.description)}
         onBack={handleBack}
       />
 
@@ -146,7 +147,7 @@ export function QuestionnaireStep() {
       </div>
 
       <Button onClick={handleContinue} className="w-full h-12 rounded-xl text-base font-medium">
-        Continue
+        {t('common.continue')}
       </Button>
     </div>
   );

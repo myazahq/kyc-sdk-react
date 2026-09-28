@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { cn } from '../lib/utils';
+import { useText } from '../i18n';
 
 /**
  * Total-ownership summary at the DECISION point — the disabled Continue
@@ -16,6 +17,7 @@ export function KeyPeopleTotals({
   totalPct: number;
   overAllocated: boolean;
 }) {
+  const t = useText();
   if (totalPct <= 0) return null;
   const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
   return (
@@ -26,12 +28,12 @@ export function KeyPeopleTotals({
           overAllocated ? 'bg-destructive/5 text-destructive' : 'bg-muted/40 text-muted-foreground',
         )}
       >
-        <span>Total ownership listed</span>
+        <span>{t('keyPeople.totals.label')}</span>
         <span className="font-semibold">{fmt(totalPct)}%</span>
       </div>
       {overAllocated && (
         <p className="text-sm text-destructive">
-          Together the percentages can’t exceed 100%, so reduce them by {fmt(totalPct - 100)}%.
+          {t('keyPeople.totals.overError', { over: fmt(totalPct - 100) })}
         </p>
       )}
     </>

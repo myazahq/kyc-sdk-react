@@ -1,6 +1,8 @@
 import { resolveMyLocation } from '../address-helpers';
 import { SAMPLE_ADDRESS_LINE } from './flow-steps';
 import type { AddressParts } from '../../services/api';
+import { defaultText } from '../../i18n/translate';
+import type { TextFn } from '../../i18n/types';
 
 // The device's current location, fetched ONCE per page session and shared by
 // every address step (module-level on purpose — the flow hook remounts per
@@ -42,16 +44,16 @@ export function currentFixFailure(): LocationFailure | null {
   return lastFailure;
 }
 
-export function locationFailureMessage(reason: LocationFailure | null): string {
+export function locationFailureMessage(reason: LocationFailure | null, t: TextFn = defaultText): string {
   switch (reason) {
     case 'denied':
-      return 'Location access is blocked for this site. Allow it in your browser (on a Mac, also under System Settings, Privacy & Security, Location Services), then try again, or place the pin yourself.';
+      return t('address.location.denied');
     case 'unavailable':
-      return 'Your device could not work out where it is right now. Try again in a moment, or place the pin yourself.';
+      return t('address.location.unavailable');
     case 'timeout':
-      return 'Finding your location took too long. Try again, or place the pin yourself.';
+      return t('address.location.timeout');
     default:
-      return 'This browser cannot share your location. Place the pin yourself.';
+      return t('address.location.unsupported');
   }
 }
 

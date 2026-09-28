@@ -12,6 +12,7 @@ import { multiIdPlan } from '../lib/multi-id';
 import { verifiedIdsFromState } from '../lib/supporting-documents';
 import { validateIdNumber } from '../utils/validators';
 import type { AnyCountry } from '../types/config';
+import { useText } from '../i18n';
 
 interface IdInputStepProps {
   country?: AnyCountry;
@@ -20,6 +21,7 @@ interface IdInputStepProps {
 export function IdInputStep({ country }: IdInputStepProps = {}) {
   const { state, dispatch } = useKYCContext();
   const config = useKYCConfig();
+  const t = useText();
 
   const resolvedCountry: AnyCountry = country ?? config.country ?? 'NG';
 
@@ -31,7 +33,7 @@ export function IdInputStep({ country }: IdInputStepProps = {}) {
     : null;
 
   // What the field asks for — e.g. Tax ID is looked up by the person's NIN.
-  const idLabel = idTypeDef?.inputLabel ?? idTypeDef?.label ?? 'ID Number';
+  const idLabel = idTypeDef?.inputLabel ?? idTypeDef?.label ?? t('selectDocument.idInput.defaultLabel');
 
   // ---------------------------------------------------------------------------
   // Derived state
@@ -92,8 +94,8 @@ export function IdInputStep({ country }: IdInputStepProps = {}) {
   return (
     <div className="space-y-5 animate-slide-up">
       <StepHeader
-        title={`Enter your ${idLabel}`}
-        description="We’ll check this against the official record."
+        title={t('selectDocument.idInput.title', { idLabel })}
+        description={t('selectDocument.idInput.description')}
         onBack={handleBack}
         country={resolvedCountry}
       />
@@ -106,8 +108,8 @@ export function IdInputStep({ country }: IdInputStepProps = {}) {
             id="idNumber"
             placeholder={
               idTypeDef?.digits
-                ? `Enter ${idTypeDef.digits}-digit ${idLabel}`
-                : `Enter your ${idLabel}`
+                ? t('selectDocument.idInput.placeholderDigits', { digits: idTypeDef.digits, idLabel })
+                : t('selectDocument.idInput.placeholder', { idLabel })
             }
             value={state.idNumber}
             onChange={(e) => dispatch({ type: 'SET_ID_NUMBER', payload: e.target.value })}
@@ -124,7 +126,7 @@ export function IdInputStep({ country }: IdInputStepProps = {}) {
         disabled={!isFormValid}
         className="w-full"
       >
-        Continue
+        {t('common.continue')}
       </Button>
     </div>
   );

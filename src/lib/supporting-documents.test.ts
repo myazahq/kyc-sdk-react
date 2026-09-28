@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   hasSupportingDocumentsStep,
+  mayAskSupportingDocuments,
   idComposite,
   resolveSupportingDocuments,
   verifiedIdsFor,
@@ -193,5 +194,34 @@ describe('what the applicant is told a document is for', () => {
       resolveSupportingDocuments({ enabled: true, types: [{ key: 'a', label: 'Signature' }] }, [NIN])[0]!
         .reads,
     ).toEqual([]);
+  });
+});
+
+describe('mayAskSupportingDocuments (the consent screen’s question)', () => {
+  it('discloses a SCOPED document that the step order cannot yet see', () => {
+    // The whole reason the second predicate exists. Consent runs before an ID
+    // is picked, so the step order has no verified IDs to resolve against and
+    // answers "nothing to ask for" — while the flow will certainly ask a NIN
+    // verifier for their slip.
+    expect(hasSupportingDocumentsStep(ninSlipOnly, [])).toBe(false);
+    expect(mayAskSupportingDocuments(ninSlipOnly)).toBe(true);
+  });
+
+  it('promises nothing when the step is off', () => {
+    expect(mayAskSupportingDocuments(undefined)).toBe(false);
+    expect(mayAskSupportingDocuments(null)).toBe(false);
+    expect(mayAskSupportingDocuments({ types: ninSlipOnly.types })).toBe(false);
+    expect(mayAskSupportingDocuments({ enabled: false, types: ninSlipOnly.types })).toBe(false);
+  });
+
+  it('promises nothing when there is no document to ask for', () => {
+    expect(mayAskSupportingDocuments({ enabled: true, types: [] })).toBe(false);
+    // A nameless entry renders no slot, so it must not put a bullet on consent.
+    expect(
+      mayAskSupportingDocuments({
+        enabled: true,
+        types: [{ key: 'draft', label: '  ', required: false, idTypes: [] }],
+      }),
+    ).toBe(false);
   });
 });

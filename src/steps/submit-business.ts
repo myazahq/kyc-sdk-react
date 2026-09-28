@@ -15,7 +15,14 @@ import {
   keyPeoplePayload,
   splitFullName,
 } from '../lib/business-application';
-import { generateRequestId, buildSubmitMetadata, uploadCaptureVideos } from './submit-helpers';
+import {
+  generateRequestId,
+  buildSubmitMetadata,
+  uploadCaptureVideos,
+  silentCaptureForSubmit,
+  withSilentCaptureMetadata,
+} from './submit-helpers';
+import { settleLivenessVideo } from '../lib/integrity-signals';
 import type { KYCConfigValue } from '../context/KYCConfigContext';
 import type { KYCState } from '../context/types';
 import type { VerifyRequest } from '../services/api';
@@ -181,6 +188,7 @@ async function submitApplicantVerification(
 
   // Best-effort capture videos (same contract as the individual flow).
   const videoIds = await uploadCaptureVideos(config.api, state);
+  settleLivenessVideo({ hadRecording: Boolean(state.livenessVideoBlob), uploaded: Boolean(videoIds.livenessVideo) });
 
   // Name: values typed on the id-input step win; the applicant-role step's
   // optional full name fills the gaps.
@@ -193,10 +201,11 @@ async function submitApplicantVerification(
       : undefined;
 
   const requestId = generateRequestId('kyc');
-  const metadata: VerifyRequest['metadata'] = buildSubmitMetadata(
-    config.metadata,
-    requestId,
-    config.deviceIntelligence !== false,
+  // Silent capture: the applicant's unposed frames ride their own leg.
+  const silent = await silentCaptureForSubmit();
+  const metadata: VerifyRequest['metadata'] = withSilentCaptureMetadata(
+    buildSubmitMetadata(config.metadata, requestId, config.deviceIntelligence !== false),
+    silent,
   );
   // The link back to the application — written last so nothing clobbers it.
   metadata.userId = applicantKeyPersonId;
@@ -215,6 +224,7 @@ async function submitApplicantVerification(
         documentBack: state.mediaIds.documentBack,
         selfie: state.mediaIds.selfie,
         ...videoIds,
+        ...silent.mediaIds,
       },
       metadata,
     }),

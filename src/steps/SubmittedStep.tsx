@@ -8,29 +8,40 @@ import { withRetry } from "../lib/retry";
 import { mapToKycError } from "../lib/errors";
 import { isBusinessFlow } from "../lib/business";
 import { KYCError } from "../types/verification";
-import { generateRequestId, buildSubmitMetadata, uploadCaptureVideos } from "./submit-helpers";
+import {
+	generateRequestId,
+	buildSubmitMetadata,
+	uploadCaptureVideos,
+	silentCaptureForSubmit,
+	withSilentCaptureMetadata,
+} from "./submit-helpers";
 import { contactStepFor, expiredContactChannels } from "./contact-recovery";
 import { multiIdWireSlots } from "../lib/multi-id";
 import { keepsIdEvidence } from "../lib/resubmit";
 import { submitBusinessApplication } from "./submit-business";
+import { submissionRequestId } from "../lib/resumed-application";
 import { KeyPeopleAwaitList } from "./KeyPeopleAwaitList";
 import { toAwaitRows } from "./CompletedStep";
 import { KeyPeoplePending } from "./KeyPeoplePending";
 import { useAwaitingPeople } from "./use-awaiting-people";
 import { successAction, successDescription, successTitle } from "./success-copy";
 import { PresenceExpectations } from "./presence-expectations";
+import { showsPresencePromise } from "../lib/presence-promise";
 import { SubmittingScreen, SubmitErrorScreen, SubmitSuccessScreen } from "./SubmittedScreens";
 import { requiredPrefillSubmission } from './address/address-field-modes';
 import { describeWaiting } from '../lib/result-copy';
 import { biometricCopyFor } from '../lib/biometric-copy';
 import { showsDoneButton, showsSelfieReview, waitsForResult } from '../lib/biometric-options';
 import { IDLE_SELFIE_UPLOAD } from '../lib/selfie-upload-wait';
+import { settleLivenessVideo } from '../lib/integrity-signals';
 import { useSelfieUploadGate } from './selfie-upload-gate';
 import { SubmittedResult } from './SubmittedResult';
+import { useText } from '../i18n';
 
 export function SubmittedStep() {
 	const { state, dispatch } = useKYCContext();
 	const config = useKYCConfig();
+	const t = useText();
 
 	// Increment to trigger a (re-)submission; starts at 0 to fire on mount.
 	const [submitTrigger, setSubmitTrigger] = useState(0);
@@ -97,8 +108,10 @@ export function SubmittedStep() {
 	// applicant extras, then (fire-and-forget) the applicant's own individual
 	// verification. Extracted to submit-business.ts per the 200-line rule.
 	async function submitBusiness(requestId: string): Promise<void> {
-		if (!state.business.registrationNumber.trim()) {
-			dispatch({ type: "SET_ERROR", payload: new KYCError("unknown", "Missing registration number.") });
+		// A replay of an application that already committed is answered from
+		// the row that exists, whatever the restored form still holds.
+		if (!state.resumedApplication && !state.business.registrationNumber.trim()) {
+			dispatch({ type: "SET_ERROR", payload: new KYCError("unknown", t("result.error.missingRegistrationNumber")) });
 			return;
 		}
 		const result = await submitBusinessApplication({ config, state, requestId, onRetry });
@@ -120,7 +133,7 @@ export function SubmittedStep() {
 				? multiSlots[0]!.idType
 				: state.selectedIdType;
 		if (!primaryIdType) {
-			dispatch({ type: "SET_ERROR", payload: new KYCError("unknown", "Missing ID type.") });
+			dispatch({ type: "SET_ERROR", payload: new KYCError("unknown", t("result.error.missingIdType")) });
 			return;
 		}
 		const isNumberOnly = multiSlots
@@ -131,7 +144,7 @@ export function SubmittedStep() {
 		// number the earlier attempt gave.
 		const idKept = !multiSlots && keepsIdEvidence(config.resubmit);
 		if (!multiSlots && isNumberOnly && !idNumber && !idKept) {
-			dispatch({ type: "SET_ERROR", payload: new KYCError("unknown", "Missing ID number.") });
+			dispatch({ type: "SET_ERROR", payload: new KYCError("unknown", t("result.error.missingIdNumber")) });
 			return;
 		}
 
@@ -151,6 +164,13 @@ export function SubmittedStep() {
 				: state,
 		);
 
+		// Whether the liveness recording reached us, and why not when it did
+		// not: rides the integrity claim the server records (integrity-signals.ts).
+		settleLivenessVideo({
+			hadRecording: Boolean(state.livenessVideoBlob),
+			uploaded: Boolean(videoIds.livenessVideo),
+		});
+
 		// Multi-ID: each check has its OWN document recording, so they upload
 		// per slot and ride that slot rather than the row's single
 		// documentFrontVideo column — which can only hold one, and would file
@@ -168,6 +188,9 @@ export function SubmittedStep() {
 					),
 				)
 			: null;
+
+		// Silent capture: the unposed frames that uploaded (lib/silent-capture.ts).
+		const silent = await silentCaptureForSubmit();
 
 		// Merge userData: config props take precedence over user-typed values
 		const firstName = config.userData?.firstName || state.userData.firstName || undefined;
@@ -298,9 +321,13 @@ export function SubmittedStep() {
 						proofOfAddress: state.mediaIds.proofOfAddress,
 						addressPhoto: state.mediaIds.addressPhoto,
 						...videoIds,
+						...silent.mediaIds,
 					},
 					metadata: {
-						...buildSubmitMetadata(config.metadata, requestId, config.deviceIntelligence !== false),
+						...withSilentCaptureMetadata(
+							buildSubmitMetadata(config.metadata, requestId, config.deviceIntelligence !== false),
+							silent,
+						),
 						// Ignored by production, so it is safe to send whenever it is set
 						// (the business flow's sandboxOutcome contract).
 						...(state.addressSandboxOutcome
@@ -329,7 +356,13 @@ export function SubmittedStep() {
 		dispatch({ type: "SUBMIT_VERIFICATION" });
 		setRetryInfo(null);
 		const business = isBusinessFlow(config);
-		const requestId = generateRequestId(business ? 'kyb' : 'kyc');
+		// A KYB application whose business half already committed replays its
+		// original request id: the server answers from the existing row, with
+		// the applicant KeyPerson, instead of refusing a second application on
+		// the spent session (lib/resumed-application.ts).
+		const requestId = submissionRequestId(business, state.resumedApplication, () =>
+			generateRequestId(business ? 'kyb' : 'kyc'),
+		);
 		try {
 			if (business) await submitBusiness(requestId);
 			else await submitIndividual(requestId);
@@ -347,7 +380,7 @@ export function SubmittedStep() {
 				dispatch({ type: "SET_STEP", payload: contactStepFor(expired[0]) });
 				return;
 			}
-			dispatch({ type: "SET_ERROR", payload: mapToKycError(err, "verify") });
+			dispatch({ type: "SET_ERROR", payload: mapToKycError(err, "verify", t) });
 		}
 	}
 
@@ -378,7 +411,7 @@ export function SubmittedStep() {
 					hostedMode: config.hostedMode === true,
 					tokens,
 					onClose: () => config.onClose?.(),
-				});
+				}, t);
 
 	// A flow that waits for its verdict (a biometric re-authentication, by
 	// default) renders the result screen from the FIRST render: it shows the
@@ -396,17 +429,17 @@ export function SubmittedStep() {
 
 	if (state.status === "loading") {
 		const words = biometricCopyFor(config).waiting;
-		const copy = describeWaiting({ scope: configScope(config), waitsForResult: false, retry: retryInfo, override: words });
+		const copy = describeWaiting({ scope: configScope(config), waitsForResult: false, retry: retryInfo, override: words }, t);
 		return <SubmittingScreen title={copy.title} description={copy.description} retrying={retryInfo != null} />;
 	}
 
 	return (
 		<SubmitSuccessScreen
-			title={successTitle(config.success, tokens)}
-			description={successDescription(config.success, tokens, isBusinessFlow(config), configScope(config))}
+			title={successTitle(config.success, tokens, t)}
+			description={successDescription(config.success, tokens, isBusinessFlow(config), configScope(config), t)}
 			extra={
 				<>
-					{config.addressCollection?.presence?.enabled === true && state.address && (
+					{showsPresencePromise(config) && state.address && (
 						<PresenceExpectations />
 					)}
 					{

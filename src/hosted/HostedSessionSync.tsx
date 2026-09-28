@@ -5,6 +5,7 @@ import { useKYCContext } from '../context/KYCContext';
 import { useSessionProgress } from '../hooks/useSessionProgress';
 import type { HandoffBootstrapResponse, KYCApi } from '../services/api';
 import type { KYCStep } from '../types/config';
+import { resumedApplicationFrom } from '../lib/resumed-application';
 
 /**
  * Binds a hosted flow to its session: names it, then saves progress as the
@@ -18,10 +19,14 @@ import type { KYCStep } from '../types/config';
 export function HostedSessionSync({
   sessionId,
   progress,
+  bootstrap,
   api,
 }: {
   sessionId: string;
   progress?: HandoffBootstrapResponse['progress'];
+  /** The bootstrap's resume facts for a KYB application whose business half
+   *  already committed (lib/resumed-application.ts). */
+  bootstrap?: Pick<HandoffBootstrapResponse, 'applicantKeyPersonId' | 'parentVerificationId' | 'parentRequestId'>;
   api: KYCApi;
 }) {
   const { state, dispatch } = useKYCContext();
@@ -36,7 +41,12 @@ export function HostedSessionSync({
       restored.current = true;
       dispatch({ type: 'RESTORE_PROGRESS', payload: progress });
     }
-  }, [sessionId, progress, dispatch]);
+    // The business half already committed: the submitting screen replays it
+    // under its own request id rather than sending a second application the
+    // server refuses on this spent session.
+    const resumed = bootstrap ? resumedApplicationFrom(bootstrap) : null;
+    if (resumed) dispatch({ type: 'SET_RESUMED_APPLICATION', payload: resumed });
+  }, [sessionId, progress, bootstrap, dispatch]);
 
   useSessionProgress(api, state);
   return null;

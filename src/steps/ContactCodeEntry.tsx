@@ -5,6 +5,7 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { InputOTP, InputOTPGroup, InputOTPSlot } from '../components/ui/input-otp';
 import type { OtpInputStyle } from '../types/config';
+import { useText } from '../i18n';
 
 // The OTP code entry. Which field renders — a segmented shadcn OTP field or a
 // plain text field — is chosen by the ORG in the workflow builder (config
@@ -22,9 +23,10 @@ interface ContactCodeEntryProps {
 }
 
 export function ContactCodeEntry({ code, onChange, codeLength, style, disabled, onComplete }: ContactCodeEntryProps) {
+  const t = useText();
   return (
     <div className="space-y-2">
-      <Label htmlFor="contact-code">Verification code</Label>
+      <Label htmlFor="contact-code">{t('contact.code.label')}</Label>
 
       {style === 'text' ? (
         <Input

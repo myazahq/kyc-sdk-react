@@ -4,13 +4,12 @@ import React from 'react';
 import { Label } from '../components/ui/label';
 import { cn } from '../lib/utils';
 import type { KeyPersonRole } from '../types/business';
+import { keyPersonRoleLabel } from '../lib/business-application';
+import { useText } from '../i18n';
 
 /** The representative hats on offer — real classifications, not job titles
  *  (those go in the free-text position field). */
-const REP_ROLES: Array<{ role: KeyPersonRole; label: string }> = [
-  { role: 'director', label: 'Director' },
-  { role: 'signatory', label: 'Signatory' },
-];
+const REP_ROLES: KeyPersonRole[] = ['director', 'signatory'];
 
 /**
  * The representative form's role chips. Multi-select over the entry's role
@@ -25,12 +24,13 @@ export function KeyPersonRoleChips({
   roles: KeyPersonRole[];
   onRoles: (next: KeyPersonRole[]) => void;
 }) {
+  const t = useText();
   const repCount = roles.filter((r) => r === 'director' || r === 'signatory').length;
   return (
     <div className="space-y-2">
-      <Label>Role</Label>
+      <Label>{t('keyPeople.form.role.label')}</Label>
       <div className="flex flex-wrap gap-2">
-        {REP_ROLES.map(({ role, label }) => {
+        {REP_ROLES.map((role) => {
           const active = roles.includes(role);
           return (
             <button
@@ -48,7 +48,7 @@ export function KeyPersonRoleChips({
                   : 'border-border text-muted-foreground hover:border-primary/40',
               )}
             >
-              {label}
+              {keyPersonRoleLabel(role, t)}
             </button>
           );
         })}

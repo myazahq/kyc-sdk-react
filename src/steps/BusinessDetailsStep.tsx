@@ -29,6 +29,7 @@ import { registrationNumberHint } from '../lib/registration-hint';
 import { BusinessCheckPanel } from '../components/BusinessCheckPanel';
 import { useBusinessCheck } from '../hooks/useBusinessCheck';
 import { defaultCountry } from '../lib/country-default';
+import { useText } from '../i18n';
 
 /**
  * Business (KYB) details step — replaces id-type/capture for business
@@ -39,6 +40,7 @@ import { defaultCountry } from '../lib/country-default';
 export function BusinessDetailsStep() {
   const { state, dispatch } = useKYCContext();
   const config = useKYCConfig();
+  const t = useText();
 
   const business = config.business;
   // Registry country: workflows may offer several — the visitor picks theirs
@@ -61,6 +63,7 @@ export function BusinessDetailsStep() {
     state.business.product && offered.includes(state.business.product) ? state.business.product : null;
   const product = showPicker ? pickedProduct : offered[0];
   const productDef = getBusinessProductDef(product ?? offered[0]!);
+  const isTin = productDef.inputLabel === 'TIN';
 
   // Two screens in one step.
   //
@@ -138,7 +141,7 @@ export function BusinessDetailsStep() {
 
   // Country-aware registration-number guidance (NG: CAC prefix rules +
   // format validation; elsewhere: a generic registry tip).
-  const regHint = registrationNumberHint(country, productDef);
+  const regHint = registrationNumberHint(country, productDef, t);
   const formatOk =
     !regHint.isValidFormat ||
     registrationNumber.trim() === '' ||
@@ -287,14 +290,14 @@ export function BusinessDetailsStep() {
   return (
     <div className="space-y-6 animate-slide-up">
       <StepHeader
-        title="Business Details"
-        description="Provide your business registration details for verification against the official registry."
+        title={t('business.details.title')}
+        description={t('business.details.description')}
         onBack={() => dispatch({ type: 'SET_STEP', payload: 'consent' })}
       />
 
       {showCountryPicker && (
         <div className="space-y-2">
-          <Label htmlFor="businessCountry">Country of registration</Label>
+          <Label htmlFor="businessCountry">{t('business.details.countryLabel')}</Label>
           <BusinessCountrySelect
             id="businessCountry"
             countries={offeredCountries}
@@ -307,7 +310,7 @@ export function BusinessDetailsStep() {
             // Where they appear to be, lifted to the top of ~48 registers. A
             // guess, tagged as one, and the register they pick is what counts.
             defaultCode={config.serverConfig?.geoCountry ?? undefined}
-            pinnedLabel="Your location"
+            pinnedLabel={t('business.details.countryPinnedLocation')}
             onChange={(value) =>
               // A country switch can invalidate the picked product — reset it.
               setDetails({ country: value, product: null })
@@ -350,14 +353,14 @@ export function BusinessDetailsStep() {
 
       {phase === 'pick' && picked && (
         <div className="space-y-2">
-          <Label>Business</Label>
+          <Label>{t('business.details.pickedLabel')}</Label>
           <div className="flex items-center gap-3 rounded-xl border border-primary bg-primary/5 p-3">
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
               <Building2 className="h-5 w-5" />
             </span>
             <span className="min-w-0 flex-1">
               <span className="block truncate text-sm font-medium">
-                {registrationName.trim() || 'We will confirm the name with the register'}
+                {registrationName.trim() || t('business.details.pickedNamePending')}
               </span>
               <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <CountryFlag code={country} className="h-3.5 w-3.5 shrink-0" />
@@ -375,7 +378,7 @@ export function BusinessDetailsStep() {
               className="inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1 text-sm font-medium text-muted-foreground hover:text-foreground"
             >
               <Pencil className="h-3.5 w-3.5" />
-              Change
+              {t('business.details.change')}
             </button>
           </div>
         </div>
@@ -383,7 +386,9 @@ export function BusinessDetailsStep() {
 
       <div className={phase === 'details' ? 'space-y-4' : 'hidden'}>
         <div className="space-y-2">
-          <Label htmlFor="registrationNumber">{productDef.inputLabel}</Label>
+          <Label htmlFor="registrationNumber">
+            {t(isTin ? 'business.details.tinLabel' : 'business.details.registrationNumberLabel')}
+          </Label>
           <Input
             id="registrationNumber"
             placeholder={regHint.placeholder}
@@ -395,7 +400,7 @@ export function BusinessDetailsStep() {
             <p className="text-sm text-destructive">
               {!formatOk && regHint.formatError
                 ? regHint.formatError
-                : `Enter a valid ${productDef.inputLabel.toLowerCase()}.`}
+                : t(isTin ? 'business.details.invalidTin' : 'business.details.invalidRegistrationNumber')}
             </p>
           ) : (
             regHint.tip && <p className="text-xs text-muted-foreground">{regHint.tip}</p>
@@ -404,12 +409,12 @@ export function BusinessDetailsStep() {
 
         <div className="space-y-2">
           <Label htmlFor="registrationName">
-            Registered business name
-            {!nameRequired && <span className="text-muted-foreground"> (optional)</span>}
+            {t('business.details.nameLabel')}
+            {!nameRequired && <span className="text-muted-foreground"> {t('business.optional')}</span>}
           </Label>
           <Input
             id="registrationName"
-            placeholder="Enter the registered business name"
+            placeholder={t('business.details.namePlaceholder')}
             value={registrationName}
             onChange={(e) => setDetails({ registrationName: e.target.value })}
           />
@@ -455,10 +460,7 @@ export function BusinessDetailsStep() {
           and is charged to the organisation. Labelling it "Continue" alone made
           a paid, outbound call look like moving to the next page. */}
       {phase === 'pick' && picked && (
-        <p className="text-xs text-muted-foreground">
-          Continue checks this business against the official register and brings back its
-          details.
-        </p>
+        <p className="text-xs text-muted-foreground">{t('business.details.checkNote')}</p>
       )}
 
       {/* Pick screen only. The outcome is chosen BEFORE the lookup runs, so
@@ -471,7 +473,7 @@ export function BusinessDetailsStep() {
           targets reach a usable size on a phone. */}
       {isSandbox && phase === 'pick' && picked && (
         <div className="space-y-2 rounded-xl border border-dashed border-border p-3 sm:flex sm:flex-wrap sm:items-center sm:gap-3 sm:space-y-0">
-          <span className="block text-sm font-medium">Test result</span>
+          <span className="block text-sm font-medium">{t('business.sandbox.label')}</span>
           {/* The active state SLIDES between the two.
               A block that vanishes here and reappears there reads as two
               separate things blinking; moving it says the selection travelled,
@@ -503,14 +505,12 @@ export function BusinessDetailsStep() {
                     active ? 'text-background' : 'text-muted-foreground hover:text-foreground'
                   }`}
                 >
-                  {outcome === 'verified' ? 'Verified' : 'Not found'}
+                  {t(outcome === 'verified' ? 'business.sandbox.verified' : 'business.sandbox.notFound')}
                 </button>
               );
             })}
           </div>
-          <span className="block text-xs text-muted-foreground">
-            Returned instead of calling the register.
-          </span>
+          <span className="block text-xs text-muted-foreground">{t('business.sandbox.hint')}</span>
         </div>
       )}
 
@@ -518,15 +518,15 @@ export function BusinessDetailsStep() {
         {checking ? (
           <>
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            Checking…
+            {t('business.details.checking')}
           </>
         ) : // Once the register has filled these in, the act is confirming what
         // it said rather than supplying it: the label should say which of
         // the two the person is being asked to do.
         phase === 'details' ? (
-          'Confirm details & continue'
+          t('business.details.confirm')
         ) : (
-          'Continue'
+          t('common.continue')
         )}
       </Button>
     </div>

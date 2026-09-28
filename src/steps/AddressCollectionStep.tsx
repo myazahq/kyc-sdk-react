@@ -14,13 +14,9 @@ import { useAddressIntroGate } from './address/AddressIntroGate';
 import { DetailsSheet } from './address/DetailsSheet';
 import { CurrentLocationRow, LocateFab } from './address/CurrentLocationRow';
 import { LabelDecisionRow } from './address/LabelDecisionRow';
-import {
-  ADDRESS_LINE_PENDING,
-  ADDRESS_LINE_UNAVAILABLE,
-  displayAddressLine,
-  shouldAskLabelDecision,
-} from './address/flow-steps';
-import { ADDRESS_FIELD_LABELS, missingRequiredAddressFields } from './address/address-field-modes';
+import { ADDRESS_LINE_PENDING, displayAddressLine, shouldAskLabelDecision } from './address/flow-steps';
+import { missingAddressFieldsMessage, missingRequiredAddressFields } from './address/address-field-modes';
+import { useText } from '../i18n';
 
 /**
  * The PIN step of the address flow (wire name 'address-collection'): a big
@@ -35,6 +31,7 @@ let autoLocateAttempted = false;
 
 export function AddressCollectionStep() {
   const { state, dispatch } = useKYCContext();
+  const t = useText();
   const flow = useAddressFlow();
   const [sheetOpen, setSheetOpen] = useState(false);
   // Declared BEFORE the intro-gate early return below: a hook after a
@@ -104,8 +101,8 @@ export function AddressCollectionStep() {
   return (
     <div className="relative space-y-4 animate-slide-up">
       <StepHeader
-        title={flow.isBusiness ? 'Is the pin on the premises?' : 'Is the pin on your building?'}
-        description="Drag the map until the pin sits exactly on it. You can add details for whoever needs to find it."
+        title={t(flow.isBusiness ? 'address.pin.title.business' : 'address.pin.title')}
+        description={t('address.pin.description')}
         onBack={() => flow.goBack('address-collection')}
       />
 
@@ -134,14 +131,14 @@ export function AddressCollectionStep() {
                 key={addressLine}
                 className={cn('truncate animate-fade-in', !addressLine && 'font-medium text-muted-foreground')}
               >
-                {!state.address ? 'No pin placed yet' : addressLine || ADDRESS_LINE_UNAVAILABLE}
+                {!state.address ? t('address.pin.noPin') : addressLine || t('address.line.unavailable')}
               </span>
             )}
           </p>
           <p className="text-xs text-muted-foreground">
             {detailCount > 0
-              ? `${detailCount} detail${detailCount === 1 ? '' : 's'} added`
-              : 'A house number and directions help someone find it'}
+              ? t(detailCount === 1 ? 'address.pin.detailsAdded.one' : 'address.pin.detailsAdded.other', { count: detailCount })
+              : t('address.pin.detailsHint')}
           </p>
         </div>
         <Button
@@ -150,7 +147,7 @@ export function AddressCollectionStep() {
           disabled={!pin}
           className="h-9 shrink-0 rounded-lg px-3 text-sm"
         >
-          <PencilLine className="mr-1.5 h-3.5 w-3.5" /> Edit details
+          <PencilLine className="mr-1.5 h-3.5 w-3.5" /> {t('address.pin.editDetails')}
         </Button>
       </div>
 
@@ -167,9 +164,7 @@ export function AddressCollectionStep() {
 
       {flow.error && <p className="text-sm text-destructive">{flow.error}</p>}
       {missingNudge && missingRequired.length > 0 && (
-        <p className="text-sm text-destructive">
-          This flow needs: {missingRequired.map((k) => ADDRESS_FIELD_LABELS[k].toLowerCase()).join(', ')}.
-        </p>
+        <p className="text-sm text-destructive">{missingAddressFieldsMessage(missingRequired, t)}</p>
       )}
 
       <StickyActions className="space-y-3">
@@ -178,7 +173,7 @@ export function AddressCollectionStep() {
           disabled={!pin || flow.confirming}
           className="h-12 w-full rounded-xl text-base font-medium"
         >
-          {flow.confirming ? 'Confirming…' : 'Continue'}
+          {flow.confirming ? t('address.confirming') : t('common.continue')}
         </Button>
 
         {flow.address?.requirePin !== true && (
@@ -187,7 +182,7 @@ export function AddressCollectionStep() {
             onClick={flow.exitForward}
             className="mx-auto block w-fit text-sm text-muted-foreground underline-offset-2 hover:underline"
           >
-            Skip for now
+            {t('address.skip')}
           </button>
         )}
       </StickyActions>

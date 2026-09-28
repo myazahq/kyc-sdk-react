@@ -8,6 +8,7 @@ import type { CompanyInfoField, CompanyInfoMode } from '../types/business';
 import { PhoneNumberInput } from './PhoneNumberInput';
 import { isValidWebsite } from '../lib/website';
 import { defaultCountry } from '../lib/country-default';
+import { useText } from '../i18n';
 
 export interface CompanyInfoValues {
   address: string;
@@ -21,33 +22,24 @@ export interface CompanyInfoValues {
   natureOfBusiness: string;
 }
 
+// Each field's label and placeholder are texts keyed
+// `business.companyInfo.<key>.label` / `.placeholder`.
 const FIELD_DEFS: Array<{
   key: CompanyInfoField;
-  label: string;
-  placeholder: string;
   type?: string;
   inputMode?: 'email' | 'tel' | 'url';
 }> = [
-  { key: 'address', label: 'Registered address', placeholder: 'e.g. 12 Marina Road, Lagos' },
-  { key: 'email', label: 'Business email', placeholder: 'hello@company.com', type: 'email', inputMode: 'email' },
-  { key: 'phone', label: 'Business phone', placeholder: '+234 800 000 0000', type: 'tel', inputMode: 'tel' },
-  { key: 'website', label: 'Website', placeholder: 'company.com', inputMode: 'url' },
+  { key: 'address' },
+  { key: 'email', type: 'email', inputMode: 'email' },
+  { key: 'phone', type: 'tel', inputMode: 'tel' },
+  { key: 'website', inputMode: 'url' },
   // Registry facts the applicant states. Asked as THEIR answer rather than
   // filled from the register, because where the two differ that is the finding.
-  {
-    key: 'dateOfIncorporation',
-    label: 'Date of incorporation',
-    placeholder: 'YYYY-MM-DD',
-    type: 'date',
-  },
-  { key: 'taxId', label: 'Tax ID', placeholder: 'e.g. 01234567-0001' },
-  { key: 'vatNumber', label: 'VAT number', placeholder: 'e.g. NG123456789' },
-  { key: 'companyType', label: 'Company type', placeholder: 'e.g. Private Limited Company' },
-  {
-    key: 'natureOfBusiness',
-    label: 'Nature of business',
-    placeholder: 'What the company does',
-  },
+  { key: 'dateOfIncorporation', type: 'date' },
+  { key: 'taxId' },
+  { key: 'vatNumber' },
+  { key: 'companyType' },
+  { key: 'natureOfBusiness' },
 ];
 
 /**
@@ -72,21 +64,21 @@ export function BusinessCompanyInfoFields({
   geoCountry?: string | null;
   onChange: (patch: Partial<CompanyInfoValues>) => void;
 }) {
+  const t = useText();
   const visible = FIELD_DEFS.filter((f) => modes[f.key] !== 'off');
   if (visible.length === 0) return null;
 
   return (
     <div className="space-y-4">
       <div className="space-y-1">
-        <p className="text-sm font-medium">Company information</p>
-        <p className="text-xs text-muted-foreground">
-          We verify these details against the official registry record.
-        </p>
+        <p className="text-sm font-medium">{t('business.companyInfo.title')}</p>
+        <p className="text-xs text-muted-foreground">{t('business.companyInfo.description')}</p>
       </div>
 
       {visible.map((f) => {
         const required = modes[f.key] === 'required';
         const value = values[f.key];
+        const placeholder = t(`business.companyInfo.${f.key}.placeholder`);
         const invalid =
           (f.key === 'email' && value !== '' && !emailValid) ||
           (f.key === 'website' && value !== '' && !isValidWebsite(value)) ||
@@ -94,11 +86,11 @@ export function BusinessCompanyInfoFields({
         return (
           <div key={f.key} className="space-y-2">
             <Label htmlFor={`company-${f.key}`}>
-              {f.label}
+              {t(`business.companyInfo.${f.key}.label`)}
               {required ? (
                 <span className="text-destructive"> *</span>
               ) : (
-                <span className="text-muted-foreground"> (optional)</span>
+                <span className="text-muted-foreground"> {t('business.optional')}</span>
               )}
             </Label>
             {/* A date gets the picker, not a text box. The native date input
@@ -124,7 +116,7 @@ export function BusinessCompanyInfoFields({
               <DateField
                 inputId={`company-${f.key}`}
                 value={value || undefined}
-                placeholder={f.placeholder}
+                placeholder={placeholder}
                 onChange={(next) => onChange({ [f.key]: next ?? '' })}
               />
             ) : (
@@ -132,19 +124,17 @@ export function BusinessCompanyInfoFields({
               id={`company-${f.key}`}
               type={f.type}
               inputMode={f.inputMode}
-              placeholder={f.placeholder}
+              placeholder={placeholder}
               value={value}
               onChange={(e) => onChange({ [f.key]: e.target.value })}
               className={invalid ? 'border-destructive' : ''}
             />
             )}
             {f.key === 'email' && value !== '' && !emailValid && (
-              <p className="text-sm text-destructive">Enter a valid email address.</p>
+              <p className="text-sm text-destructive">{t('business.error.invalidEmail')}</p>
             )}
             {f.key === 'website' && value !== '' && !isValidWebsite(value) && (
-              <p className="text-sm text-destructive">
-                Enter a valid website, for example company.com
-              </p>
+              <p className="text-sm text-destructive">{t('business.error.invalidWebsite')}</p>
             )}
           </div>
         );

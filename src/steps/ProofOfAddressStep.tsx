@@ -2,7 +2,7 @@
 
 import React, { useRef, useState } from 'react';
 import { PoaDocumentTypeList } from './PoaDocumentTypeList';
-import { PoaDropzone, PoaUploadedRow } from './ProofOfAddressParts';
+import { PoaDropzone, PoaUploadedRow, poaKindCta, poaKindLabel } from './ProofOfAddressParts';
 import { StepHeader } from '../components/StepHeader';
 import { AddressCountryControl } from './address/AddressCountryControl';
 import { Button } from '../components/ui/button';
@@ -11,17 +11,10 @@ import { useKYCConfig } from '../context/KYCConfigContext';
 import { poaNamePolicy, poaOfferedKinds, stepAfterProofOfAddress } from '../lib/post-capture';
 import { poaCountryDeclared, poaOfferedCountries } from '../lib/poa-country-gate';
 import { lastContactStep } from '../lib/contact-steps';
-import { uploadSizeError } from '../lib/upload-limits';
+import { isPdfMime, uploadSizeError } from '../lib/upload-limits';
 import { hasSupportingDocumentsStep, verifiedIdsFromState } from '../lib/supporting-documents';
 import type { PoaDocumentType } from '../types/config';
-
-const TYPE_LABELS: Record<PoaDocumentType, string> = {
-  utility_bill: 'Utility bill',
-  bank_statement: 'Bank statement',
-  tenancy_agreement: 'Tenancy agreement',
-  government_document: 'Government-issued document',
-  other: 'Other document',
-};
+import { useText } from '../i18n';
 
 const ACCEPTED_MIMES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
 
@@ -33,6 +26,7 @@ const ACCEPTED_MIMES = ['image/jpeg', 'image/png', 'image/webp', 'application/pd
 export function ProofOfAddressStep() {
   const { state, dispatch } = useKYCContext();
   const config = useKYCConfig();
+  const t = useText();
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -46,10 +40,8 @@ export function ProofOfAddressStep() {
   const selectedType = state.poaDocumentType ?? offeredTypes[0]!;
   // The org can rename the 'other' kind in the workflow builder (e.g. "Council
   // tax letter"); fall back to the generic label when unset.
-  const labelFor = (type: PoaDocumentType) =>
-    type === 'other' && config.proofOfAddress?.otherLabel?.trim()
-      ? config.proofOfAddress.otherLabel.trim()
-      : TYPE_LABELS[type];
+  const otherLabel = config.proofOfAddress?.otherLabel?.trim() || null;
+  const labelFor = (type: PoaDocumentType) => poaKindLabel(type, otherLabel, t);
   const maxAgeDays = config.proofOfAddress?.maxAgeDays ?? 90;
   // Ask for what the server will check: where the workflow does not require
   // the name on this kind in this country (a Nigerian utility bill names the
@@ -74,12 +66,11 @@ export function ProofOfAddressStep() {
   const handleFile = async (file: File) => {
     setError(null);
     if (!ACCEPTED_MIMES.includes((file.type.split(';')[0] || '').toLowerCase())) {
-      setError('Please upload a PDF, JPG or PNG file.');
+      setError(t('proofOfAddress.error.fileType'));
       return;
     }
-    const sizeError = uploadSizeError(file.type, file.size);
-    if (sizeError) {
-      setError(sizeError);
+    if (uploadSizeError(file.type, file.size)) {
+      setError(t(isPdfMime(file.type) ? 'proofOfAddress.error.pdfTooLarge' : 'proofOfAddress.error.imageTooLarge'));
       return;
     }
     setUploading(true);
@@ -92,7 +83,7 @@ export function ProofOfAddressStep() {
         payload: { documentType: selectedType, fileName: file.name },
       });
     } catch {
-      setError('Upload failed. Please check your connection and try again.');
+      setError(t('proofOfAddress.error.uploadFailed'));
     } finally {
       setUploading(false);
     }
@@ -125,8 +116,8 @@ export function ProofOfAddressStep() {
   return (
     <div className="space-y-6 animate-slide-up">
       <StepHeader
-        title="Proof of address"
-        description={`Upload a document that shows your ${nameNeeded ? 'name and home address' : 'home address'}, issued within the last ${maxAgeDays} days.`}
+        title={t('proofOfAddress.title')}
+        description={t(nameNeeded ? 'proofOfAddress.description' : 'proofOfAddress.description.noName', { days: maxAgeDays })}
         onBack={handleBack}
       />
 
@@ -139,7 +130,7 @@ export function ProofOfAddressStep() {
       {offeredTypes.length > 1 && (
         <div className="flex flex-col gap-1.5">
           <span id="poa-document-type-label" className="text-sm font-semibold">
-            Document type
+            {t('proofOfAddress.documentType')}
           </span>
           <PoaDocumentTypeList
             labelledBy="poa-document-type-label"
@@ -184,7 +175,7 @@ export function ProofOfAddressStep() {
       ) : (
         <PoaDropzone
           uploading={uploading}
-          typeLabel={labelFor(selectedType)}
+          cta={poaKindCta(selectedType, otherLabel, t)}
           country={flagCountry}
           onPress={() => inputRef.current?.click()}
         />
@@ -197,7 +188,7 @@ export function ProofOfAddressStep() {
         disabled={!uploaded || uploading || !countryDeclared}
         className="w-full h-12 rounded-xl text-base font-medium"
       >
-        Continue
+        {t('common.continue')}
       </Button>
     </div>
   );

@@ -3,6 +3,7 @@
 import React from 'react';
 import { Building2, User } from '../components/icons';
 import { cn } from '../lib/utils';
+import { useText } from '../i18n';
 
 /**
  * Person or company.
@@ -20,19 +21,20 @@ export function KeyPersonKindToggle({
   isCorporate: boolean;
   onChange: (isCorporate: boolean) => void;
 }) {
+  const t = useText();
   const options: Array<{ value: boolean; label: string; Icon: typeof User }> = [
-    { value: false, label: 'A person', Icon: User },
-    { value: true, label: 'A company', Icon: Building2 },
+    { value: false, label: t('keyPeople.form.kind.person'), Icon: User },
+    { value: true, label: t('keyPeople.form.kind.company'), Icon: Building2 },
   ];
   return (
     <div className="space-y-2">
-      <span className="text-sm font-medium leading-none">Who is this?</span>
+      <span className="text-sm font-medium leading-none">{t('keyPeople.form.kind.label')}</span>
       <div role="radiogroup" aria-label="Who is this?" className="grid grid-cols-2 gap-2">
         {options.map(({ value, label, Icon }) => {
           const selected = isCorporate === value;
           return (
             <button
-              key={label}
+              key={String(value)}
               type="button"
               role="radio"
               aria-checked={selected}

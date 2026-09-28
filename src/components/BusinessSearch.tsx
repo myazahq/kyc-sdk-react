@@ -11,12 +11,13 @@
 // register check, which is why selection is an explicit act rather than
 // something that happens as they type.
 import { useEffect, useState } from 'react';
-import { Search, Loader2, Building2, AlertTriangle, PenLine, Filter } from './icons';
+import { Search, Loader2, Building2, TriangleAlert, PenLine, Filter } from './icons';
 import { Button } from './ui/button';
 import { CountryFlag } from './CountryFlag';
 import { MyazaSelect } from './MyazaSelect';
 import { Label } from './ui/label';
 import { useKYCConfig } from '../context/KYCConfigContext';
+import { useText } from '../i18n';
 
 export interface BusinessHit {
   name: string;
@@ -47,6 +48,7 @@ export function BusinessSearch({
   disabled?: boolean;
 }) {
   const config = useKYCConfig();
+  const t = useText();
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState('');
   const [state, setState] = useState<SearchState>({ phase: 'idle' });
@@ -123,7 +125,7 @@ export function BusinessSearch({
       <div className="space-y-3">
         {regions.length > 0 && (
           <div className="space-y-2">
-            <Label htmlFor="business-region">State or region of registration</Label>
+            <Label htmlFor="business-region">{t('business.search.regionLabel')}</Label>
             {/* Searchable: fifty US states unfiltered is a scroll-and-hunt for
                 a word the person already knows how to spell. The flag is the
                 country's, because every option here belongs to it. */}
@@ -137,7 +139,7 @@ export function BusinessSearch({
               }))}
               onChange={onRegion}
               searchable
-              placeholder="Select the state or region"
+              placeholder={t('business.search.regionPlaceholder')}
               aria-label="State or region of registration"
             />
           </div>
@@ -155,7 +157,7 @@ export function BusinessSearch({
                 void run();
               }
             }}
-            placeholder="Search by company name"
+            placeholder={t('business.search.placeholder')}
             aria-label="Company name"
             disabled={disabled}
             className="h-12 w-full rounded-xl border border-input bg-background pl-9 pr-3 text-base"
@@ -176,12 +178,12 @@ export function BusinessSearch({
           {state.phase === 'searching' ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Searching…
+              {t('business.search.searching')}
             </>
           ) : (
             <>
               <Search className="mr-2 h-4 w-4" />
-              Search
+              {t('business.search.button')}
             </>
           )}
         </Button>
@@ -194,12 +196,15 @@ export function BusinessSearch({
           <div className="flex items-center justify-between gap-3">
             <p className="text-sm text-muted-foreground">
               {shown.length === state.hits.length
-                ? `${state.hits.length} results`
-                : `${shown.length} of ${state.hits.length} results`}
+                ? t('business.search.resultCount', { count: state.hits.length })
+                : t('business.search.resultCountFiltered', {
+                    shown: shown.length,
+                    count: state.hits.length,
+                  })}
             </p>
             <div className="flex items-center gap-2">
               <label htmlFor="business-filter" className="text-sm text-muted-foreground">
-                Filter
+                {t('business.search.filterLabel')}
               </label>
               <div className="relative">
                 <Filter
@@ -211,7 +216,7 @@ export function BusinessSearch({
                   type="text"
                   value={filter}
                   onChange={(e) => setFilter(e.target.value)}
-                  placeholder="Name or number"
+                  placeholder={t('business.search.filterPlaceholder')}
                   className="h-10 w-44 rounded-xl border border-input bg-background pl-8 pr-3 text-sm"
                 />
               </div>
@@ -242,14 +247,16 @@ export function BusinessSearch({
           </ul>
           {shown.length === 0 && (
             <p className="text-sm text-muted-foreground">
-              Nothing here matches &ldquo;{filter.trim()}&rdquo;. Clear the filter to see all{' '}
-              {state.hits.length}.
+              {t('business.search.noFilterMatch', {
+                filter: filter.trim(),
+                count: state.hits.length,
+              })}
             </p>
           )}
           {/* The register caps a page, so a full one may be hiding matches. */}
           {state.truncated && (
             <p className="text-xs text-muted-foreground">
-              Showing the first {state.hits.length}. Add more of the name to narrow it down.
+              {t('business.search.truncated', { count: state.hits.length })}
             </p>
           )}
         </>
@@ -257,19 +264,18 @@ export function BusinessSearch({
 
       {state.phase === 'results' && state.hits.length === 0 && (
         <p className="text-sm text-muted-foreground">
-          Nothing found under that name. Try a shorter version of it, or enter the details yourself.
+          {t('business.search.noResults')}
         </p>
       )}
 
       {state.phase === 'unavailable' && (
         <div className="flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950/40">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+          <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
           <div className="text-sm">
-            <p className="font-medium text-amber-900 dark:text-amber-200">Search is unavailable</p>
-            <p className="text-amber-800 dark:text-amber-300">
-              We could not reach the company register just now. Try again, or enter the details
-              yourself and we will check them when you submit.
+            <p className="font-medium text-amber-900 dark:text-amber-200">
+              {t('business.search.unavailableTitle')}
             </p>
+            <p className="text-amber-800 dark:text-amber-300">{t('business.search.unavailableBody')}</p>
           </div>
         </div>
       )}
@@ -282,7 +288,7 @@ export function BusinessSearch({
         className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
       >
         <PenLine className="h-3.5 w-3.5" />
-        Enter the details myself
+        {t('business.search.manualEntry')}
       </button>
     </div>
   );

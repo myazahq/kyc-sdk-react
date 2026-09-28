@@ -13,6 +13,7 @@ import {
 import { BusinessDocumentSlot, BUSINESS_DOC_ACCEPTED_MIMES } from './BusinessDocumentSlot';
 import { uploadSizeError } from '../lib/upload-limits';
 import type { BusinessDocumentKey } from '../types/business';
+import { useText } from '../i18n';
 
 /**
  * Business-documents step: one upload slot per configured document type. Each
@@ -23,7 +24,8 @@ import type { BusinessDocumentKey } from '../types/business';
 export function BusinessDocumentsStep() {
   const { state, dispatch } = useKYCContext();
   const config = useKYCConfig();
-  const slots = resolveBusinessDocumentTypes(config.business);
+  const t = useText();
+  const slots = resolveBusinessDocumentTypes(config.business, t);
   const uploads = state.businessApplication.documents;
 
   const [uploadingKey, setUploadingKey] = useState<BusinessDocumentKey | null>(null);
@@ -39,7 +41,7 @@ export function BusinessDocumentsStep() {
   const handlePick = async (key: BusinessDocumentKey, file: File) => {
     setError(key, null);
     if (!BUSINESS_DOC_ACCEPTED_MIMES.includes((file.type.split(';')[0] || '').toLowerCase())) {
-      setError(key, 'Please upload a PDF, JPG or PNG file.');
+      setError(key, t('business.documents.errorFileType'));
       return;
     }
     const sizeError = uploadSizeError(file.type, file.size);
@@ -61,7 +63,7 @@ export function BusinessDocumentsStep() {
         },
       });
     } catch {
-      setError(key, 'Upload failed. Please check your connection and try again.');
+      setError(key, t('business.documents.errorUpload'));
     } finally {
       setUploadingKey(null);
     }
@@ -90,8 +92,8 @@ export function BusinessDocumentsStep() {
   return (
     <div className="space-y-6 animate-slide-up">
       <StepHeader
-        title="Business documents"
-        description="Upload the supporting documents for your business. Each one must clearly show the registered business name and registration number. Required documents are marked with *."
+        title={t('business.documents.title')}
+        description={t('business.documents.description')}
         onBack={() =>
           dispatch({ type: 'SET_STEP', payload: prevBusinessStep('business-documents', config) })
         }
@@ -118,7 +120,7 @@ export function BusinessDocumentsStep() {
         disabled={!requiredComplete || uploadingKey !== null}
         className="w-full"
       >
-        Continue
+        {t('common.continue')}
       </Button>
     </div>
   );

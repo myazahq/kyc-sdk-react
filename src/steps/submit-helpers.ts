@@ -8,6 +8,8 @@ import { collectFingerprint } from '../lib/fingerprint';
 import { collectWebDeviceMetadata } from '../utils/device-metadata';
 import { withRetry } from '../lib/retry';
 import type { KYCApi, VerifyRequest } from '../services/api';
+import { withSilentCaptureDevice, type SilentCaptureSubmission } from '../lib/silent-capture';
+import { settleSilentUploads, silentCaptureSubmission } from '../lib/silent-capture-store';
 
 // Re-exported so existing `./submit-helpers` importers keep working; the token
 // logic now lives in one place (shared with ConsentStep).
@@ -74,4 +76,26 @@ export async function uploadCaptureVideos(
 		documentBackVideo: await upload(blobs.documentBackVideoBlob, 'document_back_video'),
 		livenessVideo: await upload(blobs.livenessVideoBlob, 'liveness_video'),
 	};
+}
+
+/**
+ * The silent-capture frames that uploaded, once any still in flight have had
+ * a moment to land. Never throws; an empty result submits nothing extra.
+ */
+export async function silentCaptureForSubmit(): Promise<SilentCaptureSubmission> {
+	try {
+		await settleSilentUploads();
+		return silentCaptureSubmission();
+	} catch {
+		return { mediaIds: {}, device: [] };
+	}
+}
+
+/** The submit metadata with the frames described on its device block. */
+export function withSilentCaptureMetadata(
+	metadata: VerifyRequest['metadata'],
+	silent: SilentCaptureSubmission,
+): VerifyRequest['metadata'] {
+	if (silent.device.length === 0) return metadata;
+	return { ...metadata, device: withSilentCaptureDevice(metadata.device, silent.device) };
 }

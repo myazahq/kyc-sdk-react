@@ -20,7 +20,10 @@ import { SandboxBanner } from './SandboxBanner';
 import { StepHeaderSlotContext } from './step-header-slot';
 import { CaptureLightContext } from './capture-light';
 import { ImmersiveCaptureContext } from './immersive-capture';
+import { LivenessCameraContext } from './liveness-camera';
+import { useLivenessLight } from './use-liveness-light';
 import { Button } from './ui/button';
+import { useText } from '../i18n';
 import { cn } from '../lib/utils';
 import { useKYCContext } from '../context/KYCContext';
 import { useKYCConfig } from '../context/KYCConfigContext';
@@ -83,6 +86,7 @@ interface KYCModalProps {
 // ---------------------------------------------------------------------------
 
 function ConfigErrorScreen({ message, onClose }: { message: string; onClose: () => void }) {
+  const t = useText();
   return (
     <div className="flex flex-col items-center gap-6 py-8 animate-fade-in">
       <div className="flex h-20 w-20 items-center justify-center rounded-full bg-destructive/10">
@@ -102,12 +106,12 @@ function ConfigErrorScreen({ message, onClose }: { message: string; onClose: () 
       </div>
 
       <div className="text-center space-y-1">
-        <h2 className="text-xl font-semibold font-heading">Unable to start verification</h2>
+        <h2 className="text-xl font-semibold font-heading">{t('general.configError.title')}</h2>
         <p className="text-sm text-muted-foreground">{message}</p>
       </div>
 
       <Button className="w-full" onClick={onClose}>
-        Close
+        {t('common.close')}
       </Button>
     </div>
   );
@@ -181,6 +185,7 @@ const CAPTURE_STEPS: KYCStep[] = ['document-capture', 'liveness'];
 export function KYCModal({ open, onClose, showThemeToggle, disableClose, fullScreen }: KYCModalProps) {
   const { state, dispatch } = useKYCContext();
   const config = useKYCConfig();
+  const t = useText();
 
   // Multi-ID flows: the applicant picks each slot's ID from what the admin
   // allowed, minus what earlier slots used, minus any pick that would strand a
@@ -244,7 +249,7 @@ export function KYCModal({ open, onClose, showThemeToggle, disableClose, fullScr
   // A fatal config-load failure (e.g. wrong API key) blocks the whole flow.
   const configError =
     config.serverConfig.status === 'error' && config.serverConfig.fatal
-      ? config.serverConfig.error ?? 'Unable to start verification. Please try again.'
+      ? config.serverConfig.error ?? t('general.configError.description')
       : null;
 
   // Apply the configured initial light/dark mode — 'system' follows (and
@@ -310,6 +315,18 @@ export function KYCModal({ open, onClose, showThemeToggle, disableClose, fullScr
   const shownStep = resolveNarrowedStep(state.currentStep, stepOptions);
   const skipping = shownStep !== state.currentStep;
   const { backAvailable } = useOpeningStep(stepOptions, shownStep, dispatch);
+  // Bright screen during the selfie: while the liveness camera is on the flow
+  // is held on its light palette so the display lights the face, then the
+  // previous theme comes back (lib/liveness-bright-screen.ts). Declared after
+  // the configured-theme effect, so on mount the configured theme lands first
+  // and is what gets restored.
+  const { forceLight, reportCameraShown } = useLivenessLight({
+    livenessBrightScreen: config.livenessBrightScreen,
+    configuredTheme: config.appearance?.theme,
+    open,
+    step: shownStep,
+    themeRoot,
+  });
   useEffect(() => {
     if (skipping) dispatch({ type: 'SET_STEP', payload: shownStep });
   }, [skipping, shownStep, dispatch]);
@@ -351,6 +368,7 @@ export function KYCModal({ open, onClose, showThemeToggle, disableClose, fullScr
     <BackAvailableContext.Provider value={backAvailable}>
     <CaptureLightContext.Provider value={setLightOverride}>
     <ImmersiveCaptureContext.Provider value={setImmersive}>
+    <LivenessCameraContext.Provider value={reportCameraShown}>
     <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen && !dismissBlocked) onClose(); }}>
       <DialogContent
         fullscreen={fullscreen}
@@ -383,7 +401,9 @@ export function KYCModal({ open, onClose, showThemeToggle, disableClose, fullScr
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[inherit]">
           {!immersive && <SandboxBanner />}
           {!immersive && <KYCHeader
-            showThemeToggle={showThemeToggle}
+            // Hidden while the selfie holds the flow light, so it cannot be
+            // switched back to dark mid-step.
+            showThemeToggle={forceLight ? false : showThemeToggle}
             dismissBlocked={dismissBlocked}
             onClose={onClose}
             fullScreen={fullScreen}
@@ -433,6 +453,7 @@ export function KYCModal({ open, onClose, showThemeToggle, disableClose, fullScr
         </div>
       </DialogContent>
     </Dialog>
+    </LivenessCameraContext.Provider>
     </ImmersiveCaptureContext.Provider>
     </CaptureLightContext.Provider>
     </BackAvailableContext.Provider>

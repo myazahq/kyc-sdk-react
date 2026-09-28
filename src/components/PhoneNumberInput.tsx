@@ -11,6 +11,7 @@ import { formatNationalNumber } from '../lib/phone-format';
 import { useDropdownAnchor } from '../lib/use-dropdown-anchor';
 import { eventPathIncludes } from '../lib/event-path';
 import { DropdownSurface } from './DropdownSurface';
+import { useText } from '../i18n';
 
 // Phone input with a searchable dial-code country picker + as-you-type
 // national formatting (libphonenumber-js). Emits the E.164 value and validity.
@@ -62,6 +63,7 @@ export interface PhoneNumberInputProps {
 }
 
 export function PhoneNumberInput({ value, defaultCountry, geoCountry, disabled, onChange }: PhoneNumberInputProps) {
+  const t = useText();
   const options = useMemo<CountryOption[]>(
     () =>
       getCountries()
@@ -186,7 +188,7 @@ export function PhoneNumberInput({ value, defaultCountry, geoCountry, disabled, 
         type="tel"
         inputMode="tel"
         autoComplete="tel-national"
-        placeholder="803 123 4567"
+        placeholder={t('contact.phone.placeholder')}
         value={national}
         onChange={(e) => handleNationalChange(e.target.value)}
         disabled={disabled}
@@ -204,14 +206,14 @@ export function PhoneNumberInput({ value, defaultCountry, geoCountry, disabled, 
                 ref={searchRef}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search country or code"
+                placeholder={t('contact.phone.search')}
                 aria-label="Search countries"
                 className="h-11 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
               />
             </div>
             <div className="overflow-y-auto p-1.5" style={{ maxHeight: anchor.maxHeight }}>
               {filtered.length === 0 ? (
-                <p className="px-3 py-8 text-center text-sm text-muted-foreground">No matches</p>
+                <p className="px-3 py-8 text-center text-sm text-muted-foreground">{t('contact.phone.noMatches')}</p>
               ) : (
                 <>
                   {pinned && (
@@ -219,7 +221,7 @@ export function PhoneNumberInput({ value, defaultCountry, geoCountry, disabled, 
                       <CountryRow
                         option={pinned}
                         selected={pinned.code === country}
-                        badge="Your location"
+                        badge={t('contact.phone.yourLocation')}
                         onPick={pick}
                       />
                       {rest.length > 0 && <div className="my-1.5 border-t border-border/70" />}

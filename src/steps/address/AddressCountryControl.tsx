@@ -15,6 +15,7 @@ import { useKYCConfig } from '../../context/KYCConfigContext';
 import { useKYCContext } from '../../context/KYCContext';
 import { configScope } from '../../lib/scope';
 import type { AnyCountry } from '../../types/config';
+import { useText } from '../../i18n';
 
 /**
  * The declared-country control for ADDRESS-SCOPED flows — mounted on the
@@ -35,6 +36,7 @@ import type { AnyCountry } from '../../types/config';
 export function AddressCountryControl() {
   const config = useKYCConfig();
   const { state, dispatch } = useKYCContext();
+  const t = useText();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const rootRef = useRef<HTMLDivElement>(null);
@@ -115,7 +117,7 @@ export function AddressCountryControl() {
     const only = offered[0]!;
     return (
       <div className="flex flex-col gap-1.5">
-        <span className="text-sm font-semibold">Country</span>
+        <span className="text-sm font-semibold">{t('proofOfAddress.country.label')}</span>
         <div className="flex h-12 w-full items-center gap-2.5 rounded-xl border border-input bg-muted/30 px-3 text-sm">
           <CountryFlag code={only} className="h-5 w-5 shrink-0" title={regionCountryName(only)} />
           <span className="truncate">{regionCountryName(only)}</span>
@@ -158,7 +160,7 @@ export function AddressCountryControl() {
   return (
     <div ref={rootRef} className="flex flex-col gap-1.5">
       <label htmlFor="address-country" className="text-sm font-semibold">
-        Country
+        {t('proofOfAddress.country.label')}
       </label>
       <button
         ref={triggerRef}
@@ -174,7 +176,7 @@ export function AddressCountryControl() {
         )}
       >
         {value && <CountryFlag code={value} className="h-5 w-5 shrink-0" title={regionCountryName(value)} />}
-        <span className="flex-1 truncate">{value ? regionCountryName(value) : 'Select country'}</span>
+        <span className="flex-1 truncate">{value ? regionCountryName(value) : t('proofOfAddress.country.placeholder')}</span>
         <ChevronDown
           className={cn('h-4 w-4 shrink-0 text-muted-foreground transition-transform', open && 'rotate-180')}
         />
@@ -192,17 +194,17 @@ export function AddressCountryControl() {
                 ref={searchRef}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search countries…"
+                placeholder={t('proofOfAddress.country.search')}
                 aria-label="Search countries"
                 className="h-11 w-full bg-transparent text-base outline-none placeholder:text-muted-foreground sm:text-sm"
               />
             </div>
             <div className="overflow-y-auto p-1.5" style={{ maxHeight: anchor.maxHeight }}>
               {pinned && (
-                <div className="mb-1 border-b border-border pb-1.5">{row(pinned, 'Your location')}</div>
+                <div className="mb-1 border-b border-border pb-1.5">{row(pinned, t('proofOfAddress.country.yourLocation'))}</div>
               )}
               {groups.length === 0 && !pinned ? (
-                <p className="px-3 py-8 text-center text-sm text-muted-foreground">No countries match.</p>
+                <p className="px-3 py-8 text-center text-sm text-muted-foreground">{t('proofOfAddress.country.noMatches')}</p>
               ) : (
                 groups.map((group) => (
                   <div key={group.region} className="mb-1 last:mb-0">

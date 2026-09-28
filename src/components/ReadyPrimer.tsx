@@ -2,6 +2,7 @@
 
 import type { AppIconComponent } from './icons';
 import { cn } from '../lib/utils';
+import { useText } from '../i18n';
 import { Button } from './ui/button';
 
 /**
@@ -26,6 +27,8 @@ export interface ReadyPrimerProps {
   /** What to expect. Three at most; past that nobody reads it. */
   checklist: { icon: AppIconComponent; label: string }[];
   buttonLabel?: string;
+  /** Catalogue keys for the copy above; when set, the workflow's text wins. */
+  textKeys?: { title: string; body: string; checklist: string[] };
   onReady: () => void;
   className?: string;
 }
@@ -35,10 +38,18 @@ export function ReadyPrimer({
   title,
   body,
   checklist,
-  buttonLabel = "I'm ready",
+  buttonLabel,
+  textKeys,
   onReady,
   className,
 }: ReadyPrimerProps) {
+  const t = useText();
+  const heading = textKeys ? t(textKeys.title) : title;
+  const description = textKeys ? t(textKeys.body) : body;
+  const rows = checklist.map((row, i) => {
+    const key = textKeys?.checklist[i];
+    return key ? { ...row, label: t(key) } : row;
+  });
   return (
     <div className={cn('space-y-5 animate-fade-in', className)}>
       {/* Hero. The ring is the ONLY looping element on the screen — more than
@@ -55,16 +66,16 @@ export function ReadyPrimer({
           </span>
         </div>
         <div className="space-y-1.5">
-          <p className="text-base font-semibold text-foreground">{title}</p>
-          <p className="mx-auto max-w-xs text-sm leading-relaxed text-muted-foreground">{body}</p>
+          <p className="text-base font-semibold text-foreground">{heading}</p>
+          <p className="mx-auto max-w-xs text-sm leading-relaxed text-muted-foreground">{description}</p>
         </div>
       </div>
 
       {/* Expectations — same row idiom as the consent screen's "during this
           process we will" list, so the two read as one flow. */}
       <ul className="space-y-3">
-        {checklist.map(({ icon: RowIcon, label }) => (
-          <li key={label} className="flex items-center gap-3">
+        {rows.map(({ icon: RowIcon, label }, i) => (
+          <li key={i} className="flex items-center gap-3">
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
               <RowIcon className="h-4.5 w-4.5" aria-hidden />
             </span>
@@ -75,7 +86,7 @@ export function ReadyPrimer({
 
       {/* One primary action. h-12 clears the 44px touch minimum. */}
       <Button className="h-12 w-full text-base font-medium" onClick={onReady}>
-        {buttonLabel}
+        {buttonLabel ?? t('primer.readyButton')}
       </Button>
     </div>
   );

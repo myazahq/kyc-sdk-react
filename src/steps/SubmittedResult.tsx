@@ -6,6 +6,7 @@ import { awaitVerificationOutcome, type VerificationOutcome } from '../lib/resul
 import { describeOutcome, describeWaiting } from '../lib/result-copy';
 import { biometricCopyFor } from '../lib/biometric-copy';
 import { configScope } from '../lib/scope';
+import { useText } from '../i18n';
 import { SubmittingScreen, SubmitSuccessScreen, type SubmitSuccessAction, type TerminalTone } from './SubmittedScreens';
 
 // ─── The result screen (a flow that waits for its verdict) ──────────────────
@@ -37,6 +38,7 @@ export function SubmittedResult({
   action?: SubmitSuccessAction;
 }) {
   const config = useKYCConfig();
+  const t = useText();
   const [outcome, setOutcome] = useState<VerificationOutcome | null>(null);
 
   useEffect(() => {
@@ -67,10 +69,10 @@ export function SubmittedResult({
   // The org's own words for these screens, tokens filled (null = the defaults).
   const words = biometricCopyFor(config);
   if (!outcome) {
-    const copy = describeWaiting({ scope: configScope(config), waitsForResult: true, retry: retryInfo, override: words.waiting });
+    const copy = describeWaiting({ scope: configScope(config), waitsForResult: true, retry: retryInfo, override: words.waiting }, t);
     return <SubmittingScreen title={copy.title} description={copy.description} retrying={retryInfo != null} />;
   }
 
-  const copy = describeOutcome(outcome, words);
+  const copy = describeOutcome(outcome, words, t);
   return <SubmitSuccessScreen title={copy.title} description={copy.description} tone={TONE[copy.tone]} action={action} />;
 }

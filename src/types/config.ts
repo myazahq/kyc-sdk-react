@@ -1,5 +1,7 @@
 import type { ResubmitConfig } from '../lib/resubmit';
 import type { ButtonHTMLAttributes } from 'react';
+import type { SdkTrustAttribution } from '../services/api';
+import type { WorkflowTexts } from '../i18n/types';
 
 import type { KYCSubmission, KYCError, KYCResult } from './verification';
 
@@ -725,9 +727,16 @@ export interface MyazaKYCConfig<C extends AnyCountry = AnyCountry> {
    * (fast, hold-still, defeats replays/injection); `'both'` — gestures then
    * flash (strongest). Usually configured in the workflow builder.
    */
-  livenessMode?: 'gestures' | 'flash' | 'both';
+  livenessMode?: 'gestures' | 'flash' | 'both' | 'passive';
   /** Flash-liveness sequence length (colours) for `flash`/`both`. 2–5, default 4. */
   flashSequenceLength?: number;
+  /**
+   * Bright screen during the selfie: while the liveness camera is on, the flow
+   * switches to its LIGHT palette so the display lights the person's face, then
+   * restores the previous theme when the step ends. On by default; only `false`
+   * turns it off. Usually configured in the workflow builder.
+   */
+  livenessBrightScreen?: boolean;
 
   /**
    * Device Intelligence — device + IP fraud analysis (multi-accounting,
@@ -789,6 +798,16 @@ export interface MyazaKYCConfig<C extends AnyCountry = AnyCountry> {
   consentStep?: boolean;
 
   /**
+   * Silent capture: up to three unposed photos of the person, taken during
+   * document capture only, when the document camera faces them (a laptop
+   * webcam; a phone's rear camera sees only the document, so a phone browser
+   * takes none). No extra permission prompt, nothing on screen, no delay. A
+   * reviewer sees who was holding the ID. Default `true`; set `false` to
+   * switch it off. Normally set by a workflow.
+   */
+  silentCapture?: boolean;
+
+  /**
    * The biometric scopes' flow options (workflow-driven, or passed here on a
    * prop-configured mount): `selfieReview` shows the captured selfie with
    * Retake and Continue before submitting (off by default on both biometric
@@ -843,6 +862,14 @@ export interface MyazaKYCConfig<C extends AnyCountry = AnyCountry> {
   previewMode?: boolean;
 
   /**
+   * The builder's DRAFT footer attribution, so the preview shows an unpublished
+   * "Protected by" logo. Ignored unless `previewMode` is on: a real verification
+   * always renders the attribution the server resolved from the published
+   * workflow.
+   */
+  previewTrustAttribution?: SdkTrustAttribution;
+
+  /**
    * Imperatively show a specific step (dashboard workflow builder: clicking a
    * step in the rail jumps the preview there). Prerequisite state (an ID type
    * of the right kind) is seeded automatically so mid-flow steps render.
@@ -858,6 +885,16 @@ export interface MyazaKYCConfig<C extends AnyCountry = AnyCountry> {
 
   /** Override the success (submitted) screen copy. */
   success?: KYCSuccessContent;
+
+  /**
+   * Custom copy for any text the SDK shows, by language then key, e.g.
+   * `{ en: { 'common.continue': 'Next' } }`. Keys come from the text catalogue
+   * (exported as TEXT_GROUPS). Unset texts keep the SDK default.
+   */
+  texts?: WorkflowTexts;
+
+  /** The language texts are shown in (BCP-47, e.g. `en`, `fr`). Default `en`. */
+  language?: string;
 
   /**
    * Extra-info questionnaire shown after capture, right before submission —

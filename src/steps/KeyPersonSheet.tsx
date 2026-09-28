@@ -10,12 +10,13 @@ import { isKeyPersonRowValid } from '../lib/business-application';
 import type { KeyPeopleSection } from '../lib/key-people-sections';
 import type { KeyPersonEntry } from '../context/types';
 import type { KeyPersonRole } from '../types/business';
+import { useText } from '../i18n';
 
-/** What the sheet calls itself, per the section that opened it. */
+/** What the sheet calls itself (a text key), per the section that opened it. */
 const ADD_TITLES: Record<KeyPeopleSection, string> = {
-  ubos: 'Add a beneficial owner',
-  shareholders: 'Add a shareholder',
-  representatives: 'Add a representative',
+  ubos: 'keyPeople.sheet.addUbo',
+  shareholders: 'keyPeople.sheet.addShareholder',
+  representatives: 'keyPeople.sheet.addRepresentative',
 };
 
 /**
@@ -62,6 +63,7 @@ export function KeyPersonSheet({
   /** The business's own country, pinned to the top of the country picker. */
   defaultCountry?: string;
 }) {
+  const t = useText();
   const [draft, setDraft] = useState<KeyPersonEntry>(initial);
   // Bottom drawer on mobile; side sheet from the right on desktop — matching
   // the modal's own layout breakpoint. Decided once per open (no resize
@@ -80,7 +82,10 @@ export function KeyPersonSheet({
   const fmtPct = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
   const combinedPctError =
     combinedTotal > 100
-      ? `Combined ownership would be ${fmtPct(combinedTotal)}%, over by ${fmtPct(combinedTotal - 100)}%.`
+      ? t('keyPeople.form.ownership.combinedError', {
+          total: fmtPct(combinedTotal),
+          over: fmtPct(combinedTotal - 100),
+        })
       : null;
 
   const canSave = isKeyPersonRowValid(draft);
@@ -90,11 +95,13 @@ export function KeyPersonSheet({
       <DrawerContent direction={direction}>
         <div className={cn('flex items-center justify-between px-4 sm:px-6', direction === 'right' ? 'pt-5' : 'pt-3')}>
           <DrawerTitle className="text-base font-bold">
-            {mode === 'add'
-              ? ADD_TITLES[section]
-              : draft.isCorporate
-                ? 'Edit company'
-                : 'Edit person'}
+            {t(
+              mode === 'add'
+                ? ADD_TITLES[section]
+                : draft.isCorporate
+                  ? 'keyPeople.sheet.editCompany'
+                  : 'keyPeople.sheet.editPerson',
+            )}
           </DrawerTitle>
           <button
             type="button"
@@ -126,7 +133,13 @@ export function KeyPersonSheet({
 
         <div className="px-4 pb-6 pt-2 sm:px-6">
           <Button className="w-full" disabled={!canSave} onClick={() => canSave && onSave(draft)}>
-            {mode === 'add' ? (draft.isCorporate ? 'Add company' : 'Add person') : 'Save changes'}
+            {t(
+              mode === 'add'
+                ? draft.isCorporate
+                  ? 'keyPeople.sheet.addCompany'
+                  : 'keyPeople.sheet.addPerson'
+                : 'keyPeople.sheet.save',
+            )}
           </Button>
           {mode === 'edit' && onRemove && (
             <button
@@ -134,7 +147,7 @@ export function KeyPersonSheet({
               onClick={onRemove}
               className="mt-1 flex h-11 w-full items-center justify-center text-sm font-semibold text-destructive transition-opacity hover:opacity-80"
             >
-              {draft.isCorporate ? 'Remove this company' : 'Remove this person'}
+              {t(draft.isCorporate ? 'keyPeople.sheet.removeCompany' : 'keyPeople.sheet.removePerson')}
             </button>
           )}
         </div>

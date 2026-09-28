@@ -4,8 +4,19 @@ import React, { useMemo, useState } from 'react';
 import { ChevronRight, Search } from './icons';
 import { cn } from '../lib/utils';
 import { CountryFlag } from './CountryFlag';
-import { groupCountriesByRegion, regionCountryName } from '../lib/regions';
+import { groupCountriesByRegion, regionCountryName, type Region } from '../lib/regions';
+import { useText } from '../i18n';
 import type { AnyCountry } from '../types/config';
+
+/** Continent headers, from the text catalogue. */
+const REGION_KEYS: Record<Region, string> = {
+  Africa: 'selectDocument.region.africa',
+  Europe: 'selectDocument.region.europe',
+  Americas: 'selectDocument.region.americas',
+  'Middle East': 'selectDocument.region.middleEast',
+  'Asia & Pacific': 'selectDocument.region.asiaPacific',
+  Other: 'selectDocument.region.other',
+};
 
 /**
  * Searchable, region-grouped country picker for the country-select step. Used
@@ -30,6 +41,7 @@ export function CountryRegionPicker({
   geoCountry?: string | null;
   onPick: (country: AnyCountry) => void;
 }) {
+  const t = useText();
   const [query, setQuery] = useState('');
   const { pinned, groups } = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -57,7 +69,7 @@ export function CountryRegionPicker({
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search countries…"
+          placeholder={t('selectDocument.country.search')}
           aria-label="Search countries"
           className="h-12 w-full bg-transparent text-base outline-none placeholder:text-muted-foreground sm:text-sm"
         />
@@ -78,18 +90,18 @@ export function CountryRegionPicker({
             <CountryFlag code={pinned} className="h-8 w-8" title={regionCountryName(pinned)} />
             <span className="flex-1 text-base font-medium">{regionCountryName(pinned)}</span>
             <span className="shrink-0 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
-              Your location
+              {t('selectDocument.country.yourLocation')}
             </span>
             <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
           </button>
         )}
         {groups.length === 0 && !pinned ? (
-          <p className="py-10 text-center text-sm text-muted-foreground">No countries found.</p>
+          <p className="py-10 text-center text-sm text-muted-foreground">{t('selectDocument.country.noResults')}</p>
         ) : (
           groups.map((group) => (
             <div key={group.region} className="space-y-2">
               <p className="px-1 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
-                {group.region}
+                {REGION_KEYS[group.region] ? t(REGION_KEYS[group.region]) : group.region}
               </p>
               <div className="flex flex-col gap-2">
                 {group.countries.map((c) => (

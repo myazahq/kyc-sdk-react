@@ -8,10 +8,11 @@ import { useKYCContext } from '../context/KYCContext';
 import { useKYCConfig } from '../context/KYCConfigContext';
 import { BUSINESS_DOC_ACCEPTED_MIMES } from './BusinessDocumentSlot';
 import { SupportingDocumentCard } from './SupportingDocumentCard';
-import { uploadSizeError } from '../lib/upload-limits';
+import { isPdfMime, uploadSizeError } from '../lib/upload-limits';
 import { resolveSupportingDocuments, verifiedIdsFromState } from '../lib/supporting-documents';
 import { stepAfterSupportingDocuments } from '../lib/post-capture';
 import { stepBeforeSupportingDocuments } from '../lib/supporting-documents-nav';
+import { useText } from '../i18n';
 
 /**
  * Supporting-documents step: one upload slot per requested document.
@@ -32,6 +33,7 @@ import { stepBeforeSupportingDocuments } from '../lib/supporting-documents-nav';
 export function SupportingDocumentsStep() {
   const { state, dispatch } = useKYCContext();
   const config = useKYCConfig();
+  const t = useText();
   const slots = resolveSupportingDocuments(
     config.supportingDocuments,
     verifiedIdsFromState(state, config),
@@ -58,12 +60,12 @@ export function SupportingDocumentsStep() {
   const handlePick = async (key: string, file: File) => {
     setError(key, null);
     if (!BUSINESS_DOC_ACCEPTED_MIMES.includes((file.type.split(';')[0] || '').toLowerCase())) {
-      setError(key, 'Please upload a PDF, JPG or PNG file.');
+      setError(key, t('supportingDocuments.error.fileType'));
       return;
     }
-    const sizeError = uploadSizeError(file.type, file.size);
-    if (sizeError) {
-      setError(key, sizeError);
+    if (uploadSizeError(file.type, file.size)) {
+      const tooLarge = isPdfMime(file.type) ? 'pdfTooLarge' : 'imageTooLarge';
+      setError(key, t(`supportingDocuments.error.${tooLarge}`));
       return;
     }
     setUploadingKey(key);
@@ -75,7 +77,7 @@ export function SupportingDocumentsStep() {
         payload: [...uploads.filter((d) => d.type !== key), { type: key, mediaId, fileName: file.name }],
       });
     } catch {
-      setError(key, 'Upload failed. Please check your connection and try again.');
+      setError(key, t('supportingDocuments.error.uploadFailed'));
     } finally {
       setUploadingKey(null);
     }
@@ -92,8 +94,8 @@ export function SupportingDocumentsStep() {
   return (
     <div className="space-y-6 animate-slide-up">
       <StepHeader
-        title="Supporting documents"
-        description={supportingDocumentsIntro(slots)}
+        title={t('supportingDocuments.title')}
+        description={supportingDocumentsIntro(slots, t)}
         onBack={goBack}
       />
 
@@ -122,7 +124,7 @@ export function SupportingDocumentsStep() {
         disabled={!requiredComplete || uploadingKey !== null}
         className="w-full"
       >
-        {optionalOnly && uploads.length === 0 ? 'Skip' : 'Continue'}
+        {t(optionalOnly && uploads.length === 0 ? 'common.skip' : 'common.continue')}
       </Button>
     </div>
   );

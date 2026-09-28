@@ -113,6 +113,7 @@ export function HostedCompleted({
         country={(snap.country ?? snap.business?.country) as AnyCountry}
         appearance={snap.appearance as KYCAppearance | undefined}
         success={snap.success as KYCSuccessContent | undefined}
+        texts={snap.texts}
         userData={snap.userData}
         // The scope is what tells the returning screen WHAT was verified: without
         // it a finished face check read "This business has been verified" (user

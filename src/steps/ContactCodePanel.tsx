@@ -3,7 +3,9 @@
 import React from 'react';
 import { ContactCodeEntry } from './ContactCodeEntry';
 import { ExpiryCountdown } from '../components/ExpiryCountdown';
-import { channelLabel, type PhoneOtpChannel } from '../lib/contact-channels';
+import type { PhoneOtpChannel } from '../lib/contact-channels';
+import { channelName } from '../components/ContactChannelPicker';
+import { useText } from '../i18n';
 import type { OtpInputStyle } from '../types/config';
 
 /**
@@ -32,6 +34,7 @@ export function ContactCodePanel({
   otherChannel: PhoneOtpChannel | null;
   disabled?: boolean;
 }) {
+  const t = useText();
   return (
     <div className="space-y-3">
       <ContactCodeEntry
@@ -43,14 +46,18 @@ export function ContactCodePanel({
         onComplete={onComplete}
       />
       <div className="flex items-center justify-between text-xs text-muted-foreground">
-        {expiresAt ? <ExpiryCountdown expiresAt={expiresAt} /> : <span>The code expires in 5 minutes.</span>}
+        {expiresAt ? (
+          <ExpiryCountdown expiresAt={expiresAt} expiredLabel={t('contact.code.expired')} />
+        ) : (
+          <span>{t('contact.code.expiresSoon')}</span>
+        )}
         <button
           type="button"
           className="font-medium text-primary hover:underline disabled:opacity-50"
           onClick={() => onResend()}
           disabled={disabled}
         >
-          Resend code
+          {t('contact.code.resend')}
         </button>
       </div>
       {/* The single most useful escape hatch on this screen: a code that never
@@ -62,7 +69,7 @@ export function ContactCodePanel({
           onClick={() => onResend(otherChannel)}
           disabled={disabled}
         >
-          Didn&rsquo;t get it? Send by {channelLabel(otherChannel)} instead
+          {t('contact.code.otherChannel', { channel: channelName(otherChannel, t) })}
         </button>
       )}
     </div>

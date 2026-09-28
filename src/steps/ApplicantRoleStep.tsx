@@ -20,6 +20,7 @@ import { CountryFlag } from '../components/CountryFlag';
 import {
   APPLICANT_ROLE_LABELS,
   applicantCountryOptions,
+  applicantRoleLabel,
   applicantSelfCountry,
   initialsOf,
   isKeyPersonRowValid,
@@ -27,6 +28,7 @@ import {
   prevBusinessStep,
 } from '../lib/business-application';
 import type { ApplicantRole } from '../types/business';
+import { useText } from '../i18n';
 
 const ROLES = Object.keys(APPLICANT_ROLE_LABELS) as ApplicantRole[];
 
@@ -61,6 +63,7 @@ function RadioDot({ selected }: { selected: boolean }) {
 export function ApplicantRoleStep() {
   const { state, dispatch } = useKYCContext();
   const config = useKYCConfig();
+  const t = useText();
   const { applicantRole, applicantName, applicantKeyPersonIndex, keyPeople } =
     state.businessApplication;
 
@@ -129,8 +132,8 @@ export function ApplicantRoleStep() {
   return (
     <div className="space-y-6 animate-slide-up">
       <StepHeader
-        title="Now verify your own identity"
-        description="Tell us your role at the business, then verify your identity with a government-issued ID."
+        title={t('business.applicant.title')}
+        description={t('business.applicant.description')}
         onBack={() =>
           dispatch({ type: 'SET_STEP', payload: prevBusinessStep('applicant-role', config) })
         }
@@ -140,15 +143,12 @@ export function ApplicantRoleStep() {
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
           <ScanFace className="h-4.5 w-4.5" />
         </span>
-        <p className="text-sm text-foreground/90">
-          Regulations require the person submitting a business application to verify their own
-          identity. This only takes a minute.
-        </p>
+        <p className="text-sm text-foreground/90">{t('business.applicant.notice')}</p>
       </div>
 
       {hasPeople && (
         <div className="space-y-3">
-          <Label>Are you one of the people you listed?</Label>
+          <Label>{t('business.applicant.whoLabel')}</Label>
           <div role="radiogroup" aria-label="Who are you?" className="space-y-2">
             {people.map(({ row, index }) => {
               const isSelected = selection === index;
@@ -180,11 +180,13 @@ export function ApplicantRoleStep() {
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-semibold">{row.name.trim()}</span>
                     <span className="mt-0.5 block truncate text-xs text-muted-foreground">
-                      {APPLICANT_ROLE_LABELS[row.role]}
+                      {applicantRoleLabel(row.role, t)}
                       {pct !== '' && (
                         <>
                           {' · '}
-                          <span className="font-medium text-foreground/80">{pct}% ownership</span>
+                          <span className="font-medium text-foreground/80">
+                            {t('business.applicant.ownership', { pct })}
+                          </span>
                         </>
                       )}
                     </span>
@@ -216,7 +218,7 @@ export function ApplicantRoleStep() {
                 <UserRoundPlus className="h-4.5 w-4.5" />
               </span>
               <span className="min-w-0 flex-1 text-sm font-medium">
-                I&apos;m not one of these people
+                {t('business.applicant.notListed')}
               </span>
               <RadioDot selected={selection === 'other'} />
             </button>
@@ -224,10 +226,7 @@ export function ApplicantRoleStep() {
           {typeof selection === 'number' && (
             <div className="flex items-start gap-2 rounded-lg bg-primary/5 px-3 py-2.5">
               <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
-              <p className="text-xs text-foreground/80">
-                You&apos;ll verify your identity at the end of this form — no separate invite
-                link is needed for you.
-              </p>
+              <p className="text-xs text-foreground/80">{t('business.applicant.selfNote')}</p>
             </div>
           )}
         </div>
@@ -236,18 +235,18 @@ export function ApplicantRoleStep() {
       {(!hasPeople || selection === 'other') && (
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="applicantRole">Your role at the business</Label>
+            <Label htmlFor="applicantRole">{t('business.applicant.roleLabel')}</Label>
             <Select
               value={applicantRole ?? ''}
               onValueChange={(role) => setApplication({ applicantRole: role as ApplicantRole })}
             >
               <SelectTrigger id="applicantRole">
-                <SelectValue placeholder="Select your role" />
+                <SelectValue placeholder={t('business.applicant.rolePlaceholder')} />
               </SelectTrigger>
               <SelectContent>
                 {ROLES.map((role) => (
                   <SelectItem key={role} value={role}>
-                    {APPLICANT_ROLE_LABELS[role]}
+                    {applicantRoleLabel(role, t)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -256,11 +255,12 @@ export function ApplicantRoleStep() {
 
           <div className="space-y-2">
             <Label htmlFor="applicantName">
-              Full name <span className="text-muted-foreground">(optional)</span>
+              {t('business.applicant.nameLabel')}{' '}
+              <span className="text-muted-foreground">{t('business.optional')}</span>
             </Label>
             <Input
               id="applicantName"
-              placeholder="Enter your full name"
+              placeholder={t('business.applicant.namePlaceholder')}
               value={applicantName}
               onChange={(e) => setApplication({ applicantName: e.target.value })}
             />
@@ -291,7 +291,7 @@ export function ApplicantRoleStep() {
         disabled={!canContinue}
         className="w-full"
       >
-        Continue
+        {t('common.continue')}
       </Button>
     </div>
   );

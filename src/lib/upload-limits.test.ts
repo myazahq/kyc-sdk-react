@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { IMAGE_MAX_BYTES, PDF_MAX_BYTES, UPLOAD_HINT, uploadSizeError } from './upload-limits';
 import { describeInMonorepo, sharedVectors } from '../__tests__/monorepo';
+import { DEFAULT_TEXTS } from '../i18n/catalogue';
 
 // ─── The shared vectors (kyc-sdk-flutter/test/upload_limits_vectors.json) ────
 //
@@ -41,8 +42,11 @@ describe('upload limits', () => {
   it('the drop zones read the hint from the one constant', () => {
     for (const rel of ['../steps/ProofOfAddressParts.tsx', '../steps/BusinessDocumentSlot.tsx']) {
       const src = readFileSync(new URL(rel, import.meta.url).pathname, 'utf8');
-      expect(src).toContain('UPLOAD_HINT');
       expect(src).not.toMatch(/up to 20MB/);
+    }
+    // Where a hint is a customisable text, its default IS the constant.
+    for (const key of ['proofOfAddress.uploadHint', 'supportingDocuments.card.uploadHint']) {
+      expect(DEFAULT_TEXTS[key]).toBe(UPLOAD_HINT);
     }
   });
 });

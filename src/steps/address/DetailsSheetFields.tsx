@@ -4,6 +4,7 @@ import React from 'react';
 import { CountryFlag } from '../../components/CountryFlag';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
+import { useText } from '../../i18n';
 
 /**
  * The edit-details form fields (200-line split from DetailsSheet). Every
@@ -88,6 +89,7 @@ export function SectionHeading({ children }: { children: React.ReactNode }) {
  *  box) so the grid stays rhythmic, but toned as information — muted fill,
  *  a flag, and no cursor pretending it edits. */
 export function CountryRow({ country }: { country: string | null }) {
+  const t = useText();
   if (!country) return null;
   let name = country;
   try {
@@ -97,12 +99,12 @@ export function CountryRow({ country }: { country: string | null }) {
   }
   return (
     <div className="space-y-1.5">
-      <span className="block text-sm font-medium leading-tight">Country</span>
+      <span className="block text-sm font-medium leading-tight">{t('address.details.country')}</span>
       <div className="flex h-11 items-center gap-2 rounded-xl border border-border/60 bg-muted/30 px-3">
         <CountryFlag code={country} className="h-5 w-5 shrink-0" />
         <span className="truncate text-sm font-medium">{name}</span>
       </div>
-      <p className="text-xs text-muted-foreground">From your verification</p>
+      <p className="text-xs text-muted-foreground">{t('address.details.country.hint')}</p>
     </div>
   );
 }
@@ -127,17 +129,18 @@ export function AreaFields({
   disabled?: boolean;
   onChange: (patch: DetailPatch) => void;
 }) {
+  const t = useText();
   const all = [modes.neighbourhood, modes.city, modes.state, modes.postcode];
   if (all.every((m) => m === 'off')) return null;
   return (
     <div className="space-y-3">
-      <SectionHeading>Area and region</SectionHeading>
+      <SectionHeading>{t('address.details.areaSection')}</SectionHeading>
       {modes.neighbourhood !== 'off' && (
         <Field
           id="address-neighbourhood"
-          label="Neighbourhood"
+          label={t('address.details.neighbourhood')}
           value={shown(values.neighbourhood, parts?.area)}
-          placeholder="e.g. Idim Ita"
+          placeholder={t('address.details.neighbourhood.placeholder')}
           maxLength={80}
           disabled={disabled}
           required={modes.neighbourhood === 'required'}
@@ -148,9 +151,9 @@ export function AreaFields({
         {modes.city !== 'off' && (
           <Field
             id="address-city"
-            label="City"
+            label={t('address.details.city')}
             value={shown(values.city, parts?.city)}
-            placeholder="e.g. Calabar"
+            placeholder={t('address.details.city.placeholder')}
             maxLength={80}
             disabled={disabled}
             required={modes.city === 'required'}
@@ -160,9 +163,9 @@ export function AreaFields({
         {modes.state !== 'off' && (
           <Field
             id="address-state"
-            label="State"
+            label={t('address.details.state')}
             value={shown(values.state, parts?.state)}
-            placeholder="e.g. Cross River"
+            placeholder={t('address.details.state.placeholder')}
             maxLength={80}
             disabled={disabled}
             required={modes.state === 'required'}
@@ -174,9 +177,9 @@ export function AreaFields({
         {modes.postcode !== 'off' && (
           <Field
             id="address-postcode"
-            label="Area code"
+            label={t('address.details.postcode')}
             value={shown(values.postcode, parts?.postcode)}
-            placeholder="e.g. 540281"
+            placeholder={t('address.details.postcode.placeholder')}
             maxLength={12}
             disabled={disabled}
             required={modes.postcode === 'required'}

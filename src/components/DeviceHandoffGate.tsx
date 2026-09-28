@@ -29,6 +29,7 @@ import { applyConfiguredTheme } from '../lib/apply-theme';
 import { useIsDark } from '../lib/use-is-dark';
 import { useBrandFonts } from '../lib/use-brand-fonts';
 import { cn } from '../lib/utils';
+import { useText } from '../i18n';
 import type { HandoffSessionSnapshot } from '../services/api';
 
 interface DeviceHandoffGateProps {
@@ -263,6 +264,7 @@ function GateBody({
   phase, url, code, noCamera, copied, mobileOnly, noHandoff,
   onCopyLink, onContinueHere, onRegenerate, onDone,
 }: GateBodyProps) {
+  const t = useText();
   // Mobile-only with handoff off: nothing to scan — the user must reopen the
   // flow on a phone themselves.
   if (noHandoff) {
@@ -272,11 +274,8 @@ function GateBody({
           <Smartphone className="h-7 w-7 text-primary" />
         </div>
         <div className="max-w-sm text-center space-y-1">
-          <h2 className="text-xl font-semibold font-heading">Continue on a mobile device</h2>
-          <p className="text-sm text-muted-foreground">
-            This verification can only be completed on a phone or tablet. Open it on your mobile
-            device to continue.
-          </p>
+          <h2 className="text-xl font-semibold font-heading">{t('handoff.mobileOnly.title')}</h2>
+          <p className="text-sm text-muted-foreground">{t('handoff.mobileOnly.description')}</p>
         </div>
       </div>
     );
@@ -291,10 +290,10 @@ function GateBody({
           </svg>
         </div>
         <div className="text-center space-y-1">
-          <h2 className="text-xl font-semibold font-heading">Completed on your phone</h2>
-          <p className="text-sm text-muted-foreground">Your verification has been submitted for review. You can close this window.</p>
+          <h2 className="text-xl font-semibold font-heading">{t('handoff.completed.title')}</h2>
+          <p className="text-sm text-muted-foreground">{t('handoff.completed.description')}</p>
         </div>
-        <Button className="w-full" onClick={onDone}>Done</Button>
+        <Button className="w-full" onClick={onDone}>{t('common.done')}</Button>
       </div>
     );
   }
@@ -306,13 +305,13 @@ function GateBody({
           <RefreshCcw className="h-7 w-7 text-muted-foreground" />
         </div>
         <div className="text-center space-y-1">
-          <h2 className="text-lg font-semibold font-heading">Link expired</h2>
-          <p className="text-sm text-muted-foreground">This verification link timed out. Generate a new one, or continue on this device.</p>
+          <h2 className="text-lg font-semibold font-heading">{t('handoff.expired.title')}</h2>
+          <p className="text-sm text-muted-foreground">{t('handoff.expired.description')}</p>
         </div>
         <div className="flex w-full flex-col gap-2">
-          <Button className="w-full" onClick={onRegenerate}>Generate a new link</Button>
+          <Button className="w-full" onClick={onRegenerate}>{t('handoff.regenerate')}</Button>
           {!mobileOnly && (
-            <Button variant="ghost" className="w-full" onClick={onContinueHere}>Continue on this device</Button>
+            <Button variant="ghost" className="w-full" onClick={onContinueHere}>{t('handoff.continueHere')}</Button>
           )}
         </div>
       </div>
@@ -328,12 +327,10 @@ function GateBody({
           <RefreshCcw className="h-7 w-7 text-muted-foreground" />
         </div>
         <div className="max-w-sm text-center space-y-1">
-          <h2 className="text-lg font-semibold font-heading">Couldn’t create the link</h2>
-          <p className="text-sm text-muted-foreground">
-            This verification must be completed on a mobile device. Try generating the link again.
-          </p>
+          <h2 className="text-lg font-semibold font-heading">{t('handoff.linkFailed.title')}</h2>
+          <p className="text-sm text-muted-foreground">{t('handoff.linkFailed.description')}</p>
         </div>
-        <Button className="w-full" onClick={onRegenerate}>Try again</Button>
+        <Button className="w-full" onClick={onRegenerate}>{t('common.tryAgain')}</Button>
       </div>
     );
   }
@@ -348,13 +345,13 @@ function GateBody({
         <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
           <Smartphone className="h-6 w-6 text-primary" />
         </div>
-        <h2 className="text-xl font-semibold font-heading">Continue on your phone</h2>
+        <h2 className="text-xl font-semibold font-heading">{t('handoff.gate.title')}</h2>
         <p className="max-w-sm text-sm text-muted-foreground">
           {mobileOnly
-            ? 'This verification can only be completed on a mobile device. Scan the QR code with your phone to continue there.'
+            ? t('handoff.gate.description.mobileOnly')
             : noCamera
-              ? 'This device has no camera. Scan the QR code with your phone to finish your verification there.'
-              : 'Scan the QR code with your phone to continue your verification there — handy for capturing your ID and selfie.'}
+              ? t('handoff.gate.description.noCamera')
+              : t('handoff.gate.description')}
         </p>
       </div>
 
@@ -370,11 +367,11 @@ function GateBody({
       {/* Short code + copy link */}
       {code && (
         <div className="flex w-full flex-col items-center gap-2">
-          <span className="text-xs uppercase tracking-wide text-muted-foreground">Or enter this code</span>
+          <span className="text-xs uppercase tracking-wide text-muted-foreground">{t('handoff.codeLabel')}</span>
           <span className="font-heading text-lg font-semibold tracking-[0.2em] text-foreground">{code}</span>
           <Button variant="outline" className="mt-1 gap-2" onClick={onCopyLink}>
             {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-            {copied ? 'Link copied' : 'Copy link'}
+            {copied ? t('handoff.gate.linkCopied') : t('handoff.copyLink')}
           </Button>
         </div>
       )}
@@ -382,7 +379,7 @@ function GateBody({
       {phase === 'opened' && (
         <p className="flex items-center gap-2 text-sm text-primary">
           <Loader2 className="h-4 w-4 animate-spin" />
-          Continuing on your phone…
+          {t('handoff.gate.opened')}
         </p>
       )}
 
@@ -392,7 +389,7 @@ function GateBody({
         {mobileOnly ? (
           <p className="flex items-center justify-center gap-2 text-center text-xs text-muted-foreground">
             <Monitor className="h-3.5 w-3.5 shrink-0" />
-            This verification can’t be completed on a computer.
+            {t('handoff.gate.computerNotAllowed')}
           </p>
         ) : (
           <Button
@@ -402,7 +399,7 @@ function GateBody({
             disabled={phase === 'opened'}
           >
             <Monitor className="h-4 w-4" />
-            Continue on this device
+            {t('handoff.continueHere')}
           </Button>
         )}
       </div>

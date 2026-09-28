@@ -3,6 +3,8 @@
 
 import { isAcceptedAddressPhoto } from '../components/AddressPhotoUpload';
 import { IMAGE_MAX_BYTES } from '../lib/upload-limits';
+import { defaultText } from '../i18n/translate';
+import type { TextFn } from '../i18n/types';
 
 const FIX_TIMEOUT_MS = 8_000;
 
@@ -195,15 +197,16 @@ export function pickedAddressState(
 export async function uploadAddressPhoto(
   api: { upload(file: File, type: string): Promise<string> },
   file: File,
+  t: TextFn = defaultText,
 ): Promise<string> {
-  if (!isAcceptedAddressPhoto(file)) throw new Error('Please upload a photo (JPEG, PNG or WebP).');
+  if (!isAcceptedAddressPhoto(file)) throw new Error(t('address.photo.error.type'));
   // The shared image cap (both mobile ports apply the same one); without a
   // mirror here the web quietly accepted anything and the server refused it
   // later with a worse message.
-  if (file.size > IMAGE_MAX_BYTES) throw new Error('Please upload a photo under 5 MB.');
+  if (file.size > IMAGE_MAX_BYTES) throw new Error(t('address.photo.error.size'));
   try {
     return await api.upload(file, 'address_photo');
   } catch {
-    throw new Error('Upload failed. Please check your connection and try again.');
+    throw new Error(t('address.photo.error.upload'));
   }
 }

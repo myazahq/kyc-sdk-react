@@ -3,6 +3,7 @@
 import React from 'react';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
+import { useText } from '../i18n';
 
 /**
  * The key-person email field. Required exactly when this person is sent a
@@ -22,31 +23,30 @@ export function KeyPersonEmailField({
   invalid: boolean;
   onChange: (email: string) => void;
 }) {
+  const t = useText();
   return (
     <div className="space-y-2">
       <Label htmlFor="kp-sheet-email">
-        Email{' '}
+        {t('keyPeople.form.email.label')}{' '}
         {needsEmail ? (
           <span className="text-destructive">*</span>
         ) : (
           <span className="text-muted-foreground">
-            {corp ? '(optional)' : '(optional, used to send their verification link)'}
+            {t(corp ? 'keyPeople.form.optional' : 'keyPeople.form.email.optionalPerson')}
           </span>
         )}
       </Label>
       <Input
         id="kp-sheet-email"
         type="email"
-        placeholder="name@company.com"
+        placeholder={t('keyPeople.form.email.placeholder')}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className={invalid ? 'border-destructive' : ''}
       />
-      {invalid && <p className="text-sm text-destructive">Enter a valid email address.</p>}
+      {invalid && <p className="text-sm text-destructive">{t('keyPeople.form.email.invalid')}</p>}
       {needsEmail && value.trim() === '' && (
-        <p className="text-xs text-muted-foreground">
-          Required: this is how they receive their own verification link.
-        </p>
+        <p className="text-xs text-muted-foreground">{t('keyPeople.form.email.requiredHint')}</p>
       )}
     </div>
   );

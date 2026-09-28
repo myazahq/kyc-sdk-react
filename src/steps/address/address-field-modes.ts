@@ -1,5 +1,7 @@
 import type { AddressCollectionConfig } from '../../types/config';
 import type { KYCState } from '../../context/types';
+import { defaultText } from '../../i18n/translate';
+import type { TextFn } from '../../i18n/types';
 
 // Per-field modes for the typed details-sheet fields — the CLIENT MIRROR of
 // the server's lib/workflows/address-fields.ts (kyc-core). Keep the
@@ -30,6 +32,16 @@ export const ADDRESS_FIELD_LABELS: Record<AddressFieldKey, string> = {
   state: 'State',
   postcode: 'Area code',
 };
+
+/** A field's name as it reads inside the "This flow needs: …" error list. */
+export function addressFieldName(key: AddressFieldKey, t: TextFn = defaultText): string {
+  return t(`address.fieldName.${key}`);
+}
+
+/** The "This flow needs: …" error for the fields still missing. */
+export function missingAddressFieldsMessage(keys: readonly AddressFieldKey[], t: TextFn = defaultText): string {
+  return t('address.missingFields', { fields: keys.map((k) => addressFieldName(k, t)).join(', ') });
+}
 
 const MODES: readonly string[] = ['off', 'optional', 'required'];
 function isAddressFieldMode(value: unknown): value is AddressFieldMode {

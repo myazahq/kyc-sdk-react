@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { useText } from '../i18n';
 
 // The free-text directions field of the address details sheet. This file
 // used to carry the typed building-name + house-number pair too, which the
@@ -23,17 +24,18 @@ export function AddressDirectionsField({
   disabled,
   onChange,
 }: AddressDirectionsFieldProps) {
+  const t = useText();
+  const labelKey = isBusiness ? 'address.details.directions.business' : 'address.details.directions';
   return (
     <div className="flex flex-col gap-1.5">
       <label htmlFor="address-directions" className="text-sm font-semibold">
-        {isBusiness ? 'Directions to the entrance' : 'Directions to this address'}
-        {required ? '' : ' (optional)'}
+        {t(required ? labelKey : `${labelKey}.optional`)}
       </label>
       <textarea
         id="address-directions"
         rows={3}
         maxLength={500}
-        placeholder="e.g. black gate opposite the kiosk, second building after the junction"
+        placeholder={t('address.details.directions.placeholder')}
         value={value}
         disabled={disabled}
         onChange={(e) => onChange(e.target.value)}

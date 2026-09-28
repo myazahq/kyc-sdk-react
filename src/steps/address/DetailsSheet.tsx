@@ -10,6 +10,7 @@ import { AreaFields, Field, SectionHeading, type DetailPatch, type DetailValues 
 import { addressFieldModes, type AddressFieldKey, type AddressFieldMode } from './address-field-modes';
 import type { AddressCollectionConfig } from '../../types/config';
 import type { KYCState } from '../../context/types';
+import { useText } from '../../i18n';
 
 /**
  * The EDIT-DETAILS sheet, OkHi-style (user decision 2026-08-31): everything
@@ -49,6 +50,7 @@ export function DetailsSheet({
   onChange: (patch: DetailPatch) => void;
   onClose: () => void;
 }) {
+  const t = useText();
   // The right-side sheet is a DESKTOP shape: width alone misjudges wide
   // phones (landscape) and emulated viewports, so the pointer must be fine
   // too — a touch device gets the bottom drawer whatever its width. Live,
@@ -82,7 +84,7 @@ export function DetailsSheet({
       <DrawerContent direction={direction}>
         <div className={cn('px-4 sm:px-6', direction === 'right' ? 'pt-5' : 'pt-3')}>
           <div className="flex items-center justify-between">
-            <DrawerTitle className="text-base font-bold">Edit your address</DrawerTitle>
+            <DrawerTitle className="text-base font-bold">{t('address.details.title')}</DrawerTitle>
             <button
               type="button"
               aria-label="Close"
@@ -93,9 +95,7 @@ export function DetailsSheet({
             </button>
           </div>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            {anyRequired
-              ? 'Correct anything the map got wrong. Fields marked * are required.'
-              : 'Correct anything the map got wrong. Every field is optional, and it all helps someone find the door.'}
+            {t(anyRequired ? 'address.details.hint.required' : 'address.details.hint')}
           </p>
         </div>
 
@@ -106,14 +106,14 @@ export function DetailsSheet({
           )}
         >
           <div className="space-y-3">
-            <SectionHeading>Street and building</SectionHeading>
+            <SectionHeading>{t('address.details.streetSection')}</SectionHeading>
             <div className="grid grid-cols-2 gap-3">
               {on('propertyNumber') && (
                 <Field
                   id="address-house-no"
-                  label="Number"
+                  label={t('address.details.number')}
                   value={values.propertyNumber}
-                  placeholder="e.g. 11"
+                  placeholder={t('address.details.number.placeholder')}
                   maxLength={20}
                   disabled={disabled}
                   required={req('propertyNumber')}
@@ -123,9 +123,9 @@ export function DetailsSheet({
               {on('street') && (
                 <Field
                   id="address-street"
-                  label="Street name"
+                  label={t('address.details.street')}
                   value={shown(values.street, parts?.street)}
-                  placeholder="e.g. Awolowo Road"
+                  placeholder={t('address.details.street.placeholder')}
                   maxLength={120}
                   disabled={disabled}
                   required={req('street')}
@@ -137,9 +137,9 @@ export function DetailsSheet({
               {on('unit') && (
                 <Field
                   id="address-unit"
-                  label="Unit"
+                  label={t('address.details.unit')}
                   value={values.unit ?? ''}
-                  placeholder="e.g. Flat 4"
+                  placeholder={t('address.details.unit.placeholder')}
                   maxLength={30}
                   disabled={disabled}
                   required={req('unit')}
@@ -149,9 +149,9 @@ export function DetailsSheet({
               {on('propertyName') && (
                 <Field
                   id="address-building"
-                  label="Building name"
+                  label={t('address.details.building')}
                   value={values.propertyName}
-                  placeholder="e.g. Sunrise Villa"
+                  placeholder={t('address.details.building.placeholder')}
                   maxLength={80}
                   disabled={disabled}
                   required={req('propertyName')}
@@ -181,7 +181,7 @@ export function DetailsSheet({
 
         <div className="px-4 pb-6 pt-2 sm:px-6">
           <Button className="h-11 w-full rounded-xl" onClick={onClose}>
-            Done
+            {t('common.done')}
           </Button>
         </div>
       </DrawerContent>

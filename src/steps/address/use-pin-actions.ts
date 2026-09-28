@@ -15,6 +15,7 @@ import { currentFix, currentFixFailure, locating, locationFailureMessage, prefet
 import { configScope } from '../../lib/scope';
 import { adoptionDecision } from './country-adoption';
 import type { AddressParts } from '../../services/api';
+import { useText } from '../../i18n';
 
 // The pin's mechanics — labelling, the shared current-location fix, and every
 // way the pin can move — extracted from use-address-flow.ts (200-line rule).
@@ -31,6 +32,7 @@ interface PinActionDeps {
 }
 
 export function usePinActions({ config, state, dispatch, setError }: PinActionDeps) {
+  const t = useText();
   // ── Reverse geocoding: the pin's human-readable line ──────────────────────
   // A moved pin invalidates a DERIVED label; the fresh one arrives debounced
   // and is dropped if the pin moved again meanwhile. Display only.
@@ -186,7 +188,7 @@ export function usePinActions({ config, state, dispatch, setError }: PinActionDe
       // Say so and STAY: moving on used to land the person on the pin step
       // centred on the country with no word about why, which reads as the
       // feature being broken rather than the browser having refused.
-      setError(locationFailureMessage(currentFixFailure()));
+      setError(locationFailureMessage(currentFixFailure(), t));
       return;
     }
     onDone?.();
@@ -266,7 +268,7 @@ export function usePinActions({ config, state, dispatch, setError }: PinActionDe
     setFix(f);
     setFixPending(false);
     if (f) setPin({ lat: f.lat, lng: f.lng }, f.accuracy);
-    else setError(locationFailureMessage(currentFixFailure()));
+    else setError(locationFailureMessage(currentFixFailure(), t));
   };
 
   return {

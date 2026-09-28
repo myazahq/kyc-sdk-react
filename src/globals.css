@@ -440,3 +440,23 @@
     animation-iteration-count: 1;
   }
 }
+
+/* ─── Theme crossfade (bright screen during the selfie) ─────────────────────
+   The liveness step holds the flow on its light palette while the camera is
+   on (lib/forced-light-theme.ts). The switch is a class change on the theme
+   root, so without help every surface snaps from dark to light at once. The
+   hook adds `kyc-theme-fade` to the theme root for the length of the switch,
+   and this turns on a short colour-only transition for the SDK's surfaces.
+   Longhands, colour properties only, so a transform or opacity transition in
+   flight is left alone apart from its property list for those 300ms.
+   Behind no-preference: reduced motion gets an instant switch. */
+@media (prefers-reduced-motion: no-preference) {
+  .kyc-theme-fade .kyc-root,
+  .kyc-theme-fade .kyc-root *,
+  .kyc-theme-fade .kyc-root *::before,
+  .kyc-theme-fade .kyc-root *::after {
+    transition-property: background-color, border-color, color, fill, stroke, outline-color;
+    transition-duration: 300ms;
+    transition-timing-function: ease-out;
+  }
+}

@@ -5,6 +5,8 @@
 
 import type { NormalizedLandmark } from '../types';
 import { L } from './landmarks';
+import { defaultText } from '../../i18n/translate';
+import type { TextFn } from '../../i18n/types';
 
 export interface FacePosition {
   isDetected: boolean;
@@ -13,7 +15,10 @@ export interface FacePosition {
   guidance: string | null;
 }
 
-export function checkFacePosition(landmarks: NormalizedLandmark[]): FacePosition {
+export function checkFacePosition(
+  landmarks: NormalizedLandmark[],
+  t: TextFn = defaultText,
+): FacePosition {
   const noseX = landmarks[L.noseTip].x;
   const noseY = landmarks[L.noseTip].y;
   const faceWidth = Math.abs(landmarks[L.rightCheek].x - landmarks[L.leftCheek].x);
@@ -30,11 +35,11 @@ export function checkFacePosition(landmarks: NormalizedLandmark[]): FacePosition
   if (faceWidth <= MIN_FACE_WIDTH) {
     // Distance first: a far face reads as "off-centre" too, but "move closer"
     // is the actionable instruction.
-    guidance = 'Kindly move closer';
+    guidance = t('presence.position.moveCloser');
   } else if (!isCentered) {
-    guidance = 'Kindly center your face';
+    guidance = t('presence.position.centerFace');
   } else if (faceWidth >= MAX_FACE_WIDTH) {
-    guidance = 'Kindly move further away';
+    guidance = t('presence.position.moveAway');
   }
 
   return {

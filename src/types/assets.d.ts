@@ -3,6 +3,11 @@ declare module '*.gif' {
   export default dataUrl;
 }
 
+declare module '*.webp' {
+  const dataUrl: string;
+  export default dataUrl;
+}
+
 // The compiled Tailwind sheet (src/generated/styles.css.txt, built before
 // tsup runs) is bundled as a raw string — it is what the style-isolation
 // boundary injects into its shadow roots, so the SDK styles itself without

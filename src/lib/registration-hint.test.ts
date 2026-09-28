@@ -46,3 +46,15 @@ describe('provider-documented example placeholders', () => {
     expect(za.isValidFormat).toBeNull();
   });
 });
+
+describe('workflow copy', () => {
+  it('reads every text through the flow text function', async () => {
+    const { defaultText } = await import('../i18n');
+    const t: typeof defaultText = (key, vars, legacy) =>
+      key === 'business.registration.placeholderGeneric' ? 'Votre numéro' : defaultText(key, vars, legacy);
+    const hint = registrationNumberHint('GH', business, t);
+    expect(hint.placeholder).toBe('Votre numéro');
+    // Untranslated keys fall back to the English default, with the country filled in.
+    expect(hint.tip).toMatch(/business registry in Ghana/);
+  });
+});

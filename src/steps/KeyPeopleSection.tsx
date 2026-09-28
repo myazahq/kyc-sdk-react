@@ -3,7 +3,8 @@
 import React from 'react';
 import { Building2, Plus, UserRound } from '../components/icons';
 import { KeyPersonCard } from './KeyPersonCard';
-import { KEY_PERSON_ROLE_LABELS } from '../lib/business-application';
+import { keyPersonRoleLabel } from '../lib/business-application';
+import { useText } from '../i18n';
 import { SECTION_ROLE, type KeyPeopleSection } from '../lib/key-people-sections';
 import type { KeyPersonEntry } from '../context/types';
 import type { KeyPersonRole } from '../types/business';
@@ -52,6 +53,7 @@ export function KeyPeopleSection({
   /** Extra section furniture (the UBO exemption checkbox). */
   children?: React.ReactNode;
 }) {
+  const t = useText();
   return (
     <section className="space-y-3">
       <div>
@@ -68,7 +70,7 @@ export function KeyPeopleSection({
               emailRequiredFor={emailRequiredFor}
               // The card names the hat THIS section is about, so the same
               // person reads "Beneficial owner" here and "Director" there.
-              roleLabel={KEY_PERSON_ROLE_LABELS[SECTION_ROLE[section]]}
+              roleLabel={keyPersonRoleLabel(SECTION_ROLE[section], t)}
               onClick={() => onEdit(index)}
               onRemove={() => onRemove(index)}
             />
@@ -79,7 +81,7 @@ export function KeyPeopleSection({
       {quickAdd.length > 0 && canAdd && (
         <div className="space-y-2">
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Quick add from people you already entered
+            {t('keyPeople.section.quickAdd')}
           </p>
           <div className="flex flex-wrap gap-2">
             {quickAdd.map((index) => {

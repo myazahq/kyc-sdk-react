@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react';
 import { useKYCConfig } from '../context/KYCConfigContext';
 import { configScope } from '../lib/scope';
 import { describeWaiting } from '../lib/result-copy';
+import { useText } from '../i18n';
 import { waitsForResult } from '../lib/biometric-options';
 import { biometricCopyFor } from '../lib/biometric-copy';
 import { SubmittingScreen } from './SubmittedScreens';
@@ -35,10 +36,14 @@ export function useSelfieAutoAdvance(opts: { enabled: boolean; ready: boolean; o
 
 export function LivenessHandover() {
   const config = useKYCConfig();
-  const copy = describeWaiting({
-    scope: configScope(config),
-    waitsForResult: waitsForResult(config),
-    override: biometricCopyFor(config).waiting,
-  });
+  const t = useText();
+  const copy = describeWaiting(
+    {
+      scope: configScope(config),
+      waitsForResult: waitsForResult(config),
+      override: biometricCopyFor(config).waiting,
+    },
+    t,
+  );
   return <SubmittingScreen title={copy.title} description={copy.description} />;
 }

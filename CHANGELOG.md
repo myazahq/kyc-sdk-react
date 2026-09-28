@@ -1,5 +1,47 @@
 # Changelog
 
+## 3.3.0
+
+Passive Liveness, customisable texts, the organisation's own footer logo, silent capture and a bright screen during liveness.
+
+These features need the Myaza server release of 2026-09-28. Against an older server the flow still completes: the new settings are simply ignored, and silent frames are refused at upload and left out.
+
+### Passive Liveness, and a head turn in every 3D Active Motion run
+
+`livenessMode: 'passive'` asks the person to hold still for a moment while the SDK records a short clip and takes the selfie. There are no prompts: Myaza's liveness model decides from the capture. 3D Active Motion now always includes a head turn among its prompts, and the SDK reports the prompts it ran with the submission.
+
+### Customisable texts
+
+A workflow can reword the main text of each screen (titles, descriptions, checklists, labels and buttons) through its `texts` setting. Errors, legal lines and anything with a value filled in keep the SDK's own wording. The older copy fields (`consent`, `success`, `questionnaire`) still take priority over `texts` for the same line. The new `@myazahq/kyc-sdk-react/texts` entry exports the catalogue (`TEXT_GROUPS`, `DEFAULT_TEXTS`, `resolveText`) for editors.
+
+### The organisation's own footer logo
+
+When a workflow uses custom trust branding, its logo replaces the Myaza mark in the footer, with a separate logo on dark flows when one is set. The consent notice then names Myaza Trust as the processor for the organisation, since Myaza still processes the applicant's data.
+
+### Silent capture
+
+When the document camera faces the person (a laptop webcam), the SDK takes up to three unposed frames of them, one per side, so a reviewer can see who was holding the ID. A phone's rear camera takes none. It is on by default; a workflow turns it off with `silentCapture: false`.
+
+### A bright screen during liveness
+
+While the liveness camera is on, the flow shows its light theme so the screen lights the face, then restores the theme afterwards. The flash check's baseline between colours is now black. A workflow turns this off with `livenessBrightScreen: false`.
+
+### Liveness is reported more honestly
+
+A flash sequence that could not be measured no longer counts as passed, and a liveness recording that fails to upload is reported with its reason instead of silently missing.
+
+### Selfie guidance
+
+The selfie primer asks for a bright spot with no glare and an uncovered face (glasses off), and no longer states a duration.
+
+### Fixes
+
+A resumed KYB application replays the committed application. The consent screen discloses supporting documents the flow may ask for. The driver's licence is drawn as an ID card again, and the Privacy Policy link text is restored.
+
+### No presence promise in a browser flow
+
+The success screen, the returning applicant's completed screen and the address primer no longer tell the applicant an address presence check is running. Only the mobile SDKs can report presence, so a browser flow (a hosted link or a web embed) can never collect evidence, and the server now starts no watch for one. The builder preview still shows these screens, since there the web SDK stands in for the mobile flow. In the preview, the primer now describes background monitoring unless the workflow turns it off, matching its new default.
+
 ## 3.2.1
 
 The CommonJS build loads again, and a multi-region workflow keeps its ID types.

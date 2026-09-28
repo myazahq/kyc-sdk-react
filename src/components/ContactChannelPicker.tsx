@@ -7,12 +7,18 @@ import { Label } from './ui/label';
 import { RadioGroup, RadioGroupItem } from './ui/radio-group';
 import { Card } from './ui/card';
 import { cn } from '../lib/utils';
-import { channelLabel, type PhoneOtpChannel } from '../lib/contact-channels';
+import type { PhoneOtpChannel } from '../lib/contact-channels';
+import { useText, type TextFn } from '../i18n';
 
-const PRESENTATION: Record<PhoneOtpChannel, { hint: string; icon: React.ComponentType<{ className?: string }> }> = {
-  sms: { hint: 'Text message', icon: MessageSquare },
-  whatsapp: { hint: 'Needs WhatsApp installed', icon: WhatsAppIcon },
+const PRESENTATION: Record<PhoneOtpChannel, { name: string; hint: string; icon: React.ComponentType<{ className?: string }> }> = {
+  sms: { name: 'contact.channel.sms', hint: 'contact.channel.smsHint', icon: MessageSquare },
+  whatsapp: { name: 'contact.channel.whatsapp', hint: 'contact.channel.whatsappHint', icon: WhatsAppIcon },
 };
+
+/** A channel's display name ("SMS", "WhatsApp") from the text catalogue. */
+export function channelName(channel: PhoneOtpChannel, t: TextFn): string {
+  return t(PRESENTATION[channel]?.name ?? 'contact.channel.sms');
+}
 
 /**
  * How the user wants their code delivered.
@@ -34,11 +40,12 @@ export function ContactChannelPicker({
   onPick: (channel: PhoneOtpChannel) => void;
   disabled?: boolean;
 }) {
+  const t = useText();
   if (offered.length < 2) return null;
 
   return (
     <div className="space-y-2">
-      <Label>How should we send it?</Label>
+      <Label>{t('contact.channel.question')}</Label>
       <RadioGroup
         value={picked}
         onValueChange={(v) => onPick(v as PhoneOtpChannel)}
@@ -47,7 +54,7 @@ export function ContactChannelPicker({
       >
         {offered.map((key) => {
           const { hint, icon: Icon } = PRESENTATION[key];
-          const label = channelLabel(key);
+          const label = channelName(key, t);
           const isSelected = picked === key;
           return (
             <Label key={key} htmlFor={`otp-channel-${key}`} className="cursor-pointer">
@@ -67,7 +74,7 @@ export function ContactChannelPicker({
                 </div>
                 <span className="flex-1 min-w-0">
                   <span className="block text-sm font-medium">{label}</span>
-                  <span className="block truncate text-xs text-muted-foreground">{hint}</span>
+                  <span className="block truncate text-xs text-muted-foreground">{t(hint)}</span>
                 </span>
                 <RadioGroupItem value={key} id={`otp-channel-${key}`} />
               </Card>

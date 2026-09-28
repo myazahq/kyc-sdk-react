@@ -10,7 +10,7 @@ import { readFileSync } from 'node:fs';
 const read = (p: string) => readFileSync(new URL(p, import.meta.url).pathname, 'utf8');
 
 // What CompletedStep, success-copy and biometric-copy read off the config.
-const COMPLETED_KEYS = ['appearance', 'success', 'userData', 'addressCollection', 'scope', 'biometric', 'assetsBasePath'];
+const COMPLETED_KEYS = ['appearance', 'success', 'texts', 'userData', 'addressCollection', 'scope', 'biometric', 'assetsBasePath'];
 
 describe('HostedCompleted', () => {
   const mount = read('./HostedCompleted.tsx');

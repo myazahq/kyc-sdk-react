@@ -16,6 +16,8 @@ import {
 	withSilentCaptureMetadata,
 } from "./submit-helpers";
 import { contactStepFor, expiredContactChannels } from "./contact-recovery";
+import { recoveryStepFor, serverRefusalOf } from "../lib/submit-recovery";
+import type { KYCStep } from "../types/config";
 import { multiIdWireSlots } from "../lib/multi-id";
 import { keepsIdEvidence } from "../lib/resubmit";
 import { submitBusinessApplication } from "./submit-business";
@@ -38,10 +40,17 @@ import { useSelfieUploadGate } from './selfie-upload-gate';
 import { SubmittedResult } from './SubmittedResult';
 import { useText } from '../i18n';
 
-export function SubmittedStep() {
+/**
+ * `stepOrder` is this flow's current step order (KYCModal builds it), so a
+ * refused submission can offer Go back to the step that fixes it.
+ */
+export function SubmittedStep({ stepOrder = [] }: { stepOrder?: readonly KYCStep[] } = {}) {
 	const { state, dispatch } = useKYCContext();
 	const config = useKYCConfig();
 	const t = useText();
+	// Where Go back lands after a refusal (lib/submit-recovery.ts); null when
+	// going back cannot help.
+	const [recoverTo, setRecoverTo] = useState<KYCStep | null>(null);
 
 	// Increment to trigger a (re-)submission; starts at 0 to fire on mount.
 	const [submitTrigger, setSubmitTrigger] = useState(0);
@@ -355,6 +364,7 @@ export function SubmittedStep() {
 		// Put UI into loading state immediately
 		dispatch({ type: "SUBMIT_VERIFICATION" });
 		setRetryInfo(null);
+		setRecoverTo(null);
 		const business = isBusinessFlow(config);
 		// A KYB application whose business half already committed replays its
 		// original request id: the server answers from the existing row, with
@@ -380,9 +390,26 @@ export function SubmittedStep() {
 				dispatch({ type: "SET_STEP", payload: contactStepFor(expired[0]) });
 				return;
 			}
+			// Retries (if any) are exhausted. Read Go back's target off the
+			// SERVER's refusal code, not the mapped client one.
+			const refusal = serverRefusalOf(err);
+			setRecoverTo(
+				refusal ? recoveryStepFor(refusal.code, stepOrder, { mediaKey: refusal.mediaKey }) : null,
+			);
 			dispatch({ type: "SET_ERROR", payload: mapToKycError(err, "verify", t) });
 		}
 	}
+
+	// Only where Try Again is not the answer: a refusal about what was entered
+	// is fixed on its own step, and returning to 'submitted' remounts this step,
+	// which submits again.
+	const goBack =
+		recoverTo && state.error && state.error.code !== "upload_failed" && state.error.code !== "network_error"
+			? () => {
+					dispatch({ type: "CLEAR_ERROR" });
+					dispatch({ type: "SET_STEP", payload: recoverTo });
+				}
+			: undefined;
 
 	if (state.status === "error" && state.error) {
 		return (
@@ -390,6 +417,7 @@ export function SubmittedStep() {
 				message={state.error.message}
 				onRetry={state.error.code === "upload_failed" ? retryUpload : () => setSubmitTrigger((t) => t + 1)}
 				onClose={() => config.onClose?.()}
+				onGoBack={goBack}
 			/>
 		);
 	}

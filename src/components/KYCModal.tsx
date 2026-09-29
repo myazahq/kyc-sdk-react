@@ -33,7 +33,7 @@ import { hasEmailVerificationStep, hasPhoneVerificationStep } from '../lib/conta
 import { isBusinessFlow } from '../lib/business';
 import { multiIdPlan } from '../lib/multi-id';
 import { MultiIdProgress } from './MultiIdProgress';
-import { getStepPosition, resolveNarrowedStep } from '../lib/step-order';
+import { buildStepOrder, getStepPosition, resolveNarrowedStep } from '../lib/step-order';
 import { keptIdType } from '../lib/resubmit';
 import { hasConsentStep } from '../lib/consent-step';
 import { BackAvailableContext, useOpeningStep } from './opening-step';
@@ -117,7 +117,15 @@ function ConfigErrorScreen({ message, onClose }: { message: string; onClose: () 
   );
 }
 
-function CurrentStep({ plan, step }: { plan: ReturnType<typeof multiIdPlan>; step: KYCStep }) {
+function CurrentStep({
+  plan,
+  step,
+  stepOrder,
+}: {
+  plan: ReturnType<typeof multiIdPlan>;
+  step: KYCStep;
+  stepOrder: readonly KYCStep[];
+}) {
   const config = useKYCConfig();
 
   switch (step) {
@@ -176,7 +184,7 @@ function CurrentStep({ plan, step }: { plan: ReturnType<typeof multiIdPlan>; ste
       // A rehydrated session is already submitted — SubmittedStep submits on
       // mount, so routing a returning applicant through it would file their
       // application a second time.
-      return config.completedSummary ? <CompletedStep /> : <SubmittedStep />;
+      return config.completedSummary ? <CompletedStep /> : <SubmittedStep stepOrder={stepOrder} />;
   }
 }
 
@@ -313,6 +321,8 @@ export function KYCModal({ open, onClose, showThemeToggle, disableClose, fullScr
   // an applicant will see, which is the first real step (user report
   // 2026-09-07: "turned off consent but it still shows on the builder preview").
   const shownStep = resolveNarrowedStep(state.currentStep, stepOptions);
+  // The submit step reads it to offer Go back after a refusal.
+  const stepOrder = buildStepOrder(stepOptions);
   const skipping = shownStep !== state.currentStep;
   const { backAvailable } = useOpeningStep(stepOptions, shownStep, dispatch);
   // Bright screen during the selfie: while the liveness camera is on the flow
@@ -440,7 +450,7 @@ export function KYCModal({ open, onClose, showThemeToggle, disableClose, fullScr
                       even for the frame before the skip lands — the applicant
                       would see it flash past and reasonably wonder what they
                       missed. */}
-                  {!skipping && <CurrentStep plan={plan} step={shownStep} />}
+                  {!skipping && <CurrentStep plan={plan} step={shownStep} stepOrder={stepOrder} />}
                 </>
               )}
             </div>

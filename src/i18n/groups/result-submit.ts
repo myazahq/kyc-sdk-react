@@ -15,6 +15,11 @@ export const RESULT_SUBMIT_TEXTS: TextEntry[] = [
   { key: 'result.error.title', label: 'Submission failed: title', default: 'Submission Failed' },
   { key: 'result.error.tryAgainButton', label: 'Submission failed: try again button', default: 'Try Again' },
   {
+    key: 'result.error.goBackButton',
+    label: 'Submission failed: go back to fix it button',
+    default: 'Go back',
+  },
+  {
     key: 'result.error.missingRegistrationNumber',
     label: 'Error: registration number missing',
     default: 'Missing registration number.',

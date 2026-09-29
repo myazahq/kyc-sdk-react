@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2 } from '../components/icons';
+import { ArrowLeft, Loader2 } from '../components/icons';
 import { Button } from "../components/ui/button";
 import { useText } from '../i18n';
 
@@ -48,10 +48,18 @@ export function SubmitErrorScreen({
 	message,
 	onRetry,
 	onClose,
+	onGoBack,
 }: {
 	message: string;
 	onRetry: () => void;
 	onClose: () => void;
+	/**
+	 * Back to the step that can fix the refusal (lib/submit-recovery.ts). When
+	 * present it is the primary action, beside Close, and Try Again is not
+	 * offered: the application is not lost, only incomplete, and resubmitting
+	 * it unchanged would be refused again.
+	 */
+	onGoBack?: () => void;
 }) {
 	const t = useText();
 	return (
@@ -78,13 +86,27 @@ export function SubmitErrorScreen({
 				<p className='text-sm text-muted-foreground'>{message}</p>
 			</div>
 
-			<Button className='w-full' onClick={onRetry}>
-				{t('result.error.tryAgainButton')}
-			</Button>
+			{onGoBack ? (
+				<div className='flex w-full gap-3'>
+					<Button variant='outline' className='flex-1' onClick={onClose}>
+						{t('common.close')}
+					</Button>
+					<Button className='flex-1 gap-2' onClick={onGoBack}>
+						<ArrowLeft className='h-4 w-4' aria-hidden='true' />
+						{t('result.error.goBackButton')}
+					</Button>
+				</div>
+			) : (
+				<>
+					<Button className='w-full' onClick={onRetry}>
+						{t('result.error.tryAgainButton')}
+					</Button>
 
-			<Button variant='ghost' className='w-full' onClick={onClose}>
-				{t('common.close')}
-			</Button>
+					<Button variant='ghost' className='w-full' onClick={onClose}>
+						{t('common.close')}
+					</Button>
+				</>
+			)}
 		</div>
 	);
 }

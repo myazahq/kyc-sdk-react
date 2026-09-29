@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.4.1
+
+A way back after a refused submission.
+
+### Go back after a refused submission
+
+When the server refused a submission, the error screen offered only Close, even when its message asked the person to fix something earlier in the flow. It now also offers Go back, which returns to the step that can fix the refusal: company documents, company details, key people, supporting documents, questionnaire, proof of address, address, or the photo a refused upload names. When the refusal doesn't point at one step, Go back returns to the step before submission. Coming back to the end submits again. Refusals that going back can't fix (not enough credits, an invalid API key) still show Close alone.
+
+The button reads "Go back". You can change it with the `result.error.goBackButton` text.
+
 ## 3.4.0
 
 The progress bar becomes the default indicator, plus fixes on the address confirmation screens.

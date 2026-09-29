@@ -1,5 +1,21 @@
 # Changelog
 
+## 3.4.0
+
+The progress bar becomes the default indicator, plus fixes on the address confirmation screens.
+
+### The progress bar is now the default indicator
+
+A workflow or config that doesn't choose a progress indicator now shows the thin bar on the header's bottom edge instead of the numbered step circles. To keep the circles, set `progressStyle: 'steps'` (or choose Steps in the workflow builder). Workflows that already chose a style are unchanged.
+
+### "Edit" keeps clear of the entrance photo on the address review
+
+On the "Confirm your address" card, the "Edit" link sat right against the entrance photo that hangs over the card. When a photo is there, "Edit" now sits under the address instead; without one it stays where it was.
+
+### The address intro button now reads "Continue"
+
+The button on the "Let's confirm your address" screen said "Got it, let's go". Google Play's guidance for the disclosure shown before a background location request asks for a clear accept button rather than a vague "Got it", and a reviewer can treat this screen as that disclosure. The default is now "Continue". If you set your own text for `address.intro.start`, nothing changes for you.
+
 ## 3.3.0
 
 Passive Liveness, customisable texts, the organisation's own footer logo, silent capture and a bright screen during liveness.

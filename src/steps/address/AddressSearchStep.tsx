@@ -20,7 +20,7 @@ export function AddressSearchStep() {
 
   // Warm the GPS + reverse geocode from the moment the flow is reached —
   // UNDER the welcome screen too (user decision 2026-08-29): by the time
-  // "Got it" is tapped the fix is usually already resolved, so the button
+  // "Continue" is tapped the fix is usually already resolved, so the button
   // carries the address immediately and the pin lands with no hesitation.
   useEffect(() => {
     flow.startPrefetch();

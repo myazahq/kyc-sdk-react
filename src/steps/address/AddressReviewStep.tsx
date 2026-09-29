@@ -116,6 +116,20 @@ export function AddressReviewStep() {
   const edit = (step: 'address-collection' | 'address-entrance') =>
     dispatch({ type: 'SET_STEP', payload: step });
 
+  // Beside the address, unless an entrance hangs over the band: the band's
+  // pr-32 (128) put Edit flush against the 112-wide photo at right-4, and
+  // widening it starves the pill on a 360px phone, so Edit moves under the
+  // address instead. RN and Flutter draw the same.
+  const editButton = (
+    <button
+      type="button"
+      onClick={() => edit('address-collection')}
+      className="shrink-0 text-sm text-primary underline-offset-4 hover:underline"
+    >
+      {t('address.review.edit')}
+    </button>
+  );
+
   // Backstop for a restored session landing straight here: required details
   // must be filled before the address can be confirmed (the pin step is the
   // primary gate).
@@ -210,14 +224,9 @@ export function AddressReviewStep() {
               {directions && (
                 <p className="text-xs leading-snug text-muted-foreground">“{directions}”</p>
               )}
+              {hero && <div className="pt-1">{editButton}</div>}
             </div>
-            <button
-              type="button"
-              onClick={() => edit('address-collection')}
-              className="shrink-0 text-sm text-primary underline-offset-4 hover:underline"
-            >
-              {t('address.review.edit')}
-            </button>
+            {!hero && editButton}
           </div>
         </div>
       </div>

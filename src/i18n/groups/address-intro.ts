@@ -66,5 +66,5 @@ export const ADDRESS_INTRO_ENTRIES: TextEntry[] = [
       "Location summaries are used only to confirm this address and are handled under your country's data protection rules.",
     multiline: true,
   },
-  { key: 'address.intro.start', label: 'Intro: start button', default: "Got it, let's go" },
+  { key: 'address.intro.start', label: 'Intro: start button', default: 'Continue' },
 ];

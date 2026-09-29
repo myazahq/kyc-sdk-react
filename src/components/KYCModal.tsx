@@ -355,7 +355,7 @@ export function KYCModal({ open, onClose, showThemeToggle, disableClose, fullScr
     setImmersive(false);
   }, [state.currentStep]);
 
-  const progressStyle = config.progressStyle ?? 'steps';
+  const progressStyle = config.progressStyle ?? 'bar';
   const asBar = progressStyle === 'bar';
   const showProgress =
     !configError && stepIndex >= 0 && stepCount > 0 && progressStyle !== 'none';

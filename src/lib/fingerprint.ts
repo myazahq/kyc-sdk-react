@@ -5,6 +5,8 @@
 // simply omitted.
 
 import { randomId } from './random-id';
+import { fnv1a } from './fnv1a';
+import { entropySnapshot, type FingerprintEntropy } from './fingerprint-entropy';
 
 const DEVICE_ID_KEY = 'myaza-kyc-did';
 
@@ -27,16 +29,10 @@ export interface ClientFingerprint {
   /** Persistent per-install UUID — the deterministic companion to the fingerprint. */
   deviceId?: string;
   components: FingerprintComponents;
-}
-
-/** FNV-1a — tiny sync hash; the server re-hashes everything with SHA-256 anyway. */
-function fnv1a(input: string): string {
-  let hash = 0x811c9dc5;
-  for (let i = 0; i < input.length; i++) {
-    hash ^= input.charCodeAt(i);
-    hash = Math.imul(hash, 0x01000193);
-  }
-  return (hash >>> 0).toString(16).padStart(8, '0');
+  /** Distinctive extras (audio render, installed fonts). Deliberately NOT in
+   *  `components`: the server hashes that object, and a new key there would
+   *  move every device's hash. */
+  entropy?: FingerprintEntropy;
 }
 
 // Exported for session resume: the anonymous-mount fallback key (the server
@@ -94,7 +90,8 @@ function canvasHash(): string | undefined {
   }
 }
 
-/** Collect the fingerprint. Sync, ~1ms; call once at submit time. */
+/** Collect the fingerprint. Sync, a few ms; call once at submit time. The
+ *  audio half of `entropy` comes from `primeFingerprintEntropy()`. */
 export function collectFingerprint(): ClientFingerprint | null {
   if (typeof window === 'undefined' || typeof navigator === 'undefined') return null;
   try {
@@ -122,7 +119,8 @@ export function collectFingerprint(): ClientFingerprint | null {
       webdriver: nav.webdriver === true,
       pluginCount: nav.plugins?.length ?? 0,
     };
-    return { deviceId: persistentDeviceId(), components };
+    const entropy = entropySnapshot();
+    return { deviceId: persistentDeviceId(), components, ...(entropy && { entropy }) };
   } catch {
     return null;
   }

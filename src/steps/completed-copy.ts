@@ -46,6 +46,19 @@ export interface DecidedContext {
 }
 
 /**
+ * A cancelled application, worded exactly as the cancelled screen every other
+ * path shows (components/SessionCancelledScreen.tsx), so a returning applicant
+ * reads the same sentence as somebody refused mid-flow.
+ */
+export function cancelledCopy(t: TextFn = defaultText): DecidedCopy {
+  return {
+    tone: 'declined',
+    title: t('general.sessionCancelled.title'),
+    description: t('general.sessionCancelled.description'),
+  };
+}
+
+/**
  * The verdict copy, or null when nothing has been decided: `submitted` keeps
  * the org's own success copy, since overriding it would be a downgrade.
  */

@@ -5,7 +5,8 @@ import { useKYCConfig } from '../context/KYCConfigContext';
 import { KeyPeopleAwaitList, type AwaitRow } from './KeyPeopleAwaitList';
 import { SubmitSuccessScreen } from './SubmittedScreens';
 import { successAction, successDescription, successTitle } from './success-copy';
-import { decidedCopy } from './completed-copy';
+import { cancelledCopy, decidedCopy } from './completed-copy';
+import { summaryIsCancelled } from '../lib/session-cancelled';
 import { biometricCopyFor } from '../lib/biometric-copy';
 import { configScope } from '../lib/scope';
 import { useText } from '../i18n';
@@ -65,7 +66,11 @@ export function CompletedStep() {
   // Absent on an older server, which only ever reported the submission, so the
   // default keeps that behaviour rather than inventing a verdict.
   const outcome = summary?.outcome ?? 'submitted';
-  const decided = decidedCopy(outcome, {
+  // Cancelled first: its `outcome` reads `error` (kept for older clients), and
+  // the screen must say what happened, not "something went wrong". Reached on a
+  // refresh that finds the application cancelled while this screen was open;
+  // a FIRST load of a cancelled summary never gets here (MyazaKYCHosted).
+  const decided = summaryIsCancelled(summary) ? cancelledCopy(t) : decidedCopy(outcome, {
     isBusiness,
     scope: configScope(config),
     reason: summary?.reason ?? null,

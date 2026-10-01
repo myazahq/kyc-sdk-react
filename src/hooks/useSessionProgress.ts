@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import type { KYCApi } from '../services/api';
 import type { KYCState } from '../context/types';
 import { progressFromState, progressFingerprint, isUntouchedProgress } from '../lib/session-progress';
+import { progressSaveStopsFlow, sessionCancelledMessage } from '../lib/session-cancelled';
 
 /** Typing shouldn't put a request on the wire per keystroke. */
 const SAVE_DEBOUNCE_MS = 800;
@@ -15,14 +16,21 @@ const SAVE_DEBOUNCE_MS = 800;
  * No-ops without a session (preview, hosted mounts, or a start that failed), and
  * skips writes when nothing worth saving has actually changed — otherwise idle
  * re-renders would put the same payload back repeatedly.
+ *
+ * The one failure that is NOT swallowed is a cancelled session: every later
+ * save and the submission would be refused too, so `onCancelled` stops the flow.
  */
-export function useSessionProgress(api: KYCApi, state: KYCState): void {
+export function useSessionProgress(
+  api: KYCApi,
+  state: KYCState,
+  onCancelled?: (message: string | null) => void,
+): void {
   const lastSaved = useRef<string | null>(null);
   const sessionId = state.sessionId;
 
   // Derived here rather than in the effect body so the fingerprint is the effect's
   // actual dependency — the state object identity changes on every render.
-  const payload = sessionId ? progressFromState(state) : null;
+  const payload = sessionId && !state.sessionCancelled ? progressFromState(state) : null;
   const fingerprint = payload ? progressFingerprint(payload) : null;
 
   useEffect(() => {
@@ -42,7 +50,11 @@ export function useSessionProgress(api: KYCApi, state: KYCState): void {
 
     const id = setTimeout(() => {
       lastSaved.current = fingerprint;
-      void api.saveProgress(sessionId, payload).catch(() => {
+      void api.saveProgress(sessionId, payload).catch((err: unknown) => {
+        if (progressSaveStopsFlow(err)) {
+          onCancelled?.(sessionCancelledMessage(err));
+          return;
+        }
         // Allow a later change to retry: a save that failed must not be
         // remembered as the last one that succeeded.
         lastSaved.current = null;

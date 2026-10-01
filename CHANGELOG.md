@@ -1,5 +1,23 @@
 # Changelog
 
+## 3.5.0
+
+A screen for a cancelled verification, and a device ID on uploads.
+
+**Deploy note for Myaza:** this version sends a new `X-Myaza-Device-Id` header on uploads. The server must allow that header before this version is used against it, or the browser refuses every upload.
+
+### A screen for a cancelled verification
+
+An organisation or Myaza support can now cancel a verification session midway. When the server says a session is cancelled (on start, on a progress save, on submission, or in the result check), the flow stops on a screen reading "This verification was cancelled", with the server's message and a Close button. There is no Try again or Go back: the session cannot continue until it is reopened from the dashboard. `onError` fires once with the new code `session_cancelled`.
+
+A failed session start used to be ignored so the flow could carry on. A cancelled session is the one exception: the flow now stops instead of walking the person through steps the server will refuse.
+
+On a hosted link, the screen also appears when the person reopens a link they already finished and the application was cancelled afterwards, instead of a generic error.
+
+### Device ID on uploads
+
+When the workflow's Device Intelligence is on, every upload now carries the same per-install device ID the submission's fingerprint carries, so the server can tell when one session's captures came from more than one device. The fingerprint also gains a small entropy block (an audio render hash and a check for a fixed list of fonts). Nothing is collected when Device Intelligence is off.
+
 ## 3.4.1
 
 A way back after a refused submission.

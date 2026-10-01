@@ -1,4 +1,5 @@
 import { SDK_VERSION } from '../utils/device-metadata';
+import { uploadDeviceIdHeader } from '../lib/upload-device-id';
 
 export class KYCApiError extends Error {
   constructor(
@@ -276,6 +277,8 @@ export type SessionStatus =
   | 'declined'
   | 'abandoned'
   | 'expired'
+  // The organisation cancelled the session; terminal until uncancelled.
+  | 'cancelled'
   | 'error';
 
 export interface VerificationStatusResponse {
@@ -752,6 +755,12 @@ export interface CompletedSessionSummary {
   /** Absent on an older server, which only ever reported the submission. */
   outcome?: ApplicantOutcome;
   /**
+   * The organisation cancelled this application. Read BEFORE `outcome`, which
+   * stays `error` for it so an older client keeps showing what it always did.
+   * Absent on an older server (lib/session-cancelled.ts summaryIsCancelled).
+   */
+  cancelled?: boolean;
+  /**
    * Whether `keyPeople` is FINAL.
    *
    * The register is reconciled against what the applicant typed after they
@@ -967,9 +976,11 @@ export function createKYCApi(baseUrl: string, apiKey: string) {
       form.append('type', type);
 
       // Don't set Content-Type — the browser adds the multipart boundary itself.
+      // The per-install id rides every upload (Device Intelligence; omitted
+      // when the workflow turns it off or storage holds no id).
       const res = await fetch(`${base}/upload`, {
         method: 'POST',
-        headers,
+        headers: { ...headers, ...uploadDeviceIdHeader() },
         body: form,
       });
       const { mediaId } = await handleResponse<UploadResponse>(res);

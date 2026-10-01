@@ -16,6 +16,7 @@ import { resolveBaseUrl } from '../lib/resolve-url';
 import { resolveIdTypeDefinition } from '../utils/id-definitions';
 import { KYCError, type KYCErrorCode } from '../types/verification';
 import { safeReportError } from '../lib/errors';
+import { useDeviceIntelSetup } from '../lib/use-device-intel-setup';
 
 // ---------------------------------------------------------------------------
 // Config value — the subset of MyazaKYCConfig that steps need at runtime
@@ -348,6 +349,9 @@ export function KYCConfigProvider({ children, apiOverride, serverConfigOverride,
     // (config, workflow resolution) stay real so grants + branding are live.
     return config.previewMode ? withPreviewMocks(client) : client;
   }, [apiOverride, config.apiKey, config.devUrl, config.previewMode]);
+
+  // Device Intelligence: the upload header + early entropy collection.
+  useDeviceIntelSetup(config.deviceIntelligence, config.previewMode);
 
   // Guards onError so a fatal config failure is reported to the consumer at
   // most once per API client (StrictMode mounts the effect twice in dev).

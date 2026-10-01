@@ -89,6 +89,9 @@ export function describeOutcome(
     }
     case 'in_review':
       return { tone: 'info', ...screen(t, 'result.faceCheck.inReview') };
+    // Never the status reason: that is the checks' own finding, not why it stopped.
+    case 'cancelled':
+      return { tone: 'error', title: t('general.sessionCancelled.title'), description: t('general.sessionCancelled.description') };
     case 'error': {
       const words = screen(t, 'result.faceCheck.error');
       return { tone: 'error', title: words.title, description: outcome.reason ?? words.description };

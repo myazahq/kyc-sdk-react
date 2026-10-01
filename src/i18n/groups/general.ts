@@ -25,6 +25,13 @@ export const GENERAL_TEXTS: TextGroup = {
       label: 'Unable to start: description',
       default: 'Unable to start verification. Please try again.',
     },
+    { key: 'general.sessionCancelled.title', label: 'Cancelled session: title', default: 'This verification was cancelled' },
+    {
+      key: 'general.sessionCancelled.description',
+      label: 'Cancelled session: description',
+      default:
+        'This verification was cancelled. Contact the organisation that sent it if you think this is a mistake.',
+    },
     { key: 'general.errorBoundary.title', label: 'Unexpected error: title', default: 'Something went wrong' },
     {
       key: 'general.errorBoundary.description',

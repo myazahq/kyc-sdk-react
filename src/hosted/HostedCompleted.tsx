@@ -26,7 +26,7 @@ function stillWaiting(summary: CompletedSessionSummary): boolean {
   // A decided application has nothing left to converge on, and its invites have
   // been voided, so there is no list to keep fresh either.
   const outcome = summary.outcome ?? 'submitted';
-  if (outcome === 'declined' || outcome === 'error') return false;
+  if (summary.cancelled === true || outcome === 'declined' || outcome === 'error') return false;
   return summary.keyPeople.some((p) => p.status === 'pending' || p.status === 'failed');
 }
 

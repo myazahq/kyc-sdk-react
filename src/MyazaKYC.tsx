@@ -30,6 +30,7 @@ import { previewSelectionForSupportingDocuments } from './lib/supporting-documen
 import { resetIntegritySignals } from './lib/integrity-signals';
 import { persistentDeviceId } from './lib/fingerprint';
 import { startSessionOnce } from './lib/start-session-once';
+import { classifySessionStartFailure } from './lib/session-cancelled';
 import { resetStepLog } from './lib/step-log';
 import { resetSilentCaptures } from './lib/silent-capture-store';
 import type { MyazaKYCConfig, MyazaKYCProps, UseMyazaKYCReturn, KYCStep, AnyCountry } from './types/config';
@@ -350,7 +351,9 @@ function KYCInner({
   // Best-effort by contract: sessions are for resuming and visibility, and a
   // failure here must never stop someone verifying.
   // Persist progress as the user advances (no-ops without a session).
-  useSessionProgress(sessionApiRef.current, state);
+  useSessionProgress(sessionApiRef.current, state, (message) =>
+    dispatch({ type: 'SET_SESSION_CANCELLED', payload: { message } }),
+  );
 
   const startSessionRef = useRef(false);
   const beginSession = useCallback(async () => {
@@ -387,8 +390,14 @@ function KYCInner({
       // submitting screen replays it rather than sending a second one the
       // server refuses (lib/resumed-application.ts).
       dispatch({ type: 'SET_RESUMED_APPLICATION', payload: resumedApplicationFrom(started) });
-    } catch {
-      /* resuming is a convenience; verifying is not conditional on it */
+    } catch (err) {
+      // Resuming is a convenience; verifying is not conditional on it. The one
+      // refusal that DOES stop the flow is a cancelled session: the applicant
+      // must not be walked into captures the server will refuse.
+      const failure = classifySessionStartFailure(err);
+      if (failure.kind === 'cancelled') {
+        dispatch({ type: 'SET_SESSION_CANCELLED', payload: { message: failure.message } });
+      }
     }
   }, [apiKey, devUrl, dispatch, metadata, previewMode, userId, workflowId]);
 

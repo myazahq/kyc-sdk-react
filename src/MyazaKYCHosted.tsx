@@ -10,6 +10,13 @@ import { HANDOFF_TOKEN_PREFIX } from './hosted/token';
 import { SdkFrame } from './lib/sdk-frame';
 import type { MyazaKYCHostedProps } from './hosted/hosted-props';
 import type { KYCAppearance } from './types/config';
+import {
+  isSessionCancelledError,
+  sessionCancelledMessage,
+  summaryIsCancelled,
+  SESSION_CANCELLED_MESSAGE,
+} from './lib/session-cancelled';
+import { KYCError } from './types/verification';
 
 export type { MyazaKYCHostedProps, MyazaKYCHostedReadyInfo } from './hosted/hosted-props';
 
@@ -37,13 +44,24 @@ export function MyazaKYCHosted({
   // Direct to the API when the page names it; '' keeps the old same-origin
   // proxy path (see MyazaKYCHostedProps.serverUrl for why direct is right).
   const [api] = useState<KYCApi>(() => createKYCApi(serverUrl, `${HANDOFF_TOKEN_PREFIX}${token}`));
-  const [phase, setPhase] = useState<'loading' | 'ready' | 'completed' | 'error'>('loading');
+  const [phase, setPhase] = useState<'loading' | 'ready' | 'completed' | 'cancelled' | 'error'>('loading');
   const [bootstrap, setBootstrap] = useState<HandoffBootstrapResponse | null>(null);
   const [summary, setSummary] = useState<CompletedSessionSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    // Cancelled by the organisation: its own screen, never "link unavailable"
+    // (which reads as expired) or a generic error, and reported to the host once.
+    const reportCancelled = (message: string) => {
+      setError(message);
+      setPhase('cancelled');
+      try {
+        onError?.(new KYCError('session_cancelled', message));
+      } catch {
+        /* a host's handler must never break the page */
+      }
+    };
     api
       .bootstrapHandoff(token)
       .then((data) => {
@@ -73,6 +91,14 @@ export function MyazaKYCHosted({
             .completedSession(token)
             .then((data) => {
               if (cancelled) return;
+              // Cancelled after it was submitted: the same screen and the same
+              // single onError as a cancelled link refused at the bootstrap,
+              // never the generic "something went wrong" verdict its `outcome`
+              // (`error`, kept for older clients) would otherwise produce.
+              if (summaryIsCancelled(data)) {
+                reportCancelled(SESSION_CANCELLED_MESSAGE);
+                return;
+              }
               setSummary(data);
               setPhase('completed');
               onCompleted?.(data);
@@ -84,6 +110,10 @@ export function MyazaKYCHosted({
               setPhase('completed');
               onCompleted?.(null);
             });
+          return;
+        }
+        if (isSessionCancelledError(err)) {
+          reportCancelled(sessionCancelledMessage(err) ?? SESSION_CANCELLED_MESSAGE);
           return;
         }
         setError(err instanceof Error ? err.message : 'This verification link is no longer valid.');
@@ -133,6 +163,15 @@ export function MyazaKYCHosted({
         <p className="max-w-xs text-center text-sm text-muted-foreground">
           This has already been sent for review. There is nothing more for you to do{embedded ? '.' : ', and you can close this tab.'}
         </p>
+      </HostedScreen>,
+    );
+  }
+
+  if (phase === 'cancelled') {
+    return frame(
+      <HostedScreen appearance={screenAppearance} compact={embedded}>
+        <h1 className="text-lg font-semibold font-heading">This verification was cancelled</h1>
+        <p className="max-w-xs text-center text-sm text-muted-foreground">{error ?? SESSION_CANCELLED_MESSAGE}</p>
       </HostedScreen>,
     );
   }

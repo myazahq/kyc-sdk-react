@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { decidedCopy } from './completed-copy';
+import { cancelledCopy, decidedCopy } from './completed-copy';
 import { NO_BIOMETRIC_COPY } from '../lib/biometric-copy';
 
 const base = { isBusiness: false, scope: null, reason: null, words: NO_BIOMETRIC_COPY };
@@ -68,5 +68,17 @@ describe('decidedCopy', () => {
         }
       }
     }
+  });
+});
+
+describe('cancelledCopy', () => {
+  it('says the same as the cancelled screen, never the generic error', () => {
+    expect(cancelledCopy()).toEqual({
+      tone: 'declined',
+      title: 'This verification was cancelled',
+      description:
+        'This verification was cancelled. Contact the organisation that sent it if you think this is a mistake.',
+    });
+    expect(cancelledCopy().title).not.toBe(decidedCopy('error', base)?.title);
   });
 });

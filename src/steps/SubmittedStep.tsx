@@ -17,6 +17,7 @@ import {
 } from "./submit-helpers";
 import { contactStepFor, expiredContactChannels } from "./contact-recovery";
 import { recoveryStepFor, serverRefusalOf } from "../lib/submit-recovery";
+import { isSessionCancelledError, sessionCancelledMessage } from "../lib/session-cancelled";
 import type { KYCStep } from "../types/config";
 import { multiIdWireSlots } from "../lib/multi-id";
 import { keepsIdEvidence } from "../lib/resubmit";
@@ -378,6 +379,12 @@ export function SubmittedStep({ stepOrder = [] }: { stepOrder?: readonly KYCStep
 			else await submitIndividual(requestId);
 		} catch (err) {
 			setRetryInfo(null);
+			// The organisation cancelled this session: no Try again or Go back can
+			// help. The modal swaps to the cancelled screen, which reports onError.
+			if (isSessionCancelledError(err)) {
+				dispatch({ type: "SET_SESSION_CANCELLED", payload: { message: sessionCancelledMessage(err) } });
+				return;
+			}
 			// A refusal over stale contact proofs is recoverable in-flow: clear
 			// the dead tokens and walk back to the contact step, which routes
 			// straight back here once re-verified (see contact-recovery.ts).

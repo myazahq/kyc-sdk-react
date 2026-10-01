@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { useKYCConfig } from '../context/KYCConfigContext';
+import { useKYCContext } from '../context/KYCContext';
+import { isCancelledStatus } from '../lib/session-cancelled';
 import { awaitVerificationOutcome, type VerificationOutcome } from '../lib/result-wait';
 import { describeOutcome, describeWaiting } from '../lib/result-copy';
 import { biometricCopyFor } from '../lib/biometric-copy';
@@ -38,6 +40,7 @@ export function SubmittedResult({
   action?: SubmitSuccessAction;
 }) {
   const config = useKYCConfig();
+  const { dispatch } = useKYCContext();
   const t = useText();
   const [outcome, setOutcome] = useState<VerificationOutcome | null>(null);
 
@@ -49,6 +52,12 @@ export function SubmittedResult({
       fetchStatus: () => api.status(verificationId).catch(() => null),
     }).then((settled) => {
       if (!alive) return;
+      // Cancelled while the person waited: the modal swaps to the cancelled
+      // screen. Never the status reason, which is the checks' own finding.
+      if (settled.kind === 'settled' && isCancelledStatus(settled.status)) {
+        dispatch({ type: 'SET_SESSION_CANCELLED', payload: { message: null } });
+        return;
+      }
       setOutcome(settled);
       if (settled.kind === 'settled') {
         config.onResult?.({

@@ -205,6 +205,13 @@ export interface KYCState {
    */
   sessionId: string | null;
   /**
+   * Set when the server refused this session as CANCELLED by the organisation
+   * (lib/session-cancelled.ts). Terminal for this run: the modal swaps to the
+   * cancelled screen and nothing else is saved or submitted. `message` is the
+   * server's own sentence, null for the catalogue default.
+   */
+  sessionCancelled: { message: string | null } | null;
+  /**
    * A KYB application whose business half already committed, resumed before
    * the applicant's own verification went through (lib/resumed-application.ts).
    * The submitting screen replays the business submission under its original
@@ -405,6 +412,7 @@ export interface KYCState {
 export type KYCAction =
   | { type: 'OPEN_MODAL' }
   | { type: 'SET_SESSION_ID'; payload: string }
+  | { type: 'SET_SESSION_CANCELLED'; payload: { message: string | null } }
   | { type: 'SET_RESUMED_APPLICATION'; payload: import('../lib/resumed-application').ResumedApplication | null }
   | {
       type: 'RESTORE_PROGRESS';

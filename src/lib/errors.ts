@@ -8,6 +8,7 @@
 
 import { KYCApiError } from '../services/api';
 import { KYCError, type KYCErrorCode } from '../types/verification';
+import { isSessionCancelledError, sessionCancelledMessage } from './session-cancelled';
 import { BUSINESS_DOCUMENT_LABELS } from './business-application';
 import type { BusinessDocumentKey } from '../types/business';
 import { defaultText } from '../i18n/translate';
@@ -71,6 +72,11 @@ const CODED_ERRORS: Record<string, { code: KYCErrorCode; key: string }> = {
  */
 export function mapToKycError(err: unknown, context: ErrorContext, t: TextFn = defaultText): KYCError {
   if (err instanceof KYCApiError) {
+    // A cancelled session is terminal until an admin uncancels it: its own code,
+    // never a generic "try again" (lib/session-cancelled.ts).
+    if (isSessionCancelledError(err)) {
+      return new KYCError('session_cancelled', sessionCancelledMessage(err) ?? t('general.sessionCancelled.description'));
+    }
     // 422 missing_documents carries the missing doc keys — name them so the
     // user knows exactly which required business documents to go back for.
     if (err.code === 'missing_documents') {

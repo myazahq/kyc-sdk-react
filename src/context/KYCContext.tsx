@@ -18,6 +18,7 @@ export const initialKYCState: KYCState = {
   status: 'idle',
   isOpen: false,
   sessionId: null,
+  sessionCancelled: null,
   resumedApplication: null,
   selectedCountry: null,
   countryAutoPicked: false,
@@ -61,6 +62,11 @@ export function kycReducer(state: KYCState, action: KYCAction): KYCState {
 
     case 'SET_SESSION_ID':
       return { ...state, sessionId: action.payload };
+
+    // Idempotent: the first message wins, so a later refusal cannot reword the
+    // screen under the applicant.
+    case 'SET_SESSION_CANCELLED':
+      return state.sessionCancelled ? state : { ...state, sessionCancelled: action.payload };
 
     case 'SET_RESUMED_APPLICATION':
       return { ...state, resumedApplication: action.payload };
@@ -530,7 +536,9 @@ export function kycReducer(state: KYCState, action: KYCAction): KYCState {
       };
 
     case 'RESET':
-      return { ...initialKYCState };
+      // A cancellation is the server's answer about this attempt; reopening the
+      // modal cannot undo it, only an admin's uncancel can.
+      return { ...initialKYCState, sessionCancelled: state.sessionCancelled };
   }
 }
 

@@ -23,6 +23,7 @@ import { ImmersiveCaptureContext } from './immersive-capture';
 import { LivenessCameraContext } from './liveness-camera';
 import { useLivenessLight } from './use-liveness-light';
 import { Button } from './ui/button';
+import { SessionCancelledScreen, useReportCancellation } from './SessionCancelledScreen';
 import { useText } from '../i18n';
 import { cn } from '../lib/utils';
 import { useKYCContext } from '../context/KYCContext';
@@ -259,6 +260,11 @@ export function KYCModal({ open, onClose, showThemeToggle, disableClose, fullScr
     config.serverConfig.status === 'error' && config.serverConfig.fatal
       ? config.serverConfig.error ?? t('general.configError.description')
       : null;
+  // Cancelled by the organisation (lib/session-cancelled.ts): terminal for this
+  // run, reported to onError once.
+  const cancelled = configError ? null : state.sessionCancelled;
+  useReportCancellation(cancelled, config.onError, t('general.sessionCancelled.description'));
+  const blocked = configError !== null || cancelled !== null;
 
   // Apply the configured initial light/dark mode — 'system' follows (and
   // tracks) the device preference. Runs on mount (and if the prop changes);
@@ -368,7 +374,7 @@ export function KYCModal({ open, onClose, showThemeToggle, disableClose, fullScr
   const progressStyle = config.progressStyle ?? 'bar';
   const asBar = progressStyle === 'bar';
   const showProgress =
-    !configError && stepIndex >= 0 && stepCount > 0 && progressStyle !== 'none';
+    !blocked && stepIndex >= 0 && stepCount > 0 && progressStyle !== 'none';
 
   return (
     // Portal-rendered surfaces (Select/Popover/Drawer) escape the modal root's
@@ -438,9 +444,11 @@ export function KYCModal({ open, onClose, showThemeToggle, disableClose, fullScr
                 ? 'overflow-hidden'
                 : 'overflow-y-auto p-6',
               !immersive && fullscreen && 'xl:mx-auto xl:w-full xl:max-w-2xl',
-            )} key={configError ? 'config-error' : state.currentStep}>
+            )} key={configError ? 'config-error' : cancelled ? 'session-cancelled' : state.currentStep}>
               {configError ? (
                 <ConfigErrorScreen message={configError} onClose={onClose} />
+              ) : cancelled ? (
+                <SessionCancelledScreen message={cancelled.message} onClose={onClose} />
               ) : (
                 <>
                   {plan && ['id-type', 'id-input', 'document-capture', 'liveness'].includes(state.currentStep) && (
